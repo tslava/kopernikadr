@@ -45,3 +45,24 @@ node client.mjs probe 192.168.1.42 locks --args '{"manualRestart":true}'
 During `probe`, the server may vanish while the phone screen is locked; the client keeps polling
 with backoff for up to 5 minutes. The `/diag` JSON shapes it assumes are documented at the top of
 `diag.mjs`, the only place to change if the server differs.
+
+## Fake camera (dev server for remote-lite and the remote app)
+
+`fake-camera.mjs` is a test-only stand-in for the camera server; it also serves remote-lite for
+manual runs. Serve the **merged build output**: remote-lite's `lib/` is assembled from
+`packages/remote-core` at build time, so `camera-android/core/src/main/resources/remote-lite` no
+longer contains every module.
+
+```sh
+(cd ../../../camera-android && ./gradlew-jbr :core:processResources)
+node fake-camera.mjs --serve ../../../camera-android/core/build/resources/main/remote-lite --port 8765
+# open http://localhost:8765/   (--host 0.0.0.0 to reach it from another device)
+```
+
+Re-run `:core:processResources` after changing remote-lite or `packages/remote-core`.
+
+CORS: `/info` and `/frames/...` echo the request `Origin` in `Access-Control-Allow-Origin` (with
+`Vary: Origin`) when it is `http://localhost`, `http://127.0.0.1` or `http://10.0.2.2` (the
+Android emulator's host), with or without a port. That covers a remote dev build on another port
+or in the emulator. Other origins get no CORS header. The failure knobs (`/fake/kick`,
+`/fake/slow-play`, `/fake/fail-play`, ...) are listed at the top of `fake-camera.mjs`.

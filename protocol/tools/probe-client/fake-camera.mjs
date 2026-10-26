@@ -2,9 +2,19 @@
 // CLI commands and the remote-lite browser page end to end. Includes a minimal RFC 6455 server
 // since there are no dependencies.
 //
-// As a dev server for remote-lite:
-//   node fake-camera.mjs --serve ../../../camera-android/core/src/main/resources/remote-lite --port 8765
-// then open http://localhost:8765/. Extra knobs (plain GETs, for manual failure tests):
+// As a dev server for remote-lite, serve the merged build output (remote-lite's lib/ is assembled
+// from packages/remote-core at build time, so core/src/main/resources/remote-lite alone no longer
+// has every module):
+//   (cd ../../../camera-android && ./gradlew-jbr :core:processResources)
+//   node fake-camera.mjs --serve ../../../camera-android/core/build/resources/main/remote-lite --port 8765
+// then open http://localhost:8765/.
+//
+// CORS: /info and /frames/... echo the request Origin in Access-Control-Allow-Origin when it is
+// http://localhost, http://127.0.0.1 or http://10.0.2.2 (the Android emulator's host), any port,
+// so a remote dev build on another port (or in the emulator) can read them. Other origins get no
+// CORS header. Only simple GET/HEAD requests are served there, so there is no preflight.
+//
+// Extra knobs (plain GETs, for manual failure tests):
 //   /fake/kick          close every socket (the page must show "offline" and reconnect)
 //   /fake/drop-capture  commit the next capture but never answer it (lost response)
 //   /fake/fail-lock     the next lock request fails to confirm (mode "failed")
@@ -128,6 +138,15 @@ const CAPABILITIES = {
   previewQualities: ['low', 'normal', 'high'],
 };
 
+const CORS_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d{1,5})?$/;
+
+/** CORS for the endpoints a remote page reads cross-origin: echo an allowed Origin, else nothing. */
+function setCors(req, res) {
+  res.setHeader('vary', 'Origin');
+  const origin = req.headers.origin;
+  if (origin && CORS_ORIGIN.test(origin)) res.setHeader('access-control-allow-origin', origin);
+}
+
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' };
 
@@ -200,6 +219,7 @@ export async function startFakeCamera(opts = {}) {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const p = url.pathname;
+    if (p === '/info' || p.startsWith('/frames/')) setCors(req, res);
     if (p === '/info') return json(res, 200, { cameraId, name: 'G05', bootId, protocolVersions: { min: 1, max: 1 } });
     let m;
     if ((m = /^\/frames\/([^/]+)\/(full|play|thumb)\.jpg$/.exec(p))) {
