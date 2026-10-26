@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kopernikadr `grid` probe target. A4 landscape, 1 user unit = 1 mm. Print at 100 % (actual size).
+  10 mm grid + 4 distinct corner fiducials (A filled square, B ring, C right triangle, D cross)
+  + an "up" arrow: shift, scale, mirror and a 180° flip are all unambiguous.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="297mm" height="210mm" viewBox="0 0 297 210">
+  <title>Kopernikadr grid target (A4 landscape)</title>
+  <rect x="0" y="0" width="297" height="210" fill="#fff"/>
+
+  <!-- 10 mm grid, 27 x 19 cells -->
+  <path fill="none" stroke="#000" stroke-width="0.3" d="M13.5 10V200 M23.5 10V200 M33.5 10V200 M43.5 10V200 M53.5 10V200 M63.5 10V200 M73.5 10V200 M83.5 10V200 M93.5 10V200 M103.5 10V200 M113.5 10V200 M123.5 10V200 M133.5 10V200 M143.5 10V200 M153.5 10V200 M163.5 10V200 M173.5 10V200 M183.5 10V200 M193.5 10V200 M203.5 10V200 M213.5 10V200 M223.5 10V200 M233.5 10V200 M243.5 10V200 M253.5 10V200 M263.5 10V200 M273.5 10V200 M283.5 10V200
+           M13.5 10H283.5 M13.5 20H283.5 M13.5 30H283.5 M13.5 40H283.5 M13.5 50H283.5 M13.5 60H283.5 M13.5 70H283.5 M13.5 80H283.5 M13.5 90H283.5 M13.5 100H283.5 M13.5 110H283.5 M13.5 120H283.5 M13.5 130H283.5 M13.5 140H283.5 M13.5 150H283.5 M13.5 160H283.5 M13.5 170H283.5 M13.5 180H283.5 M13.5 190H283.5 M13.5 200H283.5"/>
+
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="bold" fill="#000" text-anchor="middle">
+    <!-- A: top-left, filled square -->
+    <rect x="23.5" y="20" width="50" height="40" fill="#fff" stroke="#000" stroke-width="0.6"/>
+    <rect x="27.5" y="25" width="30" height="30"/>
+    <text x="65.5" y="47" font-size="18">A</text>
+
+    <!-- B: top-right, ring -->
+    <rect x="223.5" y="20" width="50" height="40" fill="#fff" stroke="#000" stroke-width="0.6"/>
+    <circle cx="242.5" cy="40" r="12.5" fill="none" stroke="#000" stroke-width="5"/>
+    <text x="265.5" y="47" font-size="18">B</text>
+
+    <!-- C: bottom-right, right triangle -->
+    <rect x="223.5" y="150" width="50" height="40" fill="#fff" stroke="#000" stroke-width="0.6"/>
+    <polygon points="227.5,185 257.5,185 257.5,155"/>
+    <text x="265.5" y="177" font-size="18">C</text>
+
+    <!-- D: bottom-left, cross -->
+    <rect x="23.5" y="150" width="50" height="40" fill="#fff" stroke="#000" stroke-width="0.6"/>
+    <rect x="38.5" y="155" width="8" height="30"/>
+    <rect x="27.5" y="166" width="30" height="8"/>
+    <text x="65.5" y="177" font-size="18">D</text>
+
+    <!-- arrow pointing to the top edge -->
+    <rect x="98.5" y="40" width="100" height="140" fill="#fff" stroke="#000" stroke-width="0.6"/>
+    <polygon points="148.5,46 175.5,86 158.5,86 158.5,150 138.5,150 138.5,86 121.5,86"/>
+    <text x="148.5" y="171" font-size="13">GÓRA / UP</text>
+
+    <text x="148.5" y="206.5" font-size="3.5" font-weight="normal">Kopernikadr grid target · A4 landscape · print at 100 % (actual size): grid squares are 10 mm · arrow points to the top of the frame</text>
+  </g>
+</svg>
