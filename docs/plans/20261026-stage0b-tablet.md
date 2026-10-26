@@ -343,23 +343,24 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `remote/android/app/src/main/java/pl/slava/kopernikadr/remote/native/{AtomicFiles.kt,VideoWriter.kt,PathGuard.kt,DiskSpace.kt}`
 - Create: `remote/android/app/src/test/java/pl/slava/kopernikadr/remote/native/{AtomicFilesTest.kt,VideoWriterTest.kt,PathGuardTest.kt}`
 
-- [ ] tests first, then `PathGuard`: relative to `filesDir/kopernikadr/`; rejects `..`,
+- [x] tests first, then `PathGuard`: relative to `filesDir/kopernikadr/`; rejects `..`,
       absolute paths and symlink escapes
-- [ ] tests first, then `AtomicFiles`:
-  - [ ] `writeTextAtomic`: tmp → fsync → rename over the target → dir fsync; never deletes the
+- [x] tests first, then `AtomicFiles`:
+  - [x] `writeTextAtomic`: tmp → fsync → rename over the target → dir fsync; never deletes the
         target first;
-  - [ ] `installFile`, idempotent: same size+sha → OK + tmp removed; differing dest → replaced;
+  - [x] `installFile`, idempotent: same size+sha → OK + tmp removed; differing dest → replaced;
         missing tmp + valid dest → OK;
-  - [ ] `freeBytes` via the `DiskSpace` seam
-- [ ] tests first, then `VideoWriter`:
-  - [ ] `open` → `exports/export-<id>.mp4`;
-  - [ ] `writeAt` handles out-of-order/overlapping positions;
-  - [ ] `close` fsyncs;
-  - [ ] `abort` is idempotent;
-  - [ ] a write after close → error;
-  - [ ] `cleanupAbandoned` deletes `exports/*`
-- [ ] write tests for errors: simulated ENOSPC, a bad handle
-- [ ] run tests — must pass before Task 6
+  - [x] `freeBytes` via the `DiskSpace` seam
+- [x] tests first, then `VideoWriter`:
+  - [x] `open` → `exports/export-<id>.mp4`;
+  - [x] `writeAt` handles out-of-order/overlapping positions;
+  - [x] `close` fsyncs;
+  - [x] `abort` is idempotent;
+  - [x] a write after close → error;
+  - [x] `cleanupAbandoned` deletes `exports/*`
+- [x] write tests for errors: simulated ENOSPC, a bad handle
+- [x] run tests — must pass before Task 6
+- [x] ➕ note for stage 2 ProjectStore: `writeTextAtomic` can leave `.<name>.<uuid>.tmp` next to a target after a crash; the startup sweep must delete `.*.tmp` everywhere under `kopernikadr/`, not only `tmp/`
 
 ### Task 6: `KopernikadrNative` — MediaStore publish + Capacitor bridge
 
