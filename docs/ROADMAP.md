@@ -11,7 +11,7 @@ work: **plan 0b (native tablet app) → effects layer → cloud AI → the rest 
   screen. No graphics from other apps.
 - **AI: a cloud API.** This **overrides** "Out of scope: cloud" in `PROMPT.md` for the AI features
   only. Consequences that must be designed for:
-  - photos of the kid's room leave the house;
+  - photos of the tabletop set (only the table is in frame, no room or people) are sent to the provider;
   - an API key is needed, entered in parent mode and stored only on the tablet, never in the repo;
   - every AI action needs network access and costs money;
   - a provider is not chosen yet (candidates: Gemini image editing, OpenAI image edit).
