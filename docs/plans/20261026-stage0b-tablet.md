@@ -319,23 +319,23 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `remote/{package.json,next.config.mjs,tsconfig.json,capacitor.config.ts,VERSIONS.md,vitest.config.ts}`, `remote/app/{layout.tsx,page.tsx}`, `remote/components/{Home.tsx,Diagnostics.tsx}`, `remote/lib/i18n/{pl.ts,ru.ts,index.ts}` + test, `remote/android/**` (from `npx cap add android`, then edited), `remote/android/gradlew-jbr`
 - Modify: `.gitignore` (`remote/.next`, `remote/out`, `dist/`)
 
-- [ ] pin versions ≥14 days (Next, React, Capacitor core/cli/android, filesystem, file-transfer,
+- [x] pin versions ≥14 days (Next, React, Capacitor core/cli/android, filesystem, file-transfer,
       app, keep-awake, vitest, TypeScript); record them in `remote/VERSIONS.md`
-- [ ] Next: `output:'export'`, `trailingSlash`, `images.unoptimized`, `turbopack.root`; one route
+- [x] Next: `output:'export'`, `trailingSlash`, `images.unoptimized`, `turbopack.root`; one route
       with in-page views; `allowJs`/`checkJs` importing remote-core
-- [ ] Capacitor Android:
-  - [ ] appId `pl.slava.kopernikadr.remote`, label "Kopernikadr";
-  - [ ] androidScheme http; cleartext config referenced in the manifest;
-  - [ ] landscape; min/target 31/36;
-  - [ ] debug suffix; wrapper sha256 pinned; `gradlew-jbr`;
-  - [ ] the Kotlin Android plugin applied (for Task 5)
-- [ ] i18n with remote-core `i18n-core`; write a pl/ru key-parity test
-- [ ] create AVD `kopernikadr-tab` (install the **API 31** arm64 image via sdkmanager; tablet
-      1920×1200 landscape); record the emulator's WebView version
-- [ ] **1-minute smoke** on the emulator: the app launches, `isSecureContext === true`, a
+- [x] Capacitor Android:
+  - [x] appId `pl.slava.kopernikadr.remote`, label "Kopernikadr";
+  - [x] androidScheme http; cleartext config referenced in the manifest;
+  - [x] landscape; min/target 31/36;
+  - [x] debug suffix; wrapper sha256 pinned; `gradlew-jbr`;
+  - [x] the Kotlin Android plugin applied (for Task 5)
+- [x] i18n with remote-core `i18n-core`; write a pl/ru key-parity test
+- [x] create AVD `kopernikadr-tab` (install the **API 31** arm64 image via sdkmanager; tablet
+      1920×1200 landscape); record the emulator's WebView version (stock 91 can't run Next 16 output → replaced with a Chromium 158 snapshot WebView in the AVD; the tablet has 155)
+- [x] **1-minute smoke** on the emulator: the app launches, `isSecureContext === true`, a
       `ws://10.0.2.2:8765/ws/control` hello against the fake camera succeeds; reload stays on
       the same view
-- [ ] run tests — must pass before Task 5
+- [x] run tests — must pass before Task 5
 
 ### Task 5: `KopernikadrNative` — file helpers (JVM TDD)
 

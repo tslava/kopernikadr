@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kopernikadr</string>
+    <string name="title_activity_main">Kopernikadr</string>
+    <string name="package_name">pl.slava.kopernikadr.remote</string>
+    <string name="custom_url_scheme">pl.slava.kopernikadr.remote</string>
+</resources>

@@ -1,0 +1,21 @@
+// Polish strings (the fallback language). Plural entries are keyed by Intl.PluralRules categories.
+export const pl = {
+  'app.title': 'Kopernikadr',
+  'app.subtitle': 'Pilot do kamery poklatkowej',
+  'home.connect': 'Połącz z kamerą',
+  'home.connectSoon': 'Łączenie z kamerą pojawi się wkrótce.',
+  'home.diagnostics': 'Diagnostyka',
+  'diag.title': 'Diagnostyka',
+  'diag.back': 'Wróć',
+  'diag.run': 'Uruchom testy',
+  'diag.notRun': 'nie uruchomiono',
+  'diag.count': { one: '{n} test', few: '{n} testy', many: '{n} testów', other: '{n} testu' },
+  'probe.env': 'Środowisko (WebView, bezpieczny kontekst, WebCodecs)',
+  'probe.nsd': 'Wykrywanie kamery (NSD)',
+  'probe.camera': 'Kamera: połączenie, podgląd, zdjęcie',
+  'probe.reconnect': 'Ponowne łączenie',
+  'probe.download': 'Pobieranie oryginałów',
+  'probe.videoFrame': 'VideoFrame z pobranego zdjęcia',
+  'probe.export': 'Eksport MP4 do galerii',
+  'probe.storage': 'Wolne miejsce',
+} as const;

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Runs ./gradlew with Android Studio's bundled JBR (no system JDK on this Mac).
+set -euo pipefail
+
+JBR="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+if [[ ! -x "$JBR/bin/java" ]]; then
+  echo "gradlew-jbr: Android Studio JBR not found at: $JBR" >&2
+  echo "Install Android Studio or edit JBR in $0." >&2
+  exit 1
+fi
+export JAVA_HOME="$JBR"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+
+cd "$(dirname "$0")"
+if [[ ! -f local.properties ]]; then
+  echo "sdk.dir=$ANDROID_HOME" > local.properties
+fi
+exec ./gradlew "$@"

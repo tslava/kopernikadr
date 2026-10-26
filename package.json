@@ -4,6 +4,7 @@
   "description": "Kopernikadr monorepo: shared JS packages and Node tooling (npm workspaces)",
   "workspaces": [
     "packages/remote-core",
+    "remote",
     "protocol/tools/probe-client"
   ],
   "scripts": {
