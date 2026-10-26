@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "9b3e7f1a-5d2c-4a86-8e0b-6f4c2a9d1e57",
+  "ok": true,
+  "data": {
+    "frameId": "01K8GZ4V7Q3M9X2B5N6R8T1WCD",
+    "seq": 42,
+    "projectId": "7a1f3c5e-8b2d-4f69-9c04-e6b8d2a4f1c3",
+    "clientId": "c4e7a1d9-2f6b-4a83-b5e0-9d1c7f3a6b25",
+    "rotation": 0,
+    "capturedAt": "2026-10-26T15:04:05.123Z",
+    "full": {"w": 3264, "h": 2448, "bytes": 2345678, "sha256": "cace12409042a8e13eab5df9a83c7a18956bbc9d8715ae2794a7859174f18295"},
+    "derived": {"play": {"w": 1440, "h": 1080}, "thumb": {"w": 256, "h": 192}},
+    "exposure": {"iso": 200, "exposureTimeNs": 16666666}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "9b3e7f1a-5d2c-4a86-8e0b-6f4c2a9d1e57",
+  "ok": false,
+  "error": {
+    "code": "GEOMETRY_MISMATCH",
+    "message": "capture rotation 0 does not match the camera rotation 180",
+    "retryable": false
+  }
+}

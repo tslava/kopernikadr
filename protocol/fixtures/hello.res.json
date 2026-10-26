@@ -1,0 +1,51 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "e1b5c9a3-7f2d-4e68-9a01-3c5d7b9f2e46",
+  "ok": true,
+  "data": {
+    "cameraId": "3f2b8c1e-7d4a-4e9b-a6c2-58d1f0e9b734",
+    "bootId": "a91c6e02-4b7f-4c3d-9e85-0d2f6b1a7c48",
+    "sessionId": "5d8f2a6c-1e9b-4f70-8c34-a2b6e0d9f1c7",
+    "name": "Galaxy A05",
+    "protocolVersion": 1,
+    "capabilities": {
+      "aspect": "4:3",
+      "sizes": {
+        "full": {"w": 3264, "h": 2448},
+        "play": {"w": 1440, "h": 1080},
+        "thumb": {"w": 256, "h": 192}
+      },
+      "rotations": [0, 180],
+      "exposure": {
+        "lock": true,
+        "method": "freeze",
+        "compensation": {"supported": true, "minSteps": -4, "maxSteps": 4, "stepEv": {"num": 1, "den": 2}}
+      },
+      "whiteBalance": {"lock": true, "method": "freeze"},
+      "focusLock": {"method": "freeze"},
+      "focus": {"modes": ["auto", "locked"], "minFocusDistanceDiopters": 10.0},
+      "previewQualities": ["low", "normal", "high"]
+    },
+    "controls": {
+      "generation": 3,
+      "settling": false,
+      "exposure": {"mode": "auto", "confirmed": true, "exact": true, "compensationSteps": 0, "compensationEnabled": true},
+      "whiteBalance": {"mode": "auto", "confirmed": true, "exact": true},
+      "focus": {"mode": "auto", "confirmed": true, "focusOk": true},
+      "rotation": 0,
+      "previewQuality": "normal"
+    },
+    "status": {
+      "batteryPct": 81,
+      "charging": true,
+      "freeBytes": 41234567890,
+      "spoolBytes": 312345678,
+      "unackedCount": 3,
+      "orphanCount": 0,
+      "integrityErrors": 0,
+      "thermal": "none"
+    },
+    "sessionTtlMs": 10000
+  }
+}

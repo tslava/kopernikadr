@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "t": "req",
+  "reqId": "e1b5c9a3-7f2d-4e68-9a01-3c5d7b9f2e46",
+  "op": "hello",
+  "args": {
+    "clientId": "c4e7a1d9-2f6b-4a83-b5e0-9d1c7f3a6b25",
+    "protocolVersions": {"min": 1, "max": 1},
+    "appVersion": "0.1.0",
+    "platform": "android"
+  }
+}

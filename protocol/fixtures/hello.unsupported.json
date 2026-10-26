@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "e1b5c9a3-7f2d-4e68-9a01-3c5d7b9f2e46",
+  "ok": false,
+  "error": {
+    "code": "UNSUPPORTED_VERSION",
+    "message": "no common protocol version: camera 1-1, client 2-3",
+    "retryable": false,
+    "data": {"protocolVersions": {"min": 1, "max": 1}}
+  }
+}
