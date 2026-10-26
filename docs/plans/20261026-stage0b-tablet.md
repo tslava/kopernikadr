@@ -403,22 +403,22 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `scripts/{build.sh,install.sh,collect-diagnostics.sh,meminfo-sampler.sh,lib.sh}`, `scripts/test/run.sh` (+ fake `adb`)
 - Modify: `camera-android/app/build.gradle.kts`, `remote/android/app/build.gradle` (release signingConfig from `~/.kopernikadr/keystore.properties`)
 
-- [ ] release signing in both apps; README steps to create the keystore with the JBR `keytool`
+- [x] release signing in both apps; README steps to create the keystore with the JBR `keytool`
       **and back it up**
-- [ ] `build.sh`: camera release + remote release (web build → cap sync → gradle) into `dist/`;
+- [x] `build.sh`: camera release + remote release (web build → cap sync → gradle) into `dist/`;
       **fails** without the keystore
-- [ ] `install.sh`:
-  - [ ] model substring mapping, `-s <serial>`, unknown model → fail;
-  - [ ] `--camera-only` / `--remote-only`, `--variant`;
-  - [ ] `install -r`;
-  - [ ] any `Failure [` → fail loudly; never uninstalls
-- [ ] `collect-diagnostics.sh` (both apps' reports) and `meminfo-sampler.sh` (app + WebView
+- [x] `install.sh`:
+  - [x] model substring mapping, `-s <serial>`, unknown model → fail;
+  - [x] `--camera-only` / `--remote-only`, `--variant`;
+  - [x] `install -r`;
+  - [x] any `Failure [` → fail loudly; never uninstalls
+- [x] `collect-diagnostics.sh` (both apps' reports) and `meminfo-sampler.sh` (app + WebView
       sandboxed process, 1 s CSV)
-- [ ] write tests (`scripts/test/run.sh` with a fake `adb`): mapping by substring, unknown
+- [x] write tests (`scripts/test/run.sh` with a fake `adb`): mapping by substring, unknown
       model, INCOMPATIBLE and DOWNGRADE failures, no devices, `--remote-only`
-- [ ] dry run on the emulator with a **throwaway** keystore: the upgrade is refused on a
+- [x] dry run on the emulator with a **throwaway** keystore: the upgrade is refused on a
       signature change and nothing is uninstalled
-- [ ] run tests — must pass before Task 13
+- [x] run tests — must pass before Task 13
 
 ### Task 9: README + parent checklist (draft)
 
