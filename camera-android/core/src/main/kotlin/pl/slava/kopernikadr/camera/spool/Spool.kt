@@ -36,6 +36,9 @@ sealed interface SpoolLookup {
 /** The reserved row of an admitted capture. */
 data class PendingFrame(val frameId: String, val seq: Long)
 
+/** [Spool.stats]: committed, not reclaimed frames. */
+data class SpoolStats(val unackedCount: Int, val fullBytes: Long)
+
 /** What [Spool.commit] stores about the durable `full` file. */
 data class CommitMeta(
     val w: Int,
@@ -196,6 +199,17 @@ class Spool private constructor(
             if (changes() == 1L) acked++ else unknown += id
         }
         AckResult(acked, unknown)
+    }
+
+    /** Committed, not reclaimed frames of every client: unacked count and the bytes of their `full` files. */
+    fun stats(): SpoolStats = synchronized(lock) {
+        conn.prepare(
+            "SELECT COALESCE(SUM(CASE WHEN ackedAt IS NULL THEN 1 ELSE 0 END), 0), COALESCE(SUM(bytes), 0) " +
+                "FROM frames WHERE state = '$STATE_COMMITTED' AND reclaimedAt IS NULL",
+        ).use { st ->
+            st.step()
+            SpoolStats(unackedCount = st.getLong(0).toInt(), fullBytes = st.getLong(1))
+        }
     }
 
     override fun close() = synchronized(lock) { conn.close() }

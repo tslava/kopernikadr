@@ -160,7 +160,7 @@ class SpoolCaptureService(
 
     private fun err(e: ProtocolError) = PortResult.Err(e)
 
-    private fun ms(a: Long, b: Long) = "%.1f".format((b - a) / 1_000_000.0)
+    private fun ms(a: Long, b: Long) = String.format(java.util.Locale.ROOT, "%.1f", (b - a) / 1_000_000.0)
 
     companion object {
         private val ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)

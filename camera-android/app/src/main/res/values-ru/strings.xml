@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="status_title">Kopernikadr Kamera</string>
-    <string name="status_ip">Адрес Wi-Fi: %1$s</string>
     <string name="status_no_wifi">Нет подключения к Wi-Fi</string>
     <string name="permission_text">Попроси родителя разрешить камеру</string>
     <string name="permission_retry">Попробовать снова</string>
     <string name="camera_starting">Камера: запуск…</string>
     <string name="camera_ready">Камера готова</string>
     <string name="camera_error">Ошибка камеры: %1$s</string>
+    <string name="server_starting">Сервер: запуск…</string>
+    <string name="server_waiting">Жду планшет</string>
+    <string name="server_connected">Планшет подключён</string>
+    <string name="server_error">Ошибка сервера: %1$s</string>
 </resources>

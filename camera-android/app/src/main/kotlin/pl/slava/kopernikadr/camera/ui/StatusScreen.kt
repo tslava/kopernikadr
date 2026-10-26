@@ -25,10 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import pl.slava.kopernikadr.camera.R
 import pl.slava.kopernikadr.camera.camera.CameraStatus
+import pl.slava.kopernikadr.camera.host.ServerState
 
 /** Diagnostics open after holding the status title this long. */
 const val DIAGNOSTICS_HOLD_MS = 2_000L
@@ -45,7 +47,7 @@ const val DIAGNOSTICS_HOLD_MS = 2_000L
 @Composable
 fun StatusScreen(
     wifiIp: String?,
-    port: Int,
+    server: ServerState,
     camera: CameraStatus,
     onPreviewView: (PreviewView?) -> Unit,
     onTitleHeld: (() -> Unit)?,
@@ -74,13 +76,35 @@ fun StatusScreen(
                     style = MaterialTheme.typography.headlineMedium,
                     modifier = if (onTitleHeld != null) Modifier.holdFor(DIAGNOSTICS_HOLD_MS, onTitleHeld) else Modifier,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
+                val port = server.port
+                when {
+                    wifiIp == null -> Text(stringResource(R.string.status_no_wifi), style = MaterialTheme.typography.titleLarge)
+                    port == null -> Text(stringResource(R.string.server_starting), style = MaterialTheme.typography.titleLarge)
+                    else -> {
+                        // The address the tablet opens; "ip:port" stays on one line.
+                        Text("http://", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "$wifiIp:$port",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = wifiIp?.let { stringResource(R.string.status_ip, "$it:$port") }
-                        ?: stringResource(R.string.status_no_wifi),
-                    style = MaterialTheme.typography.titleMedium,
+                    text = when {
+                        server.error != null -> stringResource(R.string.server_error, server.error)
+                        port == null -> ""
+                        server.connected -> stringResource(R.string.server_connected)
+                        else -> stringResource(R.string.server_waiting)
+                    },
+                    style = MaterialTheme.typography.titleLarge,
+                    color = if (server.connected) Color(0xFF7CD992) else MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
                 Text(cameraLine(camera), style = MaterialTheme.typography.bodyLarge)
                 camera.bind?.let { bind ->
                     Text(

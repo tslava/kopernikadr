@@ -143,49 +143,70 @@ export async function exportVideo({ frameIds, fps, name, urlFor, onProgress, sig
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, width, height);
 
-  const stream = canvas.captureStream(0);
-  const [track] = stream.getVideoTracks();
-  const rec = new MR(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  // Created once the first picture is on the canvas: the stream starts with the canvas as it is.
+  let track = null;
+  let rec = null;
   const chunks = [];
-  rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
-  const stopped = new Promise((resolve, reject) => {
-    rec.onstop = resolve;
-    rec.onerror = (e) => reject(e.error ?? new Error('MediaRecorder error'));
-  });
 
   const ahead = 3;
   const loads = new Map();
   const abort = new AbortController();
   const onAbort = () => abort.abort();
   signal?.addEventListener('abort', onAbort);
+  const settled = new Set();
   const load = (i) => {
     if (i >= frameIds.length || loads.has(i)) return;
     const p = loadFrameBitmap(urlFor, frameIds[i], { resize: { w: width, h: height }, signal: abort.signal });
-    p.catch(() => {});
+    p.then(() => settled.add(i), () => settled.add(i));
     loads.set(i, p);
   };
 
   const { steps } = buildSchedule(frameIds, fps);
+  let last = null; // the picture on the canvas, kept to redraw it for the extra step
   try {
     for (let i = 0; i <= ahead; i++) load(i);
+    // The clock starts with the first picture, not with its download; it is on the canvas before
+    // the recorder starts, so the video does not open with the black canvas.
+    const first = loads.has(0) ? await loads.get(0).catch(() => null) : null;
+    if (first) drawContain(ctx, first, width, height);
+    if (signal?.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
+    const stream = canvas.captureStream(0);
+    [track] = stream.getVideoTracks();
+    rec = new MR(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+    rec.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+    const stopped = new Promise((resolve, reject) => {
+      rec.onstop = resolve;
+      rec.onerror = (e) => reject(e.error ?? new Error('MediaRecorder error'));
+    });
     rec.start(1000);
     let t = performance.now();
     for (let s = 0; s < steps.length; s++) {
       if (signal?.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
       const step = steps[s];
       if (!step.extra) {
+        if (!settled.has(s)) {
+          // A late download must not stretch the previous picture: the paused time is not recorded.
+          rec.pause();
+          await loads.get(s).catch(() => null);
+          rec.resume();
+          t = performance.now();
+        }
         // a frame that cannot be loaded keeps the previous picture on screen
         const bmp = await loads.get(s).catch(() => null);
         loads.delete(s);
         load(s + ahead + 1);
-        if (signal?.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
-        if (bmp) {
-          try {
-            drawContain(ctx, bmp, width, height);
-          } finally {
-            bmp.close();
-          }
+        if (signal?.aborted) {
+          bmp?.close();
+          throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
         }
+        if (bmp) {
+          drawContain(ctx, bmp, width, height);
+          last?.close();
+          last = bmp;
+        }
+      } else if (last) {
+        // An unchanged canvas emits no frame on requestFrame(): redraw so the last picture is held.
+        drawContain(ctx, last, width, height);
       }
       track.requestFrame();
       onProgress?.(Math.min(s + 1, frameIds.length), frameIds.length);
@@ -197,13 +218,14 @@ export async function exportVideo({ frameIds, fps, name, urlFor, onProgress, sig
     const type = mime.split(';')[0];
     return { blob: new Blob(chunks, { type }), mime, fileName: safeFileName(name, extensionFor(mime)) };
   } finally {
+    last?.close();
     signal?.removeEventListener('abort', onAbort);
     abort.abort();
     for (const p of loads.values()) p.then((b) => b.close(), () => {});
-    if (rec.state !== 'inactive') {
+    if (rec && rec.state !== 'inactive') {
       try { rec.stop(); } catch { /* ignore */ }
     }
-    track.stop();
+    track?.stop();
     canvas.remove();
   }
 }

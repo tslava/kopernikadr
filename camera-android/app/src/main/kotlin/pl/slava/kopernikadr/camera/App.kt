@@ -9,6 +9,7 @@ import pl.slava.kopernikadr.camera.camera.CameraController
 import pl.slava.kopernikadr.camera.camera.CharacteristicsReader
 import pl.slava.kopernikadr.camera.camera.PrefsKeyValueStore
 import pl.slava.kopernikadr.camera.core.CapabilityMapper
+import pl.slava.kopernikadr.camera.host.ServerHost
 
 class App : Application() {
     /** Application-scoped; [MainActivity] attaches it to its lifecycle once CAMERA is granted. */
@@ -20,6 +21,9 @@ class App : Application() {
 
     /** The controls adapter (also the server's `ControlsPort`), or null before [ensureControls]. */
     val controls: CameraControls? get() = _controls
+
+    /** The camera server; [MainActivity] starts it on ON_START and stops it on ON_STOP. */
+    val server: ServerHost by lazy { ServerHost(this) }
 
     override fun onCreate() {
         super.onCreate()

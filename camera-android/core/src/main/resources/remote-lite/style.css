@@ -550,7 +550,8 @@ input[type="range"]:disabled { opacity: .35; }
 }
 .save-btn:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 2px 0 #1f5c9c; }
 .save-btn:disabled { opacity: .4; }
-.export-canvas { position: fixed; left: -20000px; top: 0; width: 160px; height: 120px; pointer-events: none; }
+/* In the viewport (Chrome stamps captured frames of an off-screen canvas irregularly), but invisible. */
+.export-canvas { position: fixed; left: 0; top: 0; width: 160px; height: 120px; opacity: .01; pointer-events: none; }
 
 .export-panel { position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,.7); display: grid; place-items: center; }
 .export-card {

@@ -2,11 +2,14 @@
 <resources>
     <string name="app_name" translatable="false">Kopernikadr Kamera</string>
     <string name="status_title">Kopernikadr Kamera</string>
-    <string name="status_ip">Adres Wi-Fi: %1$s</string>
     <string name="status_no_wifi">Brak połączenia Wi-Fi</string>
     <string name="permission_text">Poproś rodzica o zgodę na aparat</string>
     <string name="permission_retry">Spróbuj ponownie</string>
     <string name="camera_starting">Kamera: uruchamianie…</string>
     <string name="camera_ready">Kamera gotowa</string>
     <string name="camera_error">Błąd kamery: %1$s</string>
+    <string name="server_starting">Serwer: uruchamianie…</string>
+    <string name="server_waiting">Czekam na tablet</string>
+    <string name="server_connected">Połączono z tabletem</string>
+    <string name="server_error">Błąd serwera: %1$s</string>
 </resources>

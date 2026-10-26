@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.net.Inet4Address
 import java.net.InetAddress
 import pl.slava.kopernikadr.camera.camera.CameraController
+import pl.slava.kopernikadr.camera.host.ServerHost
 import pl.slava.kopernikadr.camera.ui.PermissionScreen
 import pl.slava.kopernikadr.camera.ui.StatusScreen
 
@@ -37,12 +38,16 @@ class MainActivity : ComponentActivity() {
     private var cameraGranted by mutableStateOf(false)
 
     private val camera: CameraController get() = (application as App).camera
+    private val server: ServerHost get() = (application as App).server
 
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
 
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         Log.i(CameraController.TAG, "CAMERA permission ${if (granted) "granted" else "denied"}")
-        if (granted) onCameraGranted()
+        if (granted) {
+            onCameraGranted()
+            server.start() // delivered while started
+        }
     }
 
     private val wifiCallback = object : ConnectivityManager.NetworkCallback() {
@@ -74,9 +79,10 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize()) {
                     if (cameraGranted) {
                         val status by camera.status.collectAsStateWithLifecycle()
+                        val serverState by server.state.collectAsStateWithLifecycle()
                         StatusScreen(
                             wifiIp = wifiIp,
-                            port = SERVER_PORT,
+                            server = serverState,
                             camera = status,
                             onPreviewView = { view -> camera.setPreviewSurfaceProvider(view?.surfaceProvider) },
                             // Release has no diagnostics screen, so its title gets no long-press at all.
@@ -108,9 +114,11 @@ class MainActivity : ComponentActivity() {
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .build()
         connectivity.registerNetworkCallback(wifi, wifiCallback)
+        if (cameraGranted) server.start()
     }
 
     override fun onStop() {
+        server.stop()
         connectivity.unregisterNetworkCallback(wifiCallback)
         super.onStop()
     }
@@ -122,11 +130,6 @@ class MainActivity : ComponentActivity() {
     private fun onCameraGranted() {
         cameraGranted = true
         camera.attach(this)
-    }
-
-    companion object {
-        /** The camera server's port (PROTOCOL §2); the server itself comes with Task 11. */
-        const val SERVER_PORT = 8765
     }
 }
 

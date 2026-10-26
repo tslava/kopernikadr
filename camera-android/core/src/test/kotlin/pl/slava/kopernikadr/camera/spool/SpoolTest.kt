@@ -154,4 +154,17 @@ class SpoolTest {
         } catch (_: IllegalArgumentException) {
         }
     }
+
+    @Test
+    fun `stats count committed unacked frames and their bytes across clients`() {
+        assertEquals(SpoolStats(0, 0), spool.stats())
+        val a = committed("c1", "r1")
+        committed("c2", "r1")
+        spool.insertPending("c1", "r2", "h", "p1", 0)
+        val failed = spool.insertPending("c1", "r3", "h", "p1", 0)
+        spool.fail(failed.frameId, "CAPTURE_FAILED", "x")
+        assertEquals(SpoolStats(2, 4_000_000), spool.stats())
+        spool.ack("c1", listOf(a))
+        assertEquals(SpoolStats(1, 4_000_000), spool.stats())
+    }
 }
