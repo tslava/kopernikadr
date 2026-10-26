@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "e1b5c9a3-7f2d-4e68-9a01-3c5d7b9f2e46",
+  "ok": false,
+  "error": {
+    "code": "BUSY",
+    "message": "another client holds the session",
+    "retryable": true,
+    "retryAfterMs": 7350
+  }
+}

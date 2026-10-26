@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "t": "req",
+  "reqId": "9b3e7f1a-5d2c-4a86-8e0b-6f4c2a9d1e57",
+  "op": "capture",
+  "args": {
+    "projectId": "7a1f3c5e-8b2d-4f69-9c04-e6b8d2a4f1c3",
+    "rotation": 0
+  }
+}

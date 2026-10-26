@@ -1,6 +1,6 @@
 # Kopernikadr camera protocol
 
-Version: **v0 (provisional, rev 3)**. It is frozen as v1 after the stage 0 probes.
+Version: **v0 (provisional, rev 3.1)**. It is frozen as v1 after the stage 0 probes.
 
 This document is the platform-neutral contract between a **camera** (today: Android phone;
 later maybe iOS) and a **remote** (the tablet app). MUST / SHOULD / MAY are used as in RFC 2119.
@@ -41,8 +41,10 @@ checked by both implementations.
   `kopernikadr://connect?host=<ip>&port=<port>&id=<cameraId>`.
 - One HTTP/1.1 port (default 8765; another port MAY be used and advertised).
 - **CORS**: plain HTTP endpoints answer with `Access-Control-Allow-Origin` for the remote app's
-  origin (`http://localhost` for the Android remote). WebSocket upgrades from other `Origin`s MAY
-  be rejected.
+  origin (`http://localhost` for the Android remote).
+- **Origin**: the camera MUST NOT reject a WebSocket upgrade that carries no `Origin` header
+  (non-browser clients). v0 enforces no `Origin` at all; a later version MAY reject upgrades
+  whose `Origin` is present and not the remote app's.
 
 | Endpoint | Purpose |
 |---|---|
@@ -53,13 +55,16 @@ checked by both implementations.
 
 ## 4. Sessions
 
-1. The remote opens `/ws/control` and sends `hello`, and nothing else before it.
+1. The remote opens `/ws/control` and sends `hello`, and nothing else before it. A first message
+   other than `hello` gets a `res` with `ok:false`, `INVALID_ARGS`, message `"hello expected"`,
+   and the socket is then closed with `4000 protocol error`.
 2. The camera holds at most one **current session** `{sessionId, clientId, lastSeen}`. Expiry
    uses a monotonic clock, TTL 10 s, renewed by any message on that session's socket.
    - No session, or the current one expired → a new session is granted.
    - Current session has the **same** `clientId` → it is **replaced**: the old control and
      preview sockets are closed with code `4001 replaced`, and a new `sessionId` is granted.
-   - Otherwise → error `BUSY` (with `retryAfterMs`), and the socket is closed.
+   - Otherwise → error `BUSY` with `error.retryAfterMs` (integer ms until the current session
+     expires unless renewed), and the socket is then closed with `4003 busy`.
 3. Every request is checked against the current session. A request on a socket whose session is
    no longer current gets `LEASE_LOST`, and the socket is closed (`4002 lease lost`).
 4. Work accepted before a session ended (e.g. a running `capture`) completes and is committed
@@ -67,6 +72,15 @@ checked by both implementations.
 5. The remote sends `ping` every 2 s. The camera MUST answer pings even while a capture runs.
 6. A different `bootId` in `hello` means the camera restarted. The remote re-reads controls and
    resolves outstanding captures (§8).
+
+WebSocket close codes sent by the camera:
+
+| Code | Reason | When |
+|---|---|---|
+| `4000` | protocol error | the first control message was not `hello` |
+| `4001` | replaced | the same client started a new session (control and preview sockets) |
+| `4002` | lease lost | the socket's session is no longer current (control and preview sockets) |
+| `4003` | busy | after the `BUSY` response to `hello` |
 
 ## 5. Envelope (control WS)
 
@@ -80,13 +94,18 @@ checked by both implementations.
 `v` is the protocol major version and appears in every message. Unknown fields and event names
 MUST be ignored. An unknown `op` → `UNKNOWN_OP`. A schema violation → `INVALID_ARGS`.
 
+The `error` object is `{code, message, retryable, retryAfterMs?, data?}`. `retryAfterMs` is an
+integer number of milliseconds, a top-level field of `error` (set with `BUSY`). `data` is an
+optional object with code-specific details.
+
 ## 6. Operations
 
 ### `hello`
 - **Args**: `{clientId, protocolVersions:{min,max}, appVersion, platform, token?}`. `token` is
   ignored in v1.
 - **Data**: `{cameraId, bootId, sessionId, name, protocolVersion, capabilities, controls, status,
-  sessionTtlMs}`.
+  sessionTtlMs}`. `capabilities` is the full `Capabilities` object, `controls` the full
+  `Controls` object and `status` the full `Status` object (below).
 - **Errors**: `BUSY`, `UNSUPPORTED_VERSION`.
 
 ### `ping`
@@ -114,9 +133,11 @@ Rules:
   `capture`. Ordinary failures are recorded as `failed(code)` before the camera answers.
 - It MUST respond only after the `full` file and the `committed` record are durable.
 - `(clientId, reqId)` already known:
-  - `committed` → the original `FrameInfo`;
+  - `committed` → the original `FrameInfo` (a replay returns the stored result);
   - `failed` → the original error;
-  - in flight → the same eventual response;
+  - in flight, requested again on **the same socket** → `CAPTURE_IN_PROGRESS` (a socket never
+    gets two `res` for one `reqId`); on another socket (after a reconnect) → the same eventual
+    response;
   - different args → `REQ_ID_REUSED`.
 
   An interrupted operation is NEVER re-executed.
@@ -227,8 +248,10 @@ Data: a free-form JSON object. It is not part of the compatibility promise.
   duplicates are coalesced. Without a pending `next`, frames are dropped at the source. A pending
   `next` survives rebinds and capture pauses, and is answered when frames resume.
 - Binary layout: `uint32 BE headerLength` + UTF-8 JSON header + JPEG bytes. Header: `{seq, bootId,
-  generation, w, h, ts, locks:{exposure, whiteBalance, focus}}`.
-- The socket is closed with `4001`/`4002` when its session is replaced or lost.
+  generation, w, h, ts, locks:{exposure, whiteBalance, focus}}`. `ts` is the camera wall clock in
+  epoch milliseconds when the frame was produced.
+- The socket is closed with `4001 replaced` / `4002 lease lost` when its session is replaced or
+  lost (close codes: §4).
 - Client watchdog (normative): if no frame arrives within 3 s of a `next`, or a frame fails to
   decode, the client closes the socket and reopens it once it has a valid session.
 

@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "t": "evt",
+  "name": "status",
+  "data": {
+    "batteryPct": 80,
+    "charging": true,
+    "freeBytes": 41231234567,
+    "spoolBytes": 314691356,
+    "unackedCount": 4,
+    "orphanCount": 0,
+    "integrityErrors": 0,
+    "thermal": "light"
+  }
+}
