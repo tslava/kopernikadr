@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Kopernikadr Kamera</string>
+    <string name="status_title">Kopernikadr Kamera</string>
+    <string name="status_ip">Adres Wi-Fi: %1$s</string>
+    <string name="status_no_wifi">Brak połączenia Wi-Fi</string>
+</resources>

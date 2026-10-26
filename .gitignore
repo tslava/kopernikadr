@@ -1,0 +1,21 @@
+# Gradle / Android
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+*.apk
+*.aab
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Raw probe outputs (summaries go to docs/diagnostics/)
+/diagnostics/
+
+# Node
+node_modules/

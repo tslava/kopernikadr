@@ -272,25 +272,25 @@
   `camera-android/app/src/main/kotlin/.../diag/InstallDiag.kt` (no-op), `camera-android/app/src/probe/...`,
   `camera-android/app/src/debug/...` (diag hook stubs)
 
-- [ ] check publish dates; pin every dependency ≥14 days old in `libs.versions.toml`; record
+- [x] check publish dates; pin every dependency ≥14 days old in `libs.versions.toml`; record
       versions + dates in `VERSIONS.md`
-- [ ] produce the Gradle 9.8.1 wrapper with the downloaded distribution + JBR; pin
+- [x] produce the Gradle 9.8.1 wrapper with the downloaded distribution + JBR; pin
       `distributionSha256Sum`. `gradlew-jbr` exports `JAVA_HOME`/`ANDROID_HOME`, creates
       `local.properties`, and fails clearly if the JBR is missing
-- [ ] `:app`:
-  - [ ] `applicationId pl.slava.kopernikadr.camera`, compile/target/min 36/36/31;
-  - [ ] build types debug / probe (non-debuggable, debug signing, `src/probe`) / release;
-  - [ ] activity locked to landscape, `FLAG_KEEP_SCREEN_ON`, edge-to-edge;
-  - [ ] permissions CAMERA, INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE,
+- [x] `:app`:
+  - [x] `applicationId pl.slava.kopernikadr.camera`, compile/target/min 36/36/31;
+  - [x] build types debug / probe (non-debuggable, debug signing, `src/probe`) / release;
+  - [x] activity locked to landscape, `FLAG_KEEP_SCREEN_ON`, edge-to-edge;
+  - [x] permissions CAMERA, INTERNET, ACCESS_NETWORK_STATE, ACCESS_WIFI_STATE,
         CHANGE_WIFI_MULTICAST_STATE;
-  - [ ] cleartext network security config;
-  - [ ] label "Kopernikadr Kamera"; `values/` Polish, `values-ru/`
-- [ ] **spike**: `SqliteSpikeTest` opens a `BundledSQLiteDriver` DB in `:core` tests on macOS
+  - [x] cleartext network security config;
+  - [x] label "Kopernikadr Kamera"; `values/` Polish, `values-ru/`
+- [x] **spike**: `SqliteSpikeTest` opens a `BundledSQLiteDriver` DB in `:core` tests on macOS
       and sets WAL + `synchronous=FULL`. If it fails, switch to `sqlite-jdbc` in tests behind a
       `SqlDriver` seam and record it with ⚠️
-- [ ] `./gradlew-jbr :core:test :app:assembleDebug :app:assembleProbe :app:assembleRelease` green
-- [ ] on the phone: `adb install -r` of the debug build; it launches in landscape
-- [ ] run tests — must pass before task 2
+- [x] `./gradlew-jbr :core:test :app:assembleDebug :app:assembleProbe :app:assembleRelease` green
+- [ ] ⚠️ on the phone: `adb install -r` of the debug build; it launches in landscape — pending, the phone was disconnected during Task 1
+- [x] run tests — must pass before task 2
 
 ### Task 2: Pure core — Ulid, geometry, size selection, capability mapping (TDD)
 
@@ -529,14 +529,14 @@
   - `POST /diag/controls` (lock method, compensation, rotation, previewQuality)
 
   Installed via `installDiag` only in debug/probe.
-- [ ] probe-client (Node global `WebSocket`, no deps), persistent `clientId` file. Commands:
+- [x] probe-client (Node global `WebSocket`, no deps), persistent `clientId` file. Commands:
   - `info`;
   - `hello [--clientId]`;
   - `capture` (+ same-reqId repeat);
   - `preview --seconds --quality` (fps, latency, sizes; a watchdog re-hellos after a stall);
   - `download` (sha256);
   - `probe <name>` (start, continue prompts, fetch the report + files into `diagnostics/<date>/`)
-- [ ] write `node:test` tests for the preview frame parser (good, short header, bad JSON)
+- [x] write `node:test` tests for the preview frame parser (good, short header, bad JSON) — 31 tests incl. a fake camera
 - [ ] on the phone: `dns-sd -B _kopernikadr._tcp` sees it; `probe-client info/hello/capture/preview
       /download` work; a second clientId gets BUSY
 - [ ] run tests — must pass before task 15
