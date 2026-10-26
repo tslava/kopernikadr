@@ -36,3 +36,8 @@ remote/android/app/src/main/assets/capacitor.config.json
 remote/android/app/src/main/assets/capacitor.plugins.json
 remote/android/app/src/main/res/xml/config.xml
 remote/android/capacitor-cordova-android-plugins/
+
+# Release signing material lives in ~/.kopernikadr, never in the repo
+*.jks
+*.keystore
+keystore.properties
