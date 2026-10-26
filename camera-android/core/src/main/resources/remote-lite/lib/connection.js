@@ -5,9 +5,23 @@
 import { ControlClient, PROTOCOL_VERSION, ProtocolError } from './protocol.js';
 import { Backoff } from './backoff.js';
 
+/** Close code 4001: the same clientId (another tab or device with this page) took the session. */
+export const CLOSE_REPLACED = 4001;
+
+/**
+ * What to do when the camera closes the control socket (PROTOCOL.md §4): 4001 replaced → stop
+ * (reconnecting would steal the session back and the two tabs would fight forever); anything else
+ * (4002 lease lost, network drop, ...) → reconnect with backoff.
+ * @returns {'stop'|'reconnect'}
+ */
+export function closeAction(code) {
+  return code === CLOSE_REPLACED ? 'stop' : 'reconnect';
+}
+
 /**
  * States: 'connecting' (never had a session yet), 'online', 'offline' (lost it, reconnecting),
- * 'busy' (another client holds the camera), 'unsupported' (no common protocol version).
+ * 'busy' (another client holds the camera), 'unsupported' (no common protocol version),
+ * 'replaced' (another tab/device with this clientId took over; no reconnect until takeOver()).
  * Events (on): state(state, detail), session(helloData), controls(c), status(s), event(name, data).
  */
 export class CameraConnection {
@@ -71,8 +85,17 @@ export class CameraConnection {
 
   /** Drop the current socket now and reconnect (used by the liveness check and on page resume). */
   reconnectNow() {
-    if (!this.#running) return;
+    if (!this.#running || this.state === 'replaced') return;
     this.#drop('reconnect');
+    clearTimeout(this.#timer);
+    this.#connect();
+  }
+
+  /** After 'replaced': explicitly take the session back (the other tab then gets 4001 itself). */
+  takeOver() {
+    if (!this.#running || this.state !== 'replaced') return;
+    this.backoff.reset();
+    this.#drop('takeover');
     clearTimeout(this.#timer);
     this.#connect();
   }
@@ -103,7 +126,7 @@ export class CameraConnection {
       if (token !== this.#token) return;
       const client = new ControlClient(ws, {
         onEvent: (name, data) => this.#onEvent(name, data),
-        onClose: () => { if (token === this.#token) this.#fail(token); },
+        onClose: (info) => { if (token === this.#token) this.#closed(token, info); },
       });
       this.#client = client;
       this.#hello(token, client);
@@ -174,6 +197,16 @@ export class CameraConnection {
       this.#emit('status', data);
     }
     this.#emit('event', name, data);
+  }
+
+  #closed(token, info) {
+    if (!info?.byClient && closeAction(info?.code) === 'stop') {
+      this.#drop('replaced');
+      clearTimeout(this.#timer);
+      this.#setState('replaced', { closeCode: info.code });
+      return;
+    }
+    this.#fail(token);
   }
 
   /** The current socket failed: drop it, go offline, reconnect after a backoff delay. */
