@@ -21,7 +21,7 @@ Docs: [requirements](docs/PROMPT.md) · [architecture](docs/ARCHITECTURE.md) ·
 | `protocol/` | `PROTOCOL.md` (v0, frozen as v1 at the end of 0b), `fixtures/*.json`, and `tools/probe-client/` (a Mac CLI + a fake camera) |
 | `packages/remote-core/` | *Coming in 0b:* shared JS (protocol client, preview, backoff, i18n helpers) used by remote-lite and the native remote |
 | `remote/` | *Coming in 0b:* the native tablet remote (Next.js static export + Capacitor 8 Android) |
-| `scripts/` | *Coming in 0b:* `build.sh`, `install.sh`, `collect-diagnostics.sh` |
+| `scripts/` | `build.sh`, `install.sh`, `collect-diagnostics.sh`, `meminfo-sampler.sh` (+ `lib.sh`, and `test/run.sh` with a fake `adb`) |
 | `docs/` | Requirements, architecture, roadmap, plans, diagnostics summaries, acceptance checklists |
 
 ## Build
@@ -41,7 +41,65 @@ cd camera-android
 ```
 
 Pinned versions and why some are held back: [camera-android/VERSIONS.md](camera-android/VERSIONS.md).
-*Coming in 0b:* npm workspaces at the root (`npm test --workspaces`) and `scripts/build.sh`.
+*Coming in 0b:* npm workspaces at the root (`npm test --workspaces`).
+
+### Build the APKs (`scripts/build.sh`)
+
+```sh
+scripts/build.sh                                  # camera + remote, release → dist/
+scripts/build.sh --camera-only --variant probe    # dist/kopernikadr-camera-probe.apk
+scripts/build.sh --remote-only --variant debug    # dist/kopernikadr-remote-debug.apk
+```
+
+Output: `dist/kopernikadr-<camera|remote>-<release|probe|debug>.apk` (git-ignored). The remote
+build runs `npm run build` (Next static export) → `npx cap sync android` → Gradle; run `npm ci`
+at the repo root once first. The remote has no `probe` build type. **Release** needs the release
+keystore (below); without it `build.sh` refuses to build, because an unsigned release APK can't
+be installed. After each build it prints the signer certificate's SHA-256, so a wrong key is
+visible before installing.
+
+### Release keystore (create once, then back it up)
+
+Both apps' release builds are signed with one key, kept **outside the repo** in `~/.kopernikadr/`.
+The Gradle files read `~/.kopernikadr/keystore.properties` (or the file named by
+`KOPERNIKADR_KEYSTORE_PROPERTIES`); without it the release build type stays unsigned. The
+`debug` and `probe` builds keep the debug key.
+
+> **Losing the key means losing data.** Android only upgrades an app with an APK signed by the
+> same key. With another key the only way to install is to uninstall first, which deletes the
+> camera's frames and the remote's projects. Back the key up before the first install.
+
+1. Create it with Android Studio's `keytool` (it asks for a password; PKCS12 uses the same
+   password for the store and the key):
+
+   ```sh
+   mkdir -p ~/.kopernikadr && chmod 700 ~/.kopernikadr
+   "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -genkeypair -v \
+     -keystore ~/.kopernikadr/release.jks -alias kopernikadr \
+     -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Kopernikadr"
+   ```
+
+2. Write `~/.kopernikadr/keystore.properties` (`storeFile` is absolute or relative to this
+   file), then `chmod 600 ~/.kopernikadr/keystore.properties`:
+
+   ```properties
+   storeFile=release.jks
+   storePassword=<the password>
+   keyAlias=kopernikadr
+   keyPassword=<the same password>
+   ```
+
+3. **Back up** `release.jks` and the password to two places off this Mac (for example the
+   password manager, as an attachment, and an encrypted USB stick). Check the backup opens and
+   note its fingerprint:
+
+   ```sh
+   "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -list -v \
+     -keystore /path/to/backup/release.jks | grep SHA256
+   ```
+
+   It must match the `SHA-256 digest` that `build.sh` prints. Never commit the keystore or the
+   passwords (`*.jks`, `*.keystore` and `keystore.properties` are git-ignored).
 
 ### Camera app variants
 
@@ -49,11 +107,34 @@ Pinned versions and why some are held back: [camera-android/VERSIONS.md](camera-
 |---|---|---|
 | `debug` | `pl.slava.kopernikadr.camera.debug` | Debuggable, with diagnostics |
 | `probe` | `pl.slava.kopernikadr.camera.probe` | Release-like (non-debuggable), signed with the debug key, with diagnostics. **The kid's phone runs this build today** |
-| `release` | `pl.slava.kopernikadr.camera` | No diagnostics code. Release signing comes in 0b |
+| `release` | `pl.slava.kopernikadr.camera` | No diagnostics code. Signed with the release key (`~/.kopernikadr`) |
 
-The three packages are separate apps with separate data; they can sit side by side.
+The three packages are separate apps with separate data; they can sit side by side. Moving the
+kid to the release build means a new app with an empty spool: the frames stay in the probe app
+(so don't uninstall it). The remote has `debug` (`pl.slava.kopernikadr.remote.debug`) and
+`release` (`pl.slava.kopernikadr.remote`).
 
-### Install on the phone
+### Install (`scripts/install.sh`)
+
+```sh
+scripts/install.sh                                   # release: camera on the phone, remote on the tablet
+scripts/install.sh --camera-only --variant probe     # the kid's current build
+scripts/install.sh --remote-only --serial HA1XXXXX   # one device by serial
+```
+
+It installs `dist/` APKs (from `build.sh`) and picks devices by `ro.product.model` substring:
+`g05` → camera phone, `TB328` → tablet. If any unknown model is connected it stops (pick a device
+with `--serial`); several matching devices also need `--serial`. With `--serial` and no
+`--*-only`, it installs the app that matches that device. Emulators count as the tablet only with
+`--allow-emulator` (testing). Every target is resolved before anything is installed.
+
+It always runs `adb -s <serial> install -r` (an in-place upgrade) and **never uninstalls or
+clears data**. Any `Failure [` stops it with a non-zero exit and a loud message, for example
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE` (the APK is signed with another key: rebuild with the key
+from your backup) or `INSTALL_FAILED_VERSION_DOWNGRADE` (the device has a newer `versionCode`).
+Tests: `scripts/test/run.sh` (plain bash, a fake `adb`).
+
+### Install by hand (Gradle / adb)
 
 ```sh
 cd camera-android
@@ -68,10 +149,6 @@ With more than one device connected, pick one with `ANDROID_SERIAL=<serial>` (Gr
 > **Never uninstall the camera app.** Its spool holds every frame the kid has shot; uninstalling
 > deletes them. Always upgrade in place (`install -r`, or the Gradle install task). If an install
 > fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, stop and ask; don't uninstall to "fix" it.
-
-*Coming in 0b:* release signing with a keystore kept outside the repo (with a backup step:
-losing the keystore means uninstalling, which loses data), and `scripts/install.sh`, which picks
-the device by model, runs `adb install -r` and fails loudly instead of uninstalling.
 
 ## Using it today (remote-lite)
 
@@ -107,6 +184,7 @@ Frames stay on the phone for now (see Known limitations).
 (cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest)   # Kotlin
 node --test 'camera-android/core/src/test/remote-lite/*.test.mjs'       # remote-lite
 (cd protocol/tools/probe-client && node --test)                         # probe-client + fake camera
+scripts/test/run.sh                                                      # build/install/collect scripts (fake adb)
 ```
 
 ### remote-lite against the fake camera
@@ -137,7 +215,15 @@ command needs the `/diag` routes, which the camera app doesn't have yet.
 - Phone (debug/probe builds): hold the title on the phone's status screen for 2 s to open the
   diagnostics screen (the `caps` probe). Reports go to the app's external files dir, `diag/`,
   readable with `adb pull` on the probe build too.
-- *Coming in 0b:* a diagnostics view in the native remote and `scripts/collect-diagnostics.sh`.
+- `scripts/collect-diagnostics.sh [--serial S]` pulls the reports (read-only) from every known
+  device into `diagnostics/<YYYY-MM-DD>/<kind>-<model>-<serial>/<package>/` (git-ignored): the
+  camera's `files/diag/` of the probe and debug builds, and the remote's `files/` (release and
+  debug). Summaries go to `docs/diagnostics/`.
+- `scripts/meminfo-sampler.sh --serial S --package P [--seconds N] [--out f.csv]` samples
+  `dumpsys meminfo` TOTAL PSS of the app and of its WebView sandboxed renderer about once a
+  second → CSV `ts,app_pss_kb,renderer_pss_kb,total_kb`; on Ctrl-C or after N seconds it writes
+  `<out>.summary.txt` with the peaks. Default output: `diagnostics/<date>/meminfo-<pkg>-<time>.csv`.
+- *Coming in 0b:* a diagnostics view in the native remote.
 
 ## Parent checklist (Family Link) — draft
 
@@ -178,6 +264,8 @@ devices. Never try to bypass supervision.
 - **Uninstalling an app deletes its data.** The camera app holds all frames. The native remote
   (coming in 0b) will hold all projects, with no backup in v1. Today remote-lite keeps projects
   in the browser, so clearing that browser's site data deletes them too.
+- Keep the release keystore backed up (see [Release keystore](#release-keystore-create-once-then-back-it-up)):
+  without it an update can't be installed over the existing apps.
 
 **8. Limits, downtime and "Always allowed"**
 - *To be filled after the tablet session (plan 0b, Task 14):* how both apps behave under the

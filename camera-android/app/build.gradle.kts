@@ -1,8 +1,35 @@
+import java.util.Properties
+
 plugins {
     // AGP 9 compiles Kotlin itself (built-in Kotlin); org.jetbrains.kotlin.android is not applied.
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+}
+
+// Release signing: ~/.kopernikadr/keystore.properties (outside the repo), or the file named by
+// KOPERNIKADR_KEYSTORE_PROPERTIES. Keys: storeFile (absolute, or relative to the properties
+// file), storePassword, keyAlias, keyPassword. Without the file the release build stays unsigned
+// (scripts/build.sh refuses to build release then). Same loader in remote/android/app/build.gradle.
+val releaseKeystoreProps: Properties? = run {
+    val override = System.getenv("KOPERNIKADR_KEYSTORE_PROPERTIES")?.takeIf { it.isNotBlank() }
+    val propsFile = if (override != null) {
+        file(override)
+    } else {
+        file("${System.getProperty("user.home")}/.kopernikadr/keystore.properties")
+    }
+    if (!propsFile.isFile) {
+        if (override != null) throw GradleException("KOPERNIKADR_KEYSTORE_PROPERTIES=$override: no such file")
+        return@run null
+    }
+    val props = Properties().apply { propsFile.inputStream().use { load(it) } }
+    val missing = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+        .filter { props.getProperty(it).isNullOrBlank() }
+    if (missing.isNotEmpty()) throw GradleException("$propsFile: missing ${missing.joinToString()}")
+    val store = File(props.getProperty("storeFile")).let { if (it.isAbsolute) it else File(propsFile.parentFile, it.path) }
+    if (!store.isFile) throw GradleException("$propsFile: storeFile not found: $store")
+    props.setProperty("storeFile", store.absolutePath)
+    props
 }
 
 android {
@@ -17,13 +44,25 @@ android {
         versionName = "0.0.1"
     }
 
+    signingConfigs {
+        if (releaseKeystoreProps != null) {
+            create("release") {
+                storeFile = file(releaseKeystoreProps.getProperty("storeFile"))
+                storePassword = releaseKeystoreProps.getProperty("storePassword")
+                keyAlias = releaseKeystoreProps.getProperty("keyAlias")
+                keyPassword = releaseKeystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
         }
         release {
             isMinifyEnabled = false
-            // Unsigned for now; release signing comes with plan 0b.
+            // Unsigned when there is no keystore.properties (see releaseKeystoreProps above).
+            if (releaseKeystoreProps != null) signingConfig = signingConfigs.getByName("release")
         }
         // Release-like (non-debuggable) build for timing probes; carries src/probe diagnostics.
         create("probe") {

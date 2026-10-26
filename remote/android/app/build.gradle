@@ -1,6 +1,28 @@
 apply plugin: 'com.android.application'
 apply plugin: 'org.jetbrains.kotlin.android'
 
+// Release signing: ~/.kopernikadr/keystore.properties (outside the repo), or the file named by
+// KOPERNIKADR_KEYSTORE_PROPERTIES. Keys: storeFile (absolute, or relative to the properties
+// file), storePassword, keyAlias, keyPassword. Without the file the release build stays unsigned
+// (scripts/build.sh refuses to build release then). Same loader in camera-android/app/build.gradle.kts.
+def releaseKeystoreProps = { ->
+    def override = System.getenv('KOPERNIKADR_KEYSTORE_PROPERTIES')
+    def propsFile = override ? file(override) : file("${System.getProperty('user.home')}/.kopernikadr/keystore.properties")
+    if (!propsFile.isFile()) {
+        if (override) throw new GradleException("KOPERNIKADR_KEYSTORE_PROPERTIES=${override}: no such file")
+        return null
+    }
+    def props = new Properties()
+    propsFile.withInputStream { props.load(it) }
+    def missing = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword'].findAll { !props.getProperty(it)?.trim() }
+    if (missing) throw new GradleException("${propsFile}: missing ${missing.join(', ')}")
+    def store = new File(props.getProperty('storeFile'))
+    if (!store.isAbsolute()) store = new File(propsFile.parentFile, store.path)
+    if (!store.isFile()) throw new GradleException("${propsFile}: storeFile not found: ${store}")
+    props.setProperty('storeFile', store.absolutePath)
+    return props
+}()
+
 android {
     namespace = "pl.slava.kopernikadr.remote"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -17,6 +39,16 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (releaseKeystoreProps != null) {
+            release {
+                storeFile file(releaseKeystoreProps.getProperty('storeFile'))
+                storePassword releaseKeystoreProps.getProperty('storePassword')
+                keyAlias releaseKeystoreProps.getProperty('keyAlias')
+                keyPassword releaseKeystoreProps.getProperty('keyPassword')
+            }
+        }
+    }
     buildTypes {
         debug {
             // Installs next to the release build on the same device.
@@ -25,6 +57,8 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Unsigned when there is no keystore.properties (see releaseKeystoreProps above).
+            if (releaseKeystoreProps != null) signingConfig signingConfigs.release
         }
     }
 }

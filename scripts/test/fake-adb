@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# A fake `adb` for scripts/test/run.sh. State lives in $FAKE_ADB_STATE:
+#   devices             lines "serial|state|model|qemu|avd" (qemu/avd may be empty)
+#   install.<serial>    output of `install -r` on that device (default: Success);
+#                       contains "Failure [" → exit 1
+#   fs/<serial>/<path>  files `pull` can copy
+#   meminfo.<serial>.<pkg-or-pid>, services.<serial>.<pkg>, ps.<serial>, packages.<serial>
+# Every call is appended to calls.log. `uninstall` and `pm clear` are recorded as FORBIDDEN and
+# fail; a device command without `-s` is recorded as NO_SERIAL.
+set -uo pipefail
+
+state="${FAKE_ADB_STATE:?FAKE_ADB_STATE not set}"
+echo "$*" >> "$state/calls.log"
+
+serial=""
+if [[ "${1:-}" == -s ]]; then
+  serial="$2"
+  shift 2
+fi
+cmd="${1:-}"
+shift || true
+
+device_field() { # <serial> <field 1..5>
+  [[ -f "$state/devices" ]] || return 0
+  awk -F'|' -v s="$1" -v f="$2" '$1 == s { print $f }' "$state/devices"
+}
+
+case "$cmd" in
+  devices)
+    echo "List of devices attached"
+    if [[ -f "$state/devices" ]]; then
+      while IFS='|' read -r s st model _ _; do
+        [[ -n "$s" ]] || continue
+        printf '%s\t%s usb:1-1 product:fake model:%s device:fake transport_id:1\n' "$s" "$st" "${model// /_}"
+      done < "$state/devices"
+    fi
+    echo
+    exit 0
+    ;;
+  start-server | kill-server | version) exit 0 ;;
+esac
+
+if [[ -z "$serial" ]]; then
+  echo "NO_SERIAL $cmd $*" >> "$state/violations.log"
+  echo "error: more than one device/emulator" >&2
+  exit 1
+fi
+if [[ -z "$(device_field "$serial" 1)" ]]; then
+  echo "adb: device '$serial' not found" >&2
+  exit 1
+fi
+
+case "$cmd" in
+  uninstall)
+    echo "FORBIDDEN uninstall $serial $*" >> "$state/violations.log"
+    exit 99
+    ;;
+  install)
+    out="Performing Streamed Install
+Success"
+    [[ -f "$state/install.$serial" ]] && out="$(cat "$state/install.$serial")"
+    printf '%s\n' "$out"
+    if [[ "$out" == *"Failure ["* ]]; then exit 1; fi
+    exit 0
+    ;;
+  pull)
+    src="$1" dst="$2"
+    local_src="$state/fs/$serial/${src%/}"
+    if [[ ! -e "$local_src" ]]; then
+      echo "adb: error: failed to stat remote object '$src': No such file or directory" >&2
+      exit 1
+    fi
+    if [[ -d "$dst" ]]; then
+      cp -R "$local_src" "$dst/"
+    else
+      cp -R "$local_src" "$dst"
+    fi
+    n="$(find "$local_src" -type f | wc -l | tr -d ' ')"
+    echo "$src: $n files pulled, 0 skipped."
+    exit 0
+    ;;
+  shell)
+    line="$*"
+    case "$line" in
+      *"pm clear"*)
+        echo "FORBIDDEN pm clear $serial $line" >> "$state/violations.log"
+        exit 99
+        ;;
+      "getprop ro.product.model") device_field "$serial" 3 ;;
+      "getprop ro.boot.qemu") device_field "$serial" 4 ;;
+      "getprop ro.boot.qemu.avd_name") device_field "$serial" 5 ;;
+      "pm list packages"*)
+        [[ -f "$state/packages.$serial" ]] && grep -F "${line#pm list packages }" "$state/packages.$serial"
+        exit 0
+        ;;
+      "dumpsys meminfo "*)
+        f="$state/meminfo.$serial.${line#dumpsys meminfo }"
+        if [[ -f "$f" ]]; then cat "$f"; else echo "No process found for: ${line#dumpsys meminfo }"; fi
+        ;;
+      "dumpsys activity services "*)
+        f="$state/services.$serial.${line#dumpsys activity services }"
+        if [[ -f "$f" ]]; then cat "$f"; else echo "ACTIVITY MANAGER SERVICES (dumpsys activity services)"; fi
+        ;;
+      "ps -A"*)
+        echo "  PID NAME"
+        [[ -f "$state/ps.$serial" ]] && cat "$state/ps.$serial"
+        ;;
+      *)
+        echo "fake-adb: unsupported shell command: $line" >&2
+        exit 2
+        ;;
+    esac
+    exit 0
+    ;;
+  *)
+    echo "fake-adb: unsupported command: $cmd $*" >&2
+    exit 2
+    ;;
+esac
