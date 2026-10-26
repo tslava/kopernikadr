@@ -85,6 +85,30 @@ class HttpRoutesTest {
     }
 
     @Test
+    fun `classpath remote-lite merges its own lib with remote-core`() {
+        val loader = CameraServer::class.java.classLoader
+        // remote-core (packages/remote-core/src, copied by :core:syncRemoteCore)
+        for (name in listOf("protocol.js", "connection.js", "backoff.js", "preview.js", "preview-frame.js", "i18n-core.js")) {
+            assertTrue("remote-lite/lib/$name on the classpath", loader.getResource("remote-lite/lib/$name") != null)
+        }
+        // remote-lite's own lib
+        for (name in listOf("media.js", "i18n.js", "store.js")) {
+            assertTrue("remote-lite/lib/$name on the classpath", loader.getResource("remote-lite/lib/$name") != null)
+        }
+    }
+
+    @Test
+    fun `production root serves remote-lite with remote-core modules`() = cameraTest(config = ServerConfig()) {
+        assertTrue(client.get("/").bodyAsText().contains("app.js"))
+        for (path in listOf("/lib/protocol.js", "/lib/i18n-core.js", "/lib/media.js")) {
+            val r = client.get(path)
+            assertEquals(path, HttpStatusCode.OK, r.status)
+            assertEquals(path, "text/javascript", r.contentType()!!.withoutParameters().toString())
+        }
+        assertTrue(client.get("/lib/i18n.js").bodyAsText().contains("from './i18n-core.js'"))
+    }
+
+    @Test
     fun `frames serve variants with content length and 404 rules`() {
         val cam = FakeCamera()
         val f = cam.frames.add("client", "project", 0, fakeJpeg(1000))

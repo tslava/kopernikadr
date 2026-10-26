@@ -2,13 +2,11 @@
 // using Node's global WebSocket.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { L, FAKE_CAMERA, REMOTE_LITE_DIR } from './paths.mjs';
-
-const { CameraConnection } = await import(L('connection.js'));
-const { PreviewLoop } = await import(L('preview.js'));
-const { uuid } = await import(L('protocol.js'));
-const { Backoff } = await import(L('backoff.js'));
-const { startFakeCamera, loadFakeImages } = await import(FAKE_CAMERA);
+import { CameraConnection } from '../src/connection.js';
+import { PreviewLoop } from '../src/preview.js';
+import { uuid } from '../src/protocol.js';
+import { Backoff } from '../src/backoff.js';
+import { startFakeCamera, loadFakeImages } from './support.mjs';
 
 const fast = () => new Backoff({ minMs: 20, maxMs: 50 });
 
@@ -141,13 +139,4 @@ test('preview loop pulls real JPEG frames, survives a stall and a new session', 
   loop.setSession(c.session.sessionId);
   await waitFor(() => headers.length > before + 3, 3000, 'frames on the new session');
   loop.stop();
-}));
-
-test('fake camera serves the remote-lite page and its modules', () => withCam({ serveDir: REMOTE_LITE_DIR }, async (cam) => {
-  const html = await fetch(`http://${cam.host}/`);
-  assert.equal(html.status, 200);
-  assert.match(await html.text(), /<script type="module" src="app\.js"><\/script>/);
-  const js = await fetch(`http://${cam.host}/lib/store.js`);
-  assert.match(js.headers.get('content-type'), /javascript/);
-  assert.equal((await fetch(`http://${cam.host}/..%2f..%2fbuild.gradle.kts`)).status, 404);
 }));
