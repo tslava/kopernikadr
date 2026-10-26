@@ -25,14 +25,14 @@
     "vitest": "5.0.4"
   },
   "dependencies": {
-    "@kopernikadr/remote-core": "0.1.0",
     "@capacitor-community/keep-awake": "8.0.1",
     "@capacitor/android": "8.5.3",
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.3",
     "@capacitor/file-transfer": "2.0.6",
     "@capacitor/filesystem": "8.1.4",
-    "next": "16.4.0",
+    "@kopernikadr/remote-core": "0.1.0",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   }

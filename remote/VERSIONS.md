@@ -10,7 +10,7 @@ locked registry packages checked: none is newer than the cutoff).
 
 | Package | Version | Published | Newest qualifying? |
 |---|---|---|---|
-| next | 16.4.0 | 2026-10-06 | yes (16.4.1 is 2026-10-14) |
+| next | 16.4.3 | 2026-10-23 | **exception** (owner-approved 2026-10-26): security patch release in the same minor as 16.4.0, which has open advisories |
 | react, react-dom | 19.3.0 | 2026-09-09 | yes (19.3.1 is 2026-10-14) |
 | @capacitor/core, @capacitor/android, @capacitor/cli | 8.5.3 | 2026-10-07 | yes |
 | @capacitor/filesystem | 8.1.4 | 2026-10-02 | yes (8.1.5 is 2026-10-15) |
@@ -27,10 +27,10 @@ Notes:
 - **TypeScript 7** (native compiler) has no classic JS API. Next 16.4 type-checks through the
   `tsc` CLI, and `@capacitor/cli` 8.5.3 loads `capacitor.config.ts` with Node's type stripping
   when `transpileModule` is missing (works on Node 22.21).
-- **Next 16.4.0 has open advisories** (image optimizer SVG RCE, server-actions DoS, `use cache`
-  typed arrays). None of these features ship in a static export (`output: 'export'`, no server).
-  When `next build` runs under a coding agent it stops once with `SecurityFatalError` and
-  continues on a retry within 5 minutes. Upgrade to 16.4.x ≥ 16.4.3 once it passes the 14-day rule.
+- **Next 16.4.3 is a deliberate exception to the 14-day rule.** 16.4.0 (the newest qualifying
+  version) has open advisories (image optimizer SVG RCE, server-actions DoS, `use cache` typed arrays)
+  and makes `next build` stop once under a coding agent. None of those features ship in a static
+  export, but the owner chose the patched release over the cooldown.
 - `npm audit` also flags `uuid` < 11.1.1 via `@capacitor/cli` → `xcode` (iOS tooling only, a
   dev dependency; not in the app).
 
