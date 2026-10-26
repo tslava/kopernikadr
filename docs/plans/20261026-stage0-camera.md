@@ -298,18 +298,18 @@
 - Create: `core/src/main/kotlin/.../core/{Ulid,Geometry,FrameTransform,SizeSelection,CapabilityMapper,CharacteristicsSnapshot}.kt`
 - Create: matching tests in `core/src/test/...`
 
-- [ ] tests first, then `Ulid`: monotonic within a ms, 26-char Crockford, sortable
-- [ ] tests first, then `IntRect`/`Affine` + `FrameTransform`: `rotationDegrees` ∈ {0,180} ×
+- [x] tests first, then `Ulid`: monotonic within a ms, 26-char Crockford, sortable
+- [x] tests first, then `IntRect`/`Affine` + `FrameTransform`: `rotationDegrees` ∈ {0,180} ×
       project rotation {0,180} → output w>h, exactly 4:3 after crop, no 90° rotation; rejects
       90/270 inputs; odd crop rects
-- [ ] tests first, then `SizeSelection`: g05 JPEG list → 3264×2448; fallback to a lower 4:3;
+- [x] tests first, then `SizeSelection`: g05 JPEG list → 3264×2448; fallback to a lower 4:3;
       analysis 1280×960 → 960×720 fallback; non-4:3 rejected
-- [ ] tests first, then `CapabilityMapper`: `CharacteristicsSnapshot` (own data class) → PROTOCOL
+- [ ] ➕ moved to Task 3 (needs the wire `Capabilities` from Task 10, built in parallel): `CapabilityMapper`: `CharacteristicsSnapshot` (own data class) → PROTOCOL
       `Capabilities` (freeze/ae_lock/null methods, compensation num/den, rotations [0,180], focus
       modes, fixed lens)
-- [ ] write tests for edge cases: empty size lists, no manual capabilities → fallback methods,
+- [x] write tests for edge cases: empty size lists, no manual capabilities → fallback methods,
       uncalibrated focus distance
-- [ ] run tests — must pass before task 3
+- [x] run tests — must pass before task 3
 
 ### Task 3: `caps` probe, ProbeRunner, bare diagnostics screen (on device)
 
@@ -321,6 +321,7 @@
 
 - [ ] `ProbeRunnerCore` (`:core`, TDD): one probe at a time, run dir + `report.json`, a failure is
       captured in the report, steps can wait on "camera bound" and on user "Continue"
+- [ ] ➕ (from Task 2) tests first, then `CapabilityMapper` + `CharacteristicsSnapshot` in `:core`
 - [ ] `ProbeRunner` (Application-scoped) + `CharacteristicsReader` → `CharacteristicsSnapshot`
       (all `caps` fields from Technical Details)
 - [ ] diagnostics screen: probe buttons, progress, full-screen prompt with Continue, last report
@@ -421,13 +422,13 @@
 - Create: `core/src/main/kotlin/.../diag/Metrics.kt` + `MetricsTest.kt`
 - Create: `docs/diagnostics/grid-target.svg`
 
-- [ ] tests first, then the luma/RGB centre means, segment stats and step-in-stddev
-- [ ] tests first, then Laplacian variance (sharp vs blurred synthetic)
-- [ ] tests first, then alignment: shift ±16 × scale 0.95–1.05 NCC on synthetic images with a
+- [x] tests first, then the luma/RGB centre means, segment stats and step-in-stddev
+- [x] tests first, then Laplacian variance (sharp vs blurred synthetic)
+- [x] tests first, then alignment: shift ±16 × scale 0.95–1.05 NCC on synthetic images with a
       known shift/scale; 180° candidate detected; periodic pattern doesn't fool it thanks to
       fiducials; overlay image produced
-- [ ] `grid-target.svg`: A4, 4 distinct corner fiducials + an arrow + a fine grid
-- [ ] run tests — must pass before task 9
+- [x] `grid-target.svg`: A4, 4 distinct corner fiducials + an arrow + a fine grid
+- [x] run tests — must pass before task 9
 
 ### Task 9: `locks`, `focus`, `grid` probes (on device)
 
@@ -452,15 +453,15 @@
 - Create: `core/src/main/kotlin/.../protocol/Messages.kt`,
   `core/src/main/kotlin/.../server/SessionManager.kt` + tests
 
-- [ ] fixtures per PROTOCOL §3–7 for the 0a subset
-- [ ] tests first, then the models: `args` decoded as `JsonElement` and then per `op` (unknown op →
+- [x] fixtures per PROTOCOL §3–7 for the 0a subset
+- [x] tests first, then the models: `args` decoded as `JsonElement` and then per `op` (unknown op →
       `UNKNOWN_OP`, bad args → `INVALID_ARGS`); round-trip equality; unknown fields ignored
-- [ ] tests first, then `SessionManager`:
+- [x] tests first, then `SessionManager`:
   - grant / replace (returns the old session to close) / BUSY with `retryAfterMs`;
   - `validate` → LEASE_LOST;
   - injected monotonic `Clock`, TTL 10 s;
   - expiry exactly at TTL
-- [ ] run tests — must pass before task 11
+- [x] run tests — must pass before task 11
 
 ### Task 11: Server — `/info`, `/frames`, identity, status (TDD)
 

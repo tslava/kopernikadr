@@ -130,6 +130,8 @@ test('a 4001 close rejects pending requests and reports "replaced"', async () =>
 
 test('describeClose labels 4002 and passes other codes through', () => {
   assert.equal(describeClose(4002, ''), '4002 lease lost');
+  assert.equal(describeClose(4003, ''), '4003 busy');
+  assert.equal(describeClose(4000, ''), '4000 protocol error');
   assert.equal(describeClose(1006, 'abnormal'), '1006 "abnormal"');
   assert.equal(describeClose(1000), '1000');
 });

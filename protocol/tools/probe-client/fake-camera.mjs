@@ -163,7 +163,7 @@ export async function startFakeCamera(opts = {}) {
       state.hellos++;
       if (state.session && state.session.clientId !== msg.args.clientId) {
         fail({ code: 'BUSY', message: 'another client holds the session', retryable: true, retryAfterMs: 10000 });
-        return conn.close(1000, 'busy');
+        return conn.close(4003, 'busy');
       }
       state.session = { sessionId: randomUUID(), clientId: msg.args.clientId };
       return reply({ cameraId: 'cam-1', bootId, sessionId: state.session.sessionId, name: 'G05', protocolVersion: 1,

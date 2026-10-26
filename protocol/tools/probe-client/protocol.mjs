@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 
 export const PROTOCOL_VERSION = 1;
-export const CLOSE_LABELS = { 4001: 'replaced', 4002: 'lease lost' };
+export const CLOSE_LABELS = { 4000: 'protocol error', 4001: 'replaced', 4002: 'lease lost', 4003: 'busy' };
 
 export function describeClose(code, reason) {
   const label = CLOSE_LABELS[code];
