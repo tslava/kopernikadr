@@ -1,11 +1,20 @@
 package pl.slava.kopernikadr.camera.server
 
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.OutgoingContent
 import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.application.Application
+import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.application.hooks.ResponseBodyReadyForSend
 import io.ktor.server.application.install
+import io.ktor.server.application.log
+import io.ktor.server.plugins.mutableOriginConnectionPoint
+import io.ktor.server.response.header
+import io.ktor.util.AttributeKey
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
@@ -44,10 +53,18 @@ class ServerConfig(
  * Installs the whole camera server (PROTOCOL.md §3) into an [Application]:
  * `GET /info`, `GET /frames/{frameId}/{variant}.jpg` (both with CORS for `http://localhost`),
  * `/ws/control`, `/ws/preview?session=`, and the web remote (`/`, `/{path...}`).
- * Captures run in the application scope, so they outlive their socket.
+ * Captures run in the application scope, so they outlive their socket. Every `GET` route also
+ * answers `HEAD`. A display cache that cannot be generated is `503` with `Retry-After: 1`.
+ * Incoming WebSocket messages are limited to [MAX_WS_MESSAGE_BYTES] (larger → close 1009).
  */
 fun Application.cameraModule(ports: CameraPorts, config: ServerConfig = ServerConfig()) {
-    install(WebSockets)
+    install(HeadAsGet)
+    install(WebSockets) {
+        // Incoming only (outgoing preview frames are not limited). Ktor checks each frame's
+        // declared length before reading it and the running total of a fragmented message, and
+        // closes with 1009 (TOO_BIG) before anything reaches the JSON parser.
+        maxFrameSize = MAX_WS_MESSAGE_BYTES
+    }
     val hub = Hub(ports, config, scope = this)
     routing {
         route("/info") {
@@ -64,10 +81,17 @@ fun Application.cameraModule(ports: CameraPorts, config: ServerConfig = ServerCo
                 val frameId = call.parameters["frameId"].orEmpty()
                 val file = call.parameters["file"].orEmpty()
                 val variant = if (file.endsWith(".jpg")) FrameVariant.fromWire(file.removeSuffix(".jpg")) else null
-                val found = if (variant != null && Ulid.isValid(frameId)) {
-                    withContext(Dispatchers.IO) { ports.frames.open(frameId, variant) }
-                } else {
-                    null
+                val found = try {
+                    if (variant != null && Ulid.isValid(frameId)) {
+                        withContext(Dispatchers.IO) { ports.frames.open(frameId, variant) }
+                    } else {
+                        null
+                    }
+                } catch (e: FrameUnavailableException) {
+                    call.application.log.warn("GET /frames/$frameId/$file: ${e.message}")
+                    call.response.header(HttpHeaders.RetryAfter, "1")
+                    call.respond(HttpStatusCode.ServiceUnavailable)
+                    return@get
                 }
                 when (found) {
                     is FrameFile.OnDisk ->
@@ -85,6 +109,34 @@ fun Application.cameraModule(ports: CameraPorts, config: ServerConfig = ServerCo
         }
         staticRemote(config.staticRoot)
     }
+}
+
+/** Largest incoming WebSocket message (control requests and preview `next` are tiny). */
+const val MAX_WS_MESSAGE_BYTES = 64L * 1024
+
+/**
+ * `HEAD` for every `GET` route (what Ktor's `AutoHeadResponse` does; that plugin is a separate
+ * artifact): routed as `GET`, answered with the same status and headers, `Content-Length`
+ * included, and no body.
+ */
+private val HeadAsGet = createApplicationPlugin("HeadAsGet") {
+    onCall { call ->
+        if (call.request.local.method == HttpMethod.Head) call.mutableOriginConnectionPoint.method = HttpMethod.Get
+    }
+    on(ResponseBodyReadyForSend) { call, content ->
+        if (call.request.local.method == HttpMethod.Head && content !is OutgoingContent.NoContent) {
+            transformBodyTo(HeadResponse(content))
+        }
+    }
+}
+
+private class HeadResponse(private val original: OutgoingContent) : OutgoingContent.NoContent() {
+    override val status: HttpStatusCode? get() = original.status
+    override val contentType: ContentType? get() = original.contentType
+    override val contentLength: Long? get() = original.contentLength
+    override fun <T : Any> getProperty(key: AttributeKey<T>): T? = original.getProperty(key)
+    override fun <T : Any> setProperty(key: AttributeKey<T>, value: T?) = original.setProperty(key, value)
+    override val headers: Headers get() = original.headers
 }
 
 private fun Route.installCors() {

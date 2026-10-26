@@ -243,9 +243,9 @@ class FakePreview : PreviewSource {
     }
 
     @Synchronized
-    fun produce(w: Int = 640, h: Int = 480): PreviewFrameData {
+    fun produce(w: Int = 640, h: Int = 480, jpegBytes: Int = 32): PreviewFrameData {
         val f = PreviewFrameData(
-            fakeJpeg(32), w, h, ++seq, System.currentTimeMillis(), 3,
+            fakeJpeg(jpegBytes), w, h, ++seq, System.currentTimeMillis(), 3,
             PreviewLocks(ControlMode.AUTO, ControlMode.AUTO, FocusMode.AUTO),
         )
         latest.value = f
