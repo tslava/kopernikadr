@@ -27,6 +27,7 @@ dependencies {
     api(libs.ktor.server.content.negotiation)
     api(libs.ktor.serialization.kotlinx.json)
     api(libs.androidx.sqlite)
+    implementation(libs.zxing.core)
     // Resolves to the JVM variant here and to the Android variant (with .so files) in :app.
     implementation(libs.androidx.sqlite.bundled)
 

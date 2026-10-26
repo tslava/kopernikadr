@@ -1,6 +1,7 @@
 package pl.slava.kopernikadr.camera.ui
 
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -16,12 +17,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -30,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import pl.slava.kopernikadr.camera.R
 import pl.slava.kopernikadr.camera.camera.CameraStatus
+import pl.slava.kopernikadr.camera.host.QrMatrix
 import pl.slava.kopernikadr.camera.host.ServerState
 
 /** Diagnostics open after holding the status title this long. */
@@ -91,6 +97,8 @@ fun StatusScreen(
                             maxLines = 1,
                             softWrap = false,
                         )
+                        Spacer(Modifier.height(12.dp))
+                        QrCode("http://$wifiIp:$port/", Modifier.size(200.dp))
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -118,6 +126,22 @@ fun StatusScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+    }
+}
+
+/** The remote's URL as a QR code, black on a white plate with the standard 4-module quiet zone. */
+@Composable
+private fun QrCode(text: String, modifier: Modifier = Modifier) {
+    val qr = remember(text) { QrMatrix.encode(text) }
+    Canvas(modifier.background(Color.White)) {
+        val cell = size.minDimension / (qr.size + 8)
+        for (y in 0 until qr.size) {
+            for (x in 0 until qr.size) {
+                if (qr[x, y]) {
+                    drawRect(Color.Black, Offset((x + 4) * cell, (y + 4) * cell), Size(cell + 0.5f, cell + 0.5f))
                 }
             }
         }

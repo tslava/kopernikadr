@@ -22,6 +22,7 @@ Portal (Gradle: `buildTime` from services.gradle.org). Versions live in
 | slf4j-nop (app runtime), slf4j-simple (`:core` tests) | 2.0.20 | 2026-09-22 | yes |
 | androidx.sqlite `sqlite` / `sqlite-bundled` | 2.7.1 | 2026-09-09 | yes |
 | JUnit | 4.13.2 | 2021-02-13 | yes |
+| zxing core (QR on the status screen) | 3.5.4 | 2025-11-11 | yes |
 
 Held back:
 - **Compose BOM 2026.08.00+ (Compose 1.12) and lifecycle 2.11.0** set `minCompileSdk = 37`.
