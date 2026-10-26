@@ -55,6 +55,7 @@
         <span class="cap-face"><span class="cap-icon"></span><span class="cap-spinner"></span></span>
         <span class="cap-label"></span>
       </button>
+      <button class="pill-btn cap-retry" id="btn-capture-retry" type="button" hidden></button>
       <button class="side-btn" id="btn-delete-last" type="button"></button>
       <button class="side-btn watch" id="btn-watch" type="button"></button>
     </aside>
@@ -114,6 +115,16 @@
 <!-- Parent drawer -->
 <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
 <aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title"></aside>
+
+<!-- Another tab/device with this clientId took the session (close 4001) -->
+<div class="takeover-panel" id="takeover" hidden>
+  <div class="export-card" role="alertdialog" aria-modal="true" aria-labelledby="takeover-text">
+    <div class="export-icon error" id="takeover-icon"></div>
+    <p class="export-text" id="takeover-text"></p>
+    <p class="export-sub" id="takeover-sub"></p>
+    <button class="big-btn primary" id="takeover-btn" type="button"></button>
+  </div>
+</div>
 
 <div class="snackbar" id="snackbar" hidden role="status">
   <span class="snack-text" id="snack-text"></span>

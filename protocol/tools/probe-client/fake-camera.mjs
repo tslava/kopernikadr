@@ -8,7 +8,16 @@
 //   /fake/kick          close every socket (the page must show "offline" and reconnect)
 //   /fake/drop-capture  commit the next capture but never answer it (lost response)
 //   /fake/fail-lock     the next lock request fails to confirm (mode "failed")
-//   /fake/state         JSON dump of frames / controls / session
+//   /fake/slow-play?ms=3000
+//                       `play` variants are generated in the background, one after another, `ms`
+//                       each, like the phone right after shooting: a request for a frame whose
+//                       `play` is not ready yet waits for it. Applies to frames whose `play` was not
+//                       served yet and to new captures. ms=0 turns it off.
+//   /fake/fail-play?count=2[&status=503][&frame=<id>][&full=1]
+//                       the first `count` requests of each frame's `play` (and `full` with full=1)
+//                       fail with `status` (0 = drop the connection); `frame` limits it to one frame.
+//                       count=0 turns it off.
+//   /fake/state         JSON dump of frames / controls / session / frame requests
 
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
@@ -140,6 +149,7 @@ export async function startFakeCamera(opts = {}) {
     stallNexts: opts.stallNexts ?? 0, controls: [], continues: [], hellos: 0, probeArgs: null,
     runIndex: 0, downRequests: opts.downRequests ?? 0, step: 0, acked: new Set(),
     dropCaptures: 0, failNextLock: false, requests: [],
+    slowPlayMs: 0, playCursor: 0, failPlay: null, variantFailures: new Map(), frameRequests: [],
     ctl: {
       generation: 1, settling: false,
       exposure: { mode: 'auto', confirmed: true, exact: true, compensationSteps: 0, compensationEnabled: true },
@@ -194,8 +204,26 @@ export async function startFakeCamera(opts = {}) {
     let m;
     if ((m = /^\/frames\/([^/]+)\/(full|play|thumb)\.jpg$/.exec(p))) {
       const frame = state.frames.get(m[1]);
+      const variant = m[2];
+      state.frameRequests.push(`${p}${url.search}`);
       if (!frame) return json(res, 404, { error: 'unknown frame' });
+      const fp = state.failPlay;
+      if (fp && (fp.frame == null || fp.frame === frame.frameId) && (variant === 'play' || (fp.full && variant === 'full'))) {
+        const key = `${frame.frameId}/${variant}`;
+        const n = state.variantFailures.get(key) ?? 0;
+        if (n < fp.count) {
+          state.variantFailures.set(key, n + 1);
+          if (!fp.status) return void req.socket.destroy();
+          return json(res, fp.status, { error: 'fake play failure' });
+        }
+      }
+      if (variant === 'play' && frame.playReadyAt != null) {
+        const wait = frame.playReadyAt - performance.now();
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        frame.playReadyAt = null; // generated: later requests are served at once
+      }
       const body = images ? images[m[2] === 'thumb' ? 'thumb' : 'play'][frame.step] : fullBytes;
+      if (variant === 'play') frame.playServed = true;
       res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': body.length, 'cache-control': 'max-age=31536000, immutable' });
       return res.end(body);
     }
@@ -204,9 +232,30 @@ export async function startFakeCamera(opts = {}) {
       return json(res, 200, { kicked: true });
     }
     if (p === '/fake/drop-capture') { state.dropCaptures++; return json(res, 200, { dropCaptures: state.dropCaptures }); }
+    if (p === '/fake/slow-play') {
+      state.slowPlayMs = Math.max(0, Number(url.searchParams.get('ms') ?? 3000) || 0);
+      state.playCursor = performance.now();
+      for (const f of [...state.frames.values()].sort((a, b) => a.seq - b.seq)) {
+        if (f.playServed) continue;
+        f.playReadyAt = state.slowPlayMs ? (state.playCursor += state.slowPlayMs) : null;
+      }
+      return json(res, 200, { slowPlayMs: state.slowPlayMs });
+    }
+    if (p === '/fake/fail-play') {
+      const count = Number(url.searchParams.get('count') ?? 2) || 0;
+      state.failPlay = count > 0 ? {
+        count,
+        status: Number(url.searchParams.get('status') ?? 503),
+        frame: url.searchParams.get('frame'),
+        full: url.searchParams.get('full') === '1',
+      } : null;
+      state.variantFailures.clear();
+      return json(res, 200, { failPlay: state.failPlay });
+    }
     if (p === '/fake/fail-lock') { state.failNextLock = true; return json(res, 200, { failNextLock: true }); }
     if (p === '/fake/state') {
-      return json(res, 200, { frames: [...state.frames.values()], controls: state.ctl, session: state.session, requests: state.requests.slice(-50) });
+      return json(res, 200, { frames: [...state.frames.values()], controls: state.ctl, session: state.session, requests: state.requests.slice(-50),
+        frameRequests: state.frameRequests.slice(-200) });
     }
     if (opts.diag === false && p.startsWith('/diag/')) return json(res, 404, {});
     if (p === '/diag/controls') { state.controls.push(await readBody(req)); return json(res, 200, {}); }
@@ -364,6 +413,11 @@ export async function startFakeCamera(opts = {}) {
         const drop = state.dropCaptures > 0 && state.dropCaptures--;
         const commit = () => {
           rec.done = true;
+          if (state.slowPlayMs) {
+            // background generation queue: this frame's `play` is ready after the ones before it
+            state.playCursor = Math.max(state.playCursor, performance.now()) + state.slowPlayMs;
+            rec.playReadyAt = state.playCursor;
+          }
           state.frames.set(rec.frameId, rec);
           if (images) state.step = (state.step + 1) % images.play.length;
           if (!drop) reply(frameInfo(rec));

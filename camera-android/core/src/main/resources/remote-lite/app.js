@@ -12,6 +12,8 @@ import { fitRect, formatLabel } from './lib/video.js';
 import { icon, batteryIcon, LOGO } from './lib/icons.js';
 import { playShutter } from './lib/sound.js';
 import { Player, exportVideo, downloadBlob } from './lib/media.js';
+import { imageAttempt } from './lib/frame-loader.js';
+import { CaptureTracker, OutstandingStore, OUTSTANDING_KEY } from './lib/captures.js';
 
 const lang = pickLang(navigator.languages?.length ? navigator.languages : [navigator.language]);
 const t = makeTranslator(lang);
@@ -22,7 +24,6 @@ const UNDO_MS = 5000;
 const CAPTURE_TIMEOUT_MS = 10_000;
 const KEY_CLIENT = 'kopernikadr.remoteLite.clientId';
 const KEY_PREFS = 'kopernikadr.remoteLite.prefs';
-const KEY_OUTSTANDING = 'kopernikadr.remoteLite.outstanding';
 
 // ---------- storage ----------
 
@@ -51,8 +52,6 @@ const prefs = { onion: true, onionOpacity: 30, sound: true, ...readJson(KEY_PREF
 const savePrefs = () => ls.setItem(KEY_PREFS, JSON.stringify(prefs));
 let state = S.loadState(ls);
 const save = () => S.saveState(ls, state);
-const getOutstanding = () => readJson(KEY_OUTSTANDING, null);
-const setOutstanding = (o) => (o ? ls.setItem(KEY_OUTSTANDING, JSON.stringify(o)) : ls.removeItem(KEY_OUTSTANDING));
 
 // ---------- helpers ----------
 
@@ -60,7 +59,6 @@ const wsUrl = (path) => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${lo
 const frameUrl = (frameId, variant) => `/frames/${encodeURIComponent(frameId)}/${variant}.jpg`;
 const dateFmt = new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const movieName = (ms) => dateFmt.format(new Date(ms));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -173,10 +171,12 @@ const preview = new PreviewLoop({
 conn.on('state', () => {
   preview.setSession(conn.online ? conn.session.sessionId : null);
   renderConn();
+  renderTakeover();
   renderCaptureControls();
 });
 conn.on('session', () => {
   preview.setSession(conn.session.sessionId);
+  captures.cameraId = conn.session.cameraId ?? null;
   recover();
   ensureRotation();
 });
@@ -188,6 +188,7 @@ function connInfo() {
     case 'online': return { cls: 'ok', ic: 'wifi', text: t('online') };
     case 'busy': return { cls: 'busy', ic: 'busy', text: t('busy') };
     case 'unsupported': return { cls: 'bad', ic: 'warn', text: t('unsupported') };
+    case 'replaced': return { cls: 'busy', ic: 'busy', text: t('replaced') };
     case 'connecting': return { cls: 'wait', ic: 'wifi', text: t('connecting') };
     default: return { cls: 'bad', ic: 'wifiOff', text: t('offline') };
   }
@@ -205,13 +206,22 @@ function renderConn() {
   const show = conn.state !== 'online';
   banner.hidden = !show;
   $('stage').classList.toggle('offline', show);
-  banner.classList.toggle('busy', conn.state === 'busy');
+  const still = ['busy', 'unsupported', 'replaced'].includes(conn.state); // not reconnecting by itself
+  banner.classList.toggle('busy', conn.state === 'busy' || conn.state === 'replaced');
   renderStageMsg();
   if (show) {
-    const ic = conn.state === 'busy' ? 'busy' : conn.state === 'unsupported' ? 'warn' : 'wifiOff';
-    banner.innerHTML = `${icon(ic)}<span>${esc(info.text)}</span>${conn.state === 'busy' || conn.state === 'unsupported' ? '' : '<span class="dots"><i></i><i></i><i></i></span>'}`;
+    const ic = still ? (conn.state === 'unsupported' ? 'warn' : 'busy') : 'wifiOff';
+    banner.innerHTML = `${icon(ic)}<span>${esc(info.text)}</span>${still ? '' : '<span class="dots"><i></i><i></i><i></i></span>'}`;
   }
 }
+
+/** Close 4001: this page stopped; the parent can take the camera back with one big button. */
+function renderTakeover() {
+  const on = conn.state === 'replaced';
+  $('takeover').hidden = !on;
+  if (on) $('takeover-btn').focus({ preventScroll: true });
+}
+$('takeover-btn').addEventListener('click', () => conn.takeOver());
 
 function renderBattery() {
   const s = conn.status;
@@ -245,42 +255,18 @@ async function recover() {
     const { added, recovered } = S.mergeListedFrames(state, all, {
       now: Date.now(), cameraId: conn.session?.cameraId, recoveredName: (ms) => `${t('recoveredMovie')} ${movieName(ms)}`,
     });
-    const out = getOutstanding();
-    let extra = 0;
-    if (out) {
-      const r = await resolveOperation(out.reqId);
-      if (r.state === 'done') extra = acceptFrame(r.result) ? 1 : 0;
-      if (['done', 'failed', 'unknown', 'unsupported'].includes(r.state)) setOutstanding(null);
-    }
-    if (added || recovered.length || extra) {
+    if (added || recovered.length) {
       save();
       renderAll();
-      if (added + extra) showSnack(t('recoveredFrames', { n: added + extra }));
+      if (added) showSnack(t('recoveredFrames', { n: added }));
     }
   } catch (e) {
     console.debug('recover:', e.message);
   } finally {
     recovering = false;
   }
-}
-
-/**
- * Asks the camera what happened to a capture (PROTOCOL.md §6 getOperation). Never re-sends it.
- * @returns {Promise<{state: 'done'|'pending'|'failed'|'unknown'|'unsupported'|'unreachable', result?}>}
- */
-async function resolveOperation(reqId) {
-  for (let i = 0; i < 6; i++) {
-    let r;
-    try {
-      r = await conn.request('getOperation', { reqId }, { timeoutMs: 4000 });
-    } catch (e) {
-      if (e.code === 'UNKNOWN_OP') return { state: 'unsupported' };
-      return { state: 'unreachable' };
-    }
-    if (r.state !== 'pending') return r;
-    await sleep(1000);
-  }
-  return { state: 'pending' };
+  // Outstanding captures: getOperation for each one; a frame they bring in is merged by onFrame.
+  await captures.reconcile();
 }
 
 /** Adds a frame from a capture result; returns true if it was new. */
@@ -482,7 +468,27 @@ $('btn-fullscreen').addEventListener('click', () => {
 
 // ---------- capture screen ----------
 
-let capturing = false;
+/** Captures by reqId, kept until the camera settles each one (PROTOCOL.md §8); see lib/captures.js. */
+const captures = new CaptureTracker({
+  store: new OutstandingStore(ls, OUTSTANDING_KEY),
+  request: (op, args, opts) => conn.request(op, args, opts),
+  isOnline: () => conn.online,
+  newId: uuid,
+  captureTimeoutMs: CAPTURE_TIMEOUT_MS,
+  onFrame: (info, rec, { direct }) => {
+    const added = acceptFrame(info);
+    if (added) save();
+    if (route.screen === 'capture') renderCapture({ scroll: true, popId: info.frameId });
+    else if (added) renderAll();
+    if (added && !direct) showSnack(t('recoveredFrames', { n: 1 }));
+  },
+  onFailed: (rec) => {
+    // a capture the kid is waiting for (not an old record from an earlier visit)
+    if (Date.now() - rec.at < 5 * 60_000) showSnack(t('captureFailed'));
+  },
+  onChange: () => renderCaptureControls(),
+});
+let captureTicker = null;
 
 function renderCapture({ scroll = false, popId = null } = {}) {
   const p = currentProject();
@@ -504,9 +510,8 @@ function renderCapture({ scroll = false, popId = null } = {}) {
   const last = v[v.length - 1];
   const onion = $('onion');
   if (prefs.onion && last) {
-    const src = frameUrl(last.frameId, 'play');
-    if (onion.getAttribute('src') !== src) onion.src = src;
-    onion.hidden = false;
+    showFrameImage(onion, last.frameId);
+    onion.hidden = onion.dataset.state === 'failed';
   } else {
     onion.hidden = true;
   }
@@ -525,10 +530,22 @@ function renderCaptureControls() {
   const p = currentProject();
   const n = p ? S.visibleFrames(p).length : 0;
   const btn = $('btn-capture');
-  btn.disabled = !conn.online || capturing;
-  btn.classList.toggle('busy', capturing);
+  const busy = captures.busy;
+  btn.disabled = !conn.online || busy;
+  btn.classList.toggle('busy', busy);
+  // a normal capture takes well under a second: only a slow one says "waiting for the camera"
+  const label = busy && captures.waitingMs > 1500 ? t('waitingCamera') : t('capture');
+  const lbl = btn.querySelector('.cap-label');
+  if (lbl.textContent !== label) lbl.textContent = label;
+  $('btn-capture-retry').hidden = !captures.stuck;
   $('btn-delete-last').disabled = n === 0;
   $('btn-watch').disabled = n === 0;
+  // re-render once a second while waiting, so the label and the retry button appear in time
+  if (busy && !captureTicker) captureTicker = setInterval(renderCaptureControls, 1000);
+  else if (!busy && captureTicker) {
+    clearInterval(captureTicker);
+    captureTicker = null;
+  }
 }
 
 function flash() {
@@ -538,52 +555,35 @@ function flash() {
   f.classList.add('go');
 }
 
+/**
+ * One photo. The button stays disabled until the camera settles this reqId (answer, getOperation,
+ * or after a reconnect); a capture is never re-sent or retaken automatically.
+ */
 async function doCapture() {
   const p = currentProject();
-  if (!p || capturing || !conn.online) return;
-  capturing = true;
-  renderCaptureControls();
+  if (!p || captures.busy || !conn.online) return;
   flash();
   if (prefs.sound) playShutter();
-  const reqId = uuid();
   const rotation = S.captureRotation(p, conn.controls?.rotation);
-  setOutstanding({ reqId, projectId: p.id, cameraId: conn.session?.cameraId ?? null, at: Date.now() });
-  try {
-    const info = await conn.request('capture', { projectId: p.id, rotation }, { reqId, timeoutMs: CAPTURE_TIMEOUT_MS });
-    setOutstanding(null);
-    if (acceptFrame(info)) save();
-    if (route.screen === 'capture') renderCapture({ scroll: true, popId: info.frameId });
-  } catch (e) {
-    await captureFailed(e, reqId);
-  } finally {
-    capturing = false;
-    renderCaptureControls();
+  const r = await captures.capture({ projectId: p.id, rotation });
+  renderCaptureControls();
+  if (r.kind === 'pending') {
+    // no answer yet: the button says "waiting for the camera"; the frame comes in when it settles
+    if (r.error?.code === 'TIMEOUT') showSnack(t('captureChecking'));
+  } else if (r.kind === 'failed') {
+    const msg = {
+      CAMERA_NOT_READY: 'notReady', CAPTURE_IN_PROGRESS: 'notReady', STORAGE_LOW: 'storageLow', GEOMETRY_MISMATCH: 'geometry',
+    }[r.error?.code] ?? 'captureFailed';
+    showSnack(t(msg));
+    if (r.error?.code === 'GEOMETRY_MISMATCH') ensureRotation();
   }
 }
 
-async function captureFailed(e, reqId) {
-  if (e.code === 'TIMEOUT') {
-    showSnack(t('captureChecking'));
-    const r = await resolveOperation(reqId);
-    if (r.state === 'done') {
-      setOutstanding(null);
-      if (acceptFrame(r.result)) save();
-      if (route.screen === 'capture') renderCapture({ scroll: true, popId: r.result.frameId });
-      showSnack(t('recoveredFrames', { n: 1 }));
-      return;
-    }
-    if (r.state !== 'pending' && r.state !== 'unreachable') setOutstanding(null);
-    showSnack(t('captureFailed'));
-    return;
-  }
-  if (e.code === 'CLOSED') return; // offline banner is up; recover() resolves the outstanding capture
-  if (!e.local) setOutstanding(null); // the camera answered: nothing was committed
-  const msg = {
-    CAMERA_NOT_READY: 'notReady', CAPTURE_IN_PROGRESS: 'notReady', STORAGE_LOW: 'storageLow', GEOMETRY_MISMATCH: 'geometry',
-  }[e.code] ?? 'captureFailed';
-  showSnack(t(msg));
-  if (e.code === 'GEOMETRY_MISMATCH') ensureRotation();
-}
+$('btn-capture-retry').addEventListener('click', () => {
+  // only re-enables the button: the unresolved capture is still reconciled, nothing is retaken
+  captures.dismiss();
+  renderCaptureControls();
+});
 
 function hideWithUndo(p, frameId) {
   if (!S.hideFrame(p, frameId)) return;
@@ -627,7 +627,43 @@ $('onion-opacity').addEventListener('input', (e) => {
   $('onion').style.opacity = String(prefs.onionOpacity / 100);
 });
 $('onion-opacity').addEventListener('change', savePrefs);
-$('onion').addEventListener('error', () => { $('onion').hidden = true; });
+
+/**
+ * Shows a frame's `play` picture in an <img>. Right after a capture the camera may still be
+ * generating it, so a failed load is retried a few times (then `full`), see imageAttempt().
+ */
+function showFrameImage(img, frameId) {
+  if (img.dataset.frameId === frameId && img.getAttribute('src')) return;
+  clearTimeout(img._retryTimer);
+  img.dataset.frameId = frameId;
+  img.dataset.attempt = '0';
+  img.dataset.state = 'loading';
+  img.src = imageAttempt(frameUrl, frameId, 0).url;
+}
+
+function clearFrameImage(img) {
+  clearTimeout(img._retryTimer);
+  delete img.dataset.frameId;
+  delete img.dataset.state;
+  img.removeAttribute('src');
+}
+
+for (const img of [$('onion'), $('viewer-img')]) {
+  img.addEventListener('load', () => { img.dataset.state = 'ok'; });
+  img.addEventListener('error', () => {
+    const id = img.dataset.frameId;
+    if (!id || !img.getAttribute('src')) return;
+    const n = Number(img.dataset.attempt) + 1;
+    const next = imageAttempt(frameUrl, id, n);
+    if (!next) {
+      img.dataset.state = 'failed';
+      if (img.id === 'onion') img.hidden = true;
+      return;
+    }
+    img.dataset.attempt = String(n);
+    img._retryTimer = setTimeout(() => { if (img.dataset.frameId === id) img.src = next.url; }, next.delayMs);
+  });
+}
 
 $('strip').addEventListener('click', (e) => {
   const b = e.target.closest('.thumb');
@@ -643,14 +679,14 @@ function openViewer(frameId) {
   const idx = S.visibleFrames(p).findIndex((f) => f.frameId === frameId);
   if (idx < 0) return;
   viewerFrameId = frameId;
-  $('viewer-img').src = frameUrl(frameId, 'play');
+  showFrameImage($('viewer-img'), frameId);
   $('viewer-label').textContent = t('frameN', { n: idx + 1 });
   $('viewer').hidden = false;
 }
 function closeViewer() {
   viewerFrameId = null;
   $('viewer').hidden = true;
-  $('viewer-img').removeAttribute('src');
+  clearFrameImage($('viewer-img'));
 }
 $('viewer-close').addEventListener('click', closeViewer);
 $('viewer-delete').addEventListener('click', () => {
@@ -916,18 +952,21 @@ async function startExport() {
   player.pause();
   renderPlayToggle();
   exportAbort = new AbortController();
-  exportUI({ mode: 'running', text: t('saving', { i: 0, n: ids.length }), progress: 0 });
+  exportUI({ mode: 'running', text: t('preparing', { i: 0, n: ids.length }), progress: 0 });
   try {
+    // Every frame is loaded for real (retries, `full` fallback); if one cannot be, no file at all.
     const r = await exportVideo({
       frameIds: ids, fps: p.fps, name: p.name, urlFor: frameUrl, signal: exportAbort.signal,
-      onProgress: (i, n) => exportUI({ mode: 'running', text: t('saving', { i, n }), progress: i / n }),
+      onProgress: ({ phase, i, n }) => exportUI({ mode: 'running', text: t(phase === 'prepare' ? 'preparing' : 'saving', { i, n }), progress: i / n }),
     });
     downloadBlob(r.blob, r.fileName);
-    window.__lastExport = { mime: r.mime, size: r.blob.size, fileName: r.fileName, url: URL.createObjectURL(r.blob) };
     exportUI({ mode: 'done', text: t('saved'), sub: `${t('savedFormat', { f: formatLabel(r.mime) })} · ${r.fileName}` });
   } catch (e) {
     if (e.name === 'AbortError') {
       $('export-panel').hidden = true;
+    } else if (e.code === 'FRAME_LOAD_FAILED') {
+      console.error('export:', e);
+      exportUI({ mode: 'error', text: t('exportFrameFailed'), sub: Number.isInteger(e.index) ? t('exportFrameFailedSub', { n: e.index + 1 }) : '' });
     } else {
       console.error('export:', e);
       exportUI({ mode: 'error', text: t(e.code === 'UNSUPPORTED' ? 'saveUnsupported' : 'saveFailed') });
@@ -961,6 +1000,11 @@ function initTexts() {
   $('btn-capture').querySelector('.cap-icon').innerHTML = icon('camera');
   $('btn-capture').querySelector('.cap-label').textContent = t('capture');
   $('btn-capture').setAttribute('aria-label', t('capture'));
+  setButton($('btn-capture-retry'), 'undo', t('captureRetry'));
+  $('takeover-icon').innerHTML = icon('busy');
+  $('takeover-text').textContent = t('replaced');
+  $('takeover-sub').textContent = t('replacedHint');
+  setButton($('takeover-btn'), 'wifi', t('takeOver'));
   setButton($('btn-delete-last'), 'trash', t('deleteLast'));
   setButton($('btn-watch'), 'watch', t('watch'));
   setButton($('viewer-delete'), 'trash', t('delete'));
@@ -995,4 +1039,4 @@ applyRoute();
 conn.start();
 
 // for debugging from the console / DevTools
-window.kopernikadr = { conn, preview, player, get state() { return state; }, prefs };
+window.kopernikadr = { conn, preview, player, captures, get state() { return state; }, prefs };
