@@ -1,5 +1,8 @@
 // All UI strings. Language from navigator.languages: ru → ru, everything else → pl.
-// Plural entries are objects keyed by Intl.PluralRules categories.
+// Plural entries are objects keyed by Intl.PluralRules categories. The pick/translate logic is
+// remote-core's i18n-core.js (copied next to this file at build time).
+
+import { pickLang as pickLangIn, makeTranslator as makeTranslatorFor } from './i18n-core.js';
 
 export const STRINGS = {
   pl: {
@@ -181,22 +184,7 @@ export const STRINGS = {
 export const FALLBACK_LANG = 'pl';
 
 /** @param {readonly string[] | string | undefined} languages e.g. navigator.languages */
-export function pickLang(languages) {
-  const list = Array.isArray(languages) ? languages : [languages];
-  for (const l of list) {
-    const base = String(l ?? '').toLowerCase().split(/[-_]/)[0];
-    if (base in STRINGS) return base;
-  }
-  return FALLBACK_LANG;
-}
+export const pickLang = (languages) => pickLangIn(languages, Object.keys(STRINGS), FALLBACK_LANG);
 
 /** Returns `t(key, params)`; `params.n` also selects the plural form. Missing keys fall back to pl. */
-export function makeTranslator(lang) {
-  const table = STRINGS[lang] ?? STRINGS[FALLBACK_LANG];
-  const rules = new Intl.PluralRules(lang in STRINGS ? lang : FALLBACK_LANG);
-  return function t(key, params = {}) {
-    let s = table[key] ?? STRINGS[FALLBACK_LANG][key] ?? key;
-    if (typeof s === 'object') s = s[rules.select(params.n ?? 0)] ?? s.other;
-    return s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
-  };
-}
+export const makeTranslator = (lang) => makeTranslatorFor(STRINGS, lang, FALLBACK_LANG);

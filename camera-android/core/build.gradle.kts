@@ -42,3 +42,29 @@ dependencies {
 tasks.test {
     useJUnit()
 }
+
+// remote-lite's lib/ = its own src/main/resources/remote-lite/lib/ + packages/remote-core/src/*.js
+// (@kopernikadr/remote-core), copied into a dedicated resource root so the classpath and the APK
+// merge both. A file name present in both roots fails processResources (duplicate entry).
+// (register<…>(…) rather than `by registering`: the delegate syntax is deprecated in Gradle 9.)
+val remoteCoreSrc: File = rootDir.resolve("../packages/remote-core/src").normalize()
+
+// A Sync whose source dir is missing skips its actions (empty source), so a doFirst check would
+// never run: the check is its own task, which always runs.
+val checkRemoteCore = tasks.register("checkRemoteCore") {
+    val src = remoteCoreSrc
+    doLast { check(src.resolve("protocol.js").isFile) { "remote-core not found at $src" } }
+}
+
+val syncRemoteCore = tasks.register<Sync>("syncRemoteCore") {
+    dependsOn(checkRemoteCore)
+    from(remoteCoreSrc) {
+        include("*.js")
+        into("remote-lite/lib")
+    }
+    into(layout.buildDirectory.dir("generated/remote-core-res"))
+}
+
+sourceSets.main {
+    resources.srcDir(syncRemoteCore)
+}

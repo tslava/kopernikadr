@@ -1,0 +1,16 @@
+{
+  "name": "kopernikadr",
+  "private": true,
+  "description": "Kopernikadr monorepo: shared JS packages and Node tooling (npm workspaces)",
+  "workspaces": [
+    "packages/remote-core",
+    "protocol/tools/probe-client"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@kopernikadr/remote-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure browser ESM shared by remote-lite and the native remote: control protocol, connection, preview, i18n helpers",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
