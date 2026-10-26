@@ -11,9 +11,12 @@ import pl.slava.kopernikadr.camera.server.ControlsPort
 import pl.slava.kopernikadr.camera.server.PortResult
 
 /**
- * [ControlsPort] that rejects a rotation change with `CAPTURE_IN_PROGRESS` while a capture runs
- * (§4.5). Rotation changes take the capture [admission] mutex, so one cannot slip in between a
- * capture's admission and its start.
+ * [ControlsPort] serialized with capture admission (§4.5). Every change takes the capture
+ * [admission] mutex, which a capture holds from its admission (settling check) until its still
+ * has been taken. So a change waits for an in-flight still, a capture waits for a change being
+ * applied, and an exposure / white balance / focus change can never start a new metering
+ * generation between a capture's settling check and its still. A rotation change is rejected
+ * with `CAPTURE_IN_PROGRESS` while a capture runs (each capture keeps its admitted transform).
  */
 class GuardedControls(
     private val delegate: ControlsPort,
@@ -24,14 +27,11 @@ class GuardedControls(
 
     override val updates: Flow<Controls> get() = delegate.updates
 
-    override suspend fun set(change: ControlChange): PortResult<Controls> {
-        if (change !is ControlChange.Rotation) return delegate.set(change)
-        return admission.withLock {
-            if (isCapturing()) {
-                PortResult.Err(ProtocolError(ErrorCodes.CAPTURE_IN_PROGRESS, "cannot change rotation while a capture runs"))
-            } else {
-                delegate.set(change)
-            }
+    override suspend fun set(change: ControlChange): PortResult<Controls> = admission.withLock {
+        if (change is ControlChange.Rotation && isCapturing()) {
+            PortResult.Err(ProtocolError(ErrorCodes.CAPTURE_IN_PROGRESS, "cannot change rotation while a capture runs"))
+        } else {
+            delegate.set(change)
         }
     }
 }

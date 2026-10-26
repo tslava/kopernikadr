@@ -2,6 +2,8 @@ package pl.slava.kopernikadr.camera.spool
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -10,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -30,6 +33,12 @@ import pl.slava.kopernikadr.camera.camera.CameraPort
 import pl.slava.kopernikadr.camera.camera.CameraStatus
 import pl.slava.kopernikadr.camera.camera.StillCapture
 import pl.slava.kopernikadr.camera.controls.ResultSummary
+import pl.slava.kopernikadr.camera.host.GuardedControls
+import pl.slava.kopernikadr.camera.protocol.ControlMode
+import pl.slava.kopernikadr.camera.protocol.Controls
+import pl.slava.kopernikadr.camera.server.ControlChange
+import pl.slava.kopernikadr.camera.server.ControlsPort
+import pl.slava.kopernikadr.camera.server.FakeControls
 import pl.slava.kopernikadr.camera.image.ImageIoCodec
 import pl.slava.kopernikadr.camera.image.StillPipeline
 import pl.slava.kopernikadr.camera.image.markedStill
@@ -74,11 +83,24 @@ class SpoolCaptureServiceTest {
     private lateinit var service: SpoolCaptureService
     private lateinit var store: SpoolFrameStore
     private var check: ProtocolError? = null
+    private var onAdmission: () -> Unit = {}
     private val args = CaptureArgs("p1", 0)
+
+    /** Set it to hold the next spool clock read, i.e. the `pending` insert, until it opens. */
+    @Volatile private var insertGate: CountDownLatch? = null
+    private val insertEntered = CountDownLatch(1)
 
     @Before
     fun setUp() {
-        spool = Spool.open(File(tmp.root, "spool"), BundledSQLiteDriver())
+        val clock = {
+            insertGate?.let { gate ->
+                insertGate = null
+                insertEntered.countDown()
+                gate.await(10, TimeUnit.SECONDS)
+            }
+            System.currentTimeMillis()
+        }
+        spool = Spool.open(File(tmp.root, "spool"), BundledSQLiteDriver(), clock)
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         camera = FakeStillCamera()
         val pipeline = StillPipeline(ImageIoCodec())
@@ -86,7 +108,10 @@ class SpoolCaptureServiceTest {
         val derived = DerivedFiles(spool, pipeline, files)
         service = SpoolCaptureService(
             camera, pipeline, spool, files, derived, scope,
-            admissionCheck = { _, _ -> check },
+            admissionCheck = { _, _ ->
+                onAdmission()
+                check
+            },
         )
         store = SpoolFrameStore(spool, derived)
     }
@@ -201,6 +226,117 @@ class SpoolCaptureServiceTest {
         assertEquals(0, camera.calls.get())
         assertEquals(SpoolLookup.Failed(ErrorCodes.INTERRUPTED, "interrupted by an app restart"), spool.lookup("c1", "r1", SpoolCaptureService.argsHash(args)))
         assertNull(spool.frame(p.frameId))
+    }
+
+    // ---- pending → worker handoff ----
+
+    @Test
+    fun `caller cancelled between the pending insert and the worker launch, the capture still completes`() = runBlocking {
+        val gate = CountDownLatch(1)
+        insertGate = gate
+        val caller = CoroutineScope(Dispatchers.Default).launch { service.capture("c1", "r1", args) }
+        assertTrue(insertEntered.await(5, TimeUnit.SECONDS))
+        caller.cancel() // e.g. the server stops while the row is being inserted
+        gate.countDown()
+        caller.join()
+        val done = withTimeout(10_000) {
+            var op = service.getOperation("c1", "r1")
+            while (op == OperationState.Pending) {
+                delay(20)
+                op = service.getOperation("c1", "r1")
+            }
+            op
+        }
+        assertTrue("$done", done is OperationState.Done)
+        assertEquals(1, camera.calls.get())
+        assertFalse(service.isCapturing)
+        assertFalse(service.admission.isLocked)
+        // and a replay returns the stored result
+        assertEquals((done as OperationState.Done).result, service.capture("c1", "r1", args).ok())
+    }
+
+    @Test
+    fun `capture scope cancelled at the handoff, the row is failed INTERRUPTED, never left pending`() = runBlocking {
+        val gate = CountDownLatch(1)
+        insertGate = gate
+        val caller = async(Dispatchers.Default) { runCatching { service.capture("c1", "r1", args) } }
+        assertTrue(insertEntered.await(5, TimeUnit.SECONDS))
+        scope.cancel()
+        gate.countDown()
+        caller.await()
+        withTimeout(10_000) { while (service.getOperation("c1", "r1") == OperationState.Pending) delay(20) }
+        val op = service.getOperation("c1", "r1") as OperationState.Failed
+        assertEquals(ErrorCodes.INTERRUPTED, op.error.code)
+        assertEquals(0, camera.calls.get())
+        assertFalse(service.isCapturing)
+        assertFalse(service.admission.isLocked)
+    }
+
+    // ---- controls serialized with capture ----
+
+    /** Controls whose [set] blocks until [gate] completes. */
+    private class SlowControls(private val inner: FakeControls = FakeControls()) : ControlsPort by inner {
+        val gate = CompletableDeferred<Unit>()
+        val entered = CompletableDeferred<Unit>()
+
+        override suspend fun set(change: ControlChange): PortResult<Controls> {
+            entered.complete(Unit)
+            gate.await()
+            return inner.set(change)
+        }
+    }
+
+    @Test
+    fun `a control change waits until the in-flight still has been taken`() = runBlocking {
+        val controls = FakeControls()
+        val guarded = GuardedControls(controls, service.admission) { service.isCapturing }
+        val gate = CompletableDeferred<Unit>()
+        camera.gate = gate
+        val cap = async(Dispatchers.Default) { service.capture("c1", "r1", args) }
+        camera.entered.await()
+        val generation = controls.get().generation
+        val set = async(Dispatchers.Default) { guarded.set(ControlChange.Exposure(ControlMode.LOCKED)) }
+        delay(200)
+        assertFalse("the change must wait for takePicture", set.isCompleted)
+        assertEquals(generation, controls.get().generation)
+        // a second capture is still told CAPTURE_IN_PROGRESS at once, not queued on the mutex
+        assertEquals(ErrorCodes.CAPTURE_IN_PROGRESS, withTimeout(2_000) { service.capture("c1", "r2", args) }.code())
+        gate.complete(Unit)
+        assertTrue(set.await() is PortResult.Ok)
+        assertEquals(ControlMode.LOCKED, controls.get().exposure.mode)
+        cap.await().ok()
+        assertFalse(service.admission.isLocked)
+    }
+
+    @Test
+    fun `a capture waits until a control change in progress has been applied`() = runBlocking {
+        val controls = SlowControls()
+        val guarded = GuardedControls(controls, service.admission) { service.isCapturing }
+        var seen: ControlMode? = null
+        onAdmission = { seen = controls.get().exposure.mode }
+        val set = async(Dispatchers.Default) { guarded.set(ControlChange.Exposure(ControlMode.LOCKED)) }
+        controls.entered.await()
+        val cap = async(Dispatchers.Default) { service.capture("c1", "r1", args) }
+        delay(200)
+        assertFalse("the capture must wait for the change", cap.isCompleted)
+        assertNull(seen)
+        assertEquals(0, camera.calls.get())
+        controls.gate.complete(Unit)
+        assertTrue(set.await() is PortResult.Ok)
+        cap.await().ok()
+        // admission (and its settling check) saw the applied change
+        assertEquals(ControlMode.LOCKED, seen)
+        assertFalse(service.admission.isLocked)
+    }
+
+    @Test
+    fun `a failing still releases the admission mutex`() = runBlocking {
+        camera.failure = RuntimeException("hal error")
+        assertEquals(ErrorCodes.CAPTURE_FAILED, service.capture("c1", "r1", args).code())
+        assertFalse(service.admission.isLocked)
+        check = ProtocolError(ErrorCodes.GEOMETRY_MISMATCH, "rotation")
+        assertEquals(ErrorCodes.GEOMETRY_MISMATCH, service.capture("c1", "r2", args).code())
+        assertFalse(service.admission.isLocked)
     }
 
     @Test

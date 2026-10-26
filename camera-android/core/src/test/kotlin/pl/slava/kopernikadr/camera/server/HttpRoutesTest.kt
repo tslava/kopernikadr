@@ -1,6 +1,8 @@
 package pl.slava.kopernikadr.camera.server
 
 import io.ktor.client.request.get
+import io.ktor.client.request.head
+import io.ktor.server.testing.testApplication
 import io.ktor.client.statement.bodyAsBytes
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -14,6 +16,36 @@ import org.junit.Test
 import pl.slava.kopernikadr.camera.protocol.ProtocolJson
 
 class HttpRoutesTest {
+
+    @Test
+    fun `HEAD on frames and info answers without a body`() {
+        val cam = FakeCamera()
+        val f = cam.frames.add("client", "project", 0, fakeJpeg(1000))
+        cameraTest(cam) {
+            val r = client.head("/frames/${f.frameId}/full.jpg")
+            assertEquals(HttpStatusCode.OK, r.status)
+            assertEquals("1000", r.headers[HttpHeaders.ContentLength])
+            assertEquals(ContentType.Image.JPEG, r.contentType())
+            assertEquals(0, r.bodyAsBytes().size)
+            assertEquals(HttpStatusCode.OK, client.head("/info").status)
+            assertEquals(HttpStatusCode.NotFound, client.head("/frames/${f.frameId}/huge.jpg").status)
+        }
+    }
+
+    @Test
+    fun `a display cache that cannot be generated is 503 with Retry-After`() {
+        val cam = FakeCamera()
+        val failing = object : FrameStore by cam.frames {
+            override fun open(frameId: String, variant: FrameVariant): FrameFile? = throw FrameUnavailableException("injected")
+        }
+        val ports = CameraPorts(cam.identity, cam.status, cam.controls, cam.capture, failing, cam.preview)
+        testApplication {
+            application { cameraModule(ports, ServerConfig(staticRoot = TEST_STATIC_ROOT)) }
+            val r = client.get("/frames/01K8GZ4V7Q3M9X2B5N6R8T1WCD/play.jpg")
+            assertEquals(HttpStatusCode.ServiceUnavailable, r.status)
+            assertEquals("1", r.headers[HttpHeaders.RetryAfter])
+        }
+    }
 
     @Test
     fun `info returns identity and versions`() {

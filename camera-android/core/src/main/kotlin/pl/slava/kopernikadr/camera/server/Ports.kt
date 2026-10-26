@@ -84,10 +84,15 @@ interface FrameStore {
 
     /**
      * The file for `/frames/{frameId}/{variant}.jpg`, or null → 404. `full`: null if unknown or
-     * reclaimed. `play`/`thumb`: generated on demand if missing (may take ~1 s); null if `full` is gone.
+     * reclaimed. `play`/`thumb`: generated on demand if missing (may take ~1 s; a request for a file
+     * being generated waits for it); null if `full` is gone.
+     * @throws FrameUnavailableException if a `play`/`thumb` could not be generated (→ 503).
      */
     fun open(frameId: String, variant: FrameVariant): FrameFile?
 }
+
+/** A display cache could not be generated even after a retry; the server answers 503 + `Retry-After`. */
+class FrameUnavailableException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 /** One preview JPEG with the metadata of its §7 header (`bootId` is added by the server). */
 class PreviewFrameData(

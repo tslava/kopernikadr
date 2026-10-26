@@ -4,6 +4,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -12,9 +13,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import pl.slava.kopernikadr.camera.camera.CameraNotReadyException
 import pl.slava.kopernikadr.camera.camera.CameraPort
@@ -37,7 +40,16 @@ import pl.slava.kopernikadr.camera.server.PortResult
  * there) → durable `pending` row. The work (takePicture → [StillPipeline] → durable `full` →
  * `committed`) then runs in [scope], so a caller that goes away does not abort it; a second
  * caller with the same `(clientId, reqId)` awaits the same result. After the commit `thumb` and
- * `play` are generated in the background (best-effort).
+ * `play` are generated in the background, one frame at a time ([DerivedFiles.prefetch]).
+ *
+ * The admission mutex stays held from admission until the still's `takePicture` has returned, so
+ * a control change (which takes the same mutex) can neither start between the settling check and
+ * the still nor while the still is being taken. A capture that finds another one running answers
+ * `CAPTURE_IN_PROGRESS` without waiting for the mutex.
+ *
+ * The `pending` insert and the worker launch are one non-cancellable step: once the row exists a
+ * worker owns it, even if the caller is cancelled right then; a worker whose [scope] is already
+ * cancelled still runs far enough to mark the row `failed(INTERRUPTED)`.
  */
 class SpoolCaptureService(
     private val camera: CameraPort,
@@ -62,6 +74,18 @@ class SpoolCaptureService(
     @Volatile
     private var current: Deferred<PortResult<FrameInfo>>? = null
 
+    /** Frames whose display caches the background worker generates, in commit order. */
+    private val toDerive = Channel<String>(Channel.UNLIMITED)
+
+    init {
+        scope.launch(io) {
+            for (frameId in toDerive) {
+                derived.prefetch(frameId, FrameVariant.THUMB)
+                derived.prefetch(frameId, FrameVariant.PLAY)
+            }
+        }
+    }
+
     /** True while a capture is between admission and its result (reject rotation changes then). */
     val isCapturing: Boolean get() = current?.isActive == true
 
@@ -70,40 +94,96 @@ class SpoolCaptureService(
             return err(ProtocolError.invalidArgs("rotation must be 0 or 180, got ${args.rotation}"))
         }
         val key = Key(clientId, reqId)
-        val work = admission.withLock {
-            when (val found = withContext(io) { spool.lookup(clientId, reqId, argsHash(args)) }) {
-                is SpoolLookup.Committed -> return PortResult.Ok(found.info)
-                is SpoolLookup.Failed -> return err(ProtocolError(found.code, found.message))
-                SpoolLookup.Reused -> return err(ProtocolError(ErrorCodes.REQ_ID_REUSED, "reqId $reqId was used with other args"))
-                is SpoolLookup.Pending -> {
-                    running[key]?.let { return@withLock it }
-                    // Left by a dead process; an interrupted operation is never re-executed.
-                    withContext(io) { spool.fail(found.frameId, ErrorCodes.INTERRUPTED, "interrupted by an app restart") }
-                    return err(ProtocolError(ErrorCodes.INTERRUPTED, "interrupted by an app restart", retryable = false))
+        // First without the mutex: a running capture holds it through its takePicture.
+        when (val early = dedup(key, args, locked = false)) {
+            is Admit.Done -> return early.result
+            is Admit.Join -> return early.work.await()
+            Admit.Proceed -> if (isCapturing) return inProgress()
+        }
+        admission.lock()
+        val permit = AdmissionPermit(admission)
+        var work: Deferred<PortResult<FrameInfo>>? = null
+        try {
+            when (val found = dedup(key, args, locked = true)) {
+                is Admit.Done -> return found.result
+                is Admit.Join -> {
+                    permit.release()
+                    return found.work.await()
                 }
-                SpoolLookup.None -> Unit
+                Admit.Proceed -> Unit
             }
-            if (isCapturing) return err(ProtocolError(ErrorCodes.CAPTURE_IN_PROGRESS, "another capture is running"))
+            if (isCapturing) return inProgress()
             admissionCheck(clientId, args)?.let { return err(it) }
-
-            val pending = withContext(io) { spool.insertPending(clientId, reqId, argsHash(args), args.projectId, args.rotation) }
-            val d = scope.async(io, start = CoroutineStart.LAZY) { run(pending, args) }
-            running[key] = d
-            current = d
-            d.invokeOnCompletion { running.remove(key, d) }
-            d.start()
-            d
+            work = withContext(NonCancellable) { start(key, args, permit) }
+        } finally {
+            if (work == null) permit.release()
         }
         return work.await()
     }
 
     override fun getOperation(clientId: String, reqId: String): OperationState = spool.getOperation(clientId, reqId)
 
-    private suspend fun run(p: PendingFrame, args: CaptureArgs): PortResult<FrameInfo> {
+    private sealed interface Admit {
+        data class Done(val result: PortResult<FrameInfo>) : Admit
+        data class Join(val work: Deferred<PortResult<FrameInfo>>) : Admit
+        data object Proceed : Admit
+    }
+
+    /** Dedup by `(clientId, reqId)`. A `pending` row nobody runs is failed only under the mutex. */
+    private suspend fun dedup(key: Key, args: CaptureArgs, locked: Boolean): Admit =
+        when (val found = withContext(io) { spool.lookup(key.clientId, key.reqId, argsHash(args)) }) {
+            is SpoolLookup.Committed -> Admit.Done(PortResult.Ok(found.info))
+            is SpoolLookup.Failed -> Admit.Done(err(ProtocolError(found.code, found.message)))
+            SpoolLookup.Reused -> Admit.Done(err(ProtocolError(ErrorCodes.REQ_ID_REUSED, "reqId ${key.reqId} was used with other args")))
+            is SpoolLookup.Pending -> {
+                val work = running[key]
+                when {
+                    work != null -> Admit.Join(work)
+                    // Without the mutex the row may be between its insert and its worker's registration.
+                    !locked -> Admit.Proceed
+                    else -> {
+                        // Left by a dead process; an interrupted operation is never re-executed.
+                        val msg = "interrupted by an app restart"
+                        withContext(io) { spool.fail(found.frameId, ErrorCodes.INTERRUPTED, msg) }
+                        Admit.Done(err(ProtocolError(ErrorCodes.INTERRUPTED, msg, retryable = false)))
+                    }
+                }
+            }
+            SpoolLookup.None -> Admit.Proceed
+        }
+
+    /**
+     * Inserts the `pending` row and launches its worker; call it non-cancellable. The worker takes
+     * over [permit] and releases it once `takePicture` has returned.
+     */
+    private suspend fun start(key: Key, args: CaptureArgs, permit: AdmissionPermit): Deferred<PortResult<FrameInfo>> {
+        val pending = withContext(io) { spool.insertPending(key.clientId, key.reqId, argsHash(args), args.projectId, args.rotation) }
+        val d = try {
+            // ATOMIC: the body starts even if [scope] is already cancelled, and fails the row.
+            scope.async(io, start = CoroutineStart.ATOMIC) { run(pending, args, permit) }
+        } catch (e: Throwable) {
+            withContext(io) { failQuietly(pending, ErrorCodes.INTERRUPTED, "capture could not start: $e") }
+            throw e
+        }
+        running[key] = d
+        current = d
+        d.invokeOnCompletion {
+            running.remove(key, d)
+            permit.release()
+        }
+        return d
+    }
+
+    private suspend fun run(p: PendingFrame, args: CaptureArgs, permit: AdmissionPermit): PortResult<FrameInfo> {
         val fullFile = spool.file(p.frameId, FrameVariant.FULL)
         try {
             val t0 = System.nanoTime()
-            val still = camera.takePicture()
+            val still = try {
+                currentCoroutineContext().ensureActive()
+                camera.takePicture()
+            } finally {
+                permit.release()
+            }
             val capturedAt = ISO.format(Instant.ofEpochMilli(clock()))
             val t1 = System.nanoTime()
             val full = pipeline.processStill(still, args.rotation)
@@ -122,16 +202,8 @@ class SpoolCaptureService(
                     "takePicture=${ms(t0, t1)} ${still.timings} pipeline=${ms(t1, t2)} ${full.timings} " +
                     "write=${ms(t2, t3)} commit=${ms(t3, t4)} total=${ms(t0, t4)} ms",
             )
-            scope.launch(io) {
-                try {
-                    derived.ensure(p.frameId, FrameVariant.THUMB)
-                    derived.ensure(p.frameId, FrameVariant.PLAY)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    log("derive ${p.frameId} failed: $e")
-                }
-            }
+            // Unlimited: fails only once [scope] is gone; requests then generate on demand.
+            toDerive.trySend(p.frameId)
             return PortResult.Ok(info)
         } catch (e: CancellationException) {
             withContext(NonCancellable) { failQuietly(p, ErrorCodes.INTERRUPTED, "capture cancelled") }
@@ -160,7 +232,18 @@ class SpoolCaptureService(
 
     private fun err(e: ProtocolError) = PortResult.Err(e)
 
+    private fun inProgress() = err(ProtocolError(ErrorCodes.CAPTURE_IN_PROGRESS, "another capture is running"))
+
     private fun ms(a: Long, b: Long) = String.format(java.util.Locale.ROOT, "%.1f", (b - a) / 1_000_000.0)
+
+    /** The held [admission] mutex, released exactly once by whoever is done with it first. */
+    private class AdmissionPermit(private val mutex: Mutex) {
+        private val released = AtomicBoolean(false)
+
+        fun release() {
+            if (released.compareAndSet(false, true)) mutex.unlock()
+        }
+    }
 
     companion object {
         private val ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)

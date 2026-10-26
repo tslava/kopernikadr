@@ -145,7 +145,7 @@ class ServerHost(private val app: App) {
         val spool = Spool.open(File(app.filesDir, "spool"))
         val codec = AndroidImageCodec()
         val pipeline = StillPipeline(codec)
-        val derived = DerivedFiles(spool, pipeline, files)
+        val derived = DerivedFiles(spool, pipeline, files, log = { Log.w(CAP_TAG, it) })
         val admission = CaptureAdmission(
             controls = controls.controls,
             currentControls = { controls.controls.value },
