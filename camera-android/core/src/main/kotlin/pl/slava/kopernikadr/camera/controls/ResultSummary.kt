@@ -38,10 +38,15 @@ data class ColorTransform(val m: List<Double>) {
 /**
  * The fields of a `TotalCaptureResult` the controls read. Ints are the Camera2 constant values
  * ([Camera2]), so the Android mapper is a plain copy; a key the result lacks is null.
+ * Also the per-frame / per-still metadata of the camera port (`ResultSummaryMapper` in `:app`).
  */
+@Serializable
 data class ResultSummary(
     val frameNumber: Long,
+    /** `SENSOR_TIMESTAMP`, ns (same clock as `ImageProxy.imageInfo.timestamp`). */
     val timestampNs: Long? = null,
+    /** `CONTROL_CAPTURE_INTENT` of the request: [Camera2.CAPTURE_INTENT_PREVIEW] (repeating) or [Camera2.CAPTURE_INTENT_STILL_CAPTURE]. */
+    val captureIntent: Int? = null,
     val aeMode: Int? = null,
     val aeState: Int? = null,
     val aeLock: Boolean? = null,

@@ -1,44 +1,49 @@
 package pl.slava.kopernikadr.camera
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.net.Inet4Address
 import java.net.InetAddress
+import pl.slava.kopernikadr.camera.camera.CameraController
+import pl.slava.kopernikadr.camera.ui.PermissionScreen
+import pl.slava.kopernikadr.camera.ui.StatusScreen
 
 class MainActivity : ComponentActivity() {
     private var wifiIp by mutableStateOf<String?>(null)
     private var diagnosticsOpen by mutableStateOf(false)
+    private var cameraGranted by mutableStateOf(false)
+
+    private val camera: CameraController get() = (application as App).camera
 
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
+
+    private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Log.i(CameraController.TAG, "CAMERA permission ${if (granted) "granted" else "denied"}")
+        if (granted) onCameraGranted()
+    }
 
     private val wifiCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
@@ -56,15 +61,34 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (savedInstanceState == null && diagHook.onIntent(intent)) diagnosticsOpen = true
+        if (hasCameraPermission()) {
+            onCameraGranted()
+        } else if (savedInstanceState == null) {
+            permissionRequest.launch(Manifest.permission.CAMERA)
+        }
         val diagnosticsScreen = diagHook.diagnosticsScreen
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                if (diagnosticsOpen && diagnosticsScreen != null) {
-                    BackHandler { diagnosticsOpen = false }
-                    diagnosticsScreen { diagnosticsOpen = false }
-                } else {
-                    // Release has no diagnostics screen, so its title gets no long-press at all.
-                    PlaceholderStatus(wifiIp, onTitleHeld = diagnosticsScreen?.let { { diagnosticsOpen = true } })
+                // The status screen (with the viewfinder) stays composed under the diagnostics
+                // screen, so the Preview keeps its surface while a probe runs (variant A).
+                Box(Modifier.fillMaxSize()) {
+                    if (cameraGranted) {
+                        val status by camera.status.collectAsStateWithLifecycle()
+                        StatusScreen(
+                            wifiIp = wifiIp,
+                            port = SERVER_PORT,
+                            camera = status,
+                            onPreviewView = { view -> camera.setPreviewSurfaceProvider(view?.surfaceProvider) },
+                            // Release has no diagnostics screen, so its title gets no long-press at all.
+                            onTitleHeld = diagnosticsScreen?.let { { diagnosticsOpen = true } },
+                        )
+                    } else {
+                        PermissionScreen(onRetry = { permissionRequest.launch(Manifest.permission.CAMERA) })
+                    }
+                    if (diagnosticsOpen && diagnosticsScreen != null) {
+                        BackHandler { diagnosticsOpen = false }
+                        diagnosticsScreen { diagnosticsOpen = false }
+                    }
                 }
             }
         }
@@ -78,6 +102,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        // Granted from the settings (or by the parent) while we were stopped.
+        if (!cameraGranted && hasCameraPermission()) onCameraGranted()
         val wifi = NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .build()
@@ -88,45 +114,21 @@ class MainActivity : ComponentActivity() {
         connectivity.unregisterNetworkCallback(wifiCallback)
         super.onStop()
     }
+
+    private fun hasCameraPermission() =
+        checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
+    /** Camera binding starts only from here: the controller binds on this activity's ON_START. */
+    private fun onCameraGranted() {
+        cameraGranted = true
+        camera.attach(this)
+    }
+
+    companion object {
+        /** The camera server's port (PROTOCOL §2); the server itself comes with Task 11. */
+        const val SERVER_PORT = 8765
+    }
 }
 
 internal fun firstIpv4(addresses: List<InetAddress>): String? =
     addresses.firstOrNull { it is Inet4Address && !it.isLoopbackAddress }?.hostAddress
-
-/** Diagnostics open after holding the status title this long. */
-private const val DIAGNOSTICS_HOLD_MS = 2_000L
-
-/** Calls [onHold] when a pointer stays down for [millis] without being released or cancelled. */
-internal fun Modifier.holdFor(millis: Long, onHold: () -> Unit): Modifier = pointerInput(millis) {
-    awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false)
-        var ended = false
-        withTimeoutOrNull(millis) {
-            waitForUpOrCancellation()
-            ended = true
-        }
-        if (!ended) onHold()
-    }
-}
-
-@Composable
-private fun PlaceholderStatus(wifiIp: String?, onTitleHeld: (() -> Unit)?) {
-    Surface(Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize().safeDrawingPadding(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                stringResource(R.string.status_title),
-                style = MaterialTheme.typography.displaySmall,
-                modifier = if (onTitleHeld != null) Modifier.holdFor(DIAGNOSTICS_HOLD_MS, onTitleHeld) else Modifier,
-            )
-            Text(
-                text = wifiIp?.let { stringResource(R.string.status_ip, it) }
-                    ?: stringResource(R.string.status_no_wifi),
-                style = MaterialTheme.typography.headlineSmall,
-            )
-        }
-    }
-}

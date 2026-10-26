@@ -6,6 +6,9 @@ package pl.slava.kopernikadr.camera.controls
  * stays JVM-only and the Android mapper is a plain copy of `CaptureResult` ints.
  */
 object Camera2 {
+    const val CAPTURE_INTENT_PREVIEW = 1
+    const val CAPTURE_INTENT_STILL_CAPTURE = 2
+
     const val CONTROL_MODE_OFF = 0
     const val CONTROL_MODE_AUTO = 1
 

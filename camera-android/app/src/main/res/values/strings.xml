@@ -4,4 +4,9 @@
     <string name="status_title">Kopernikadr Kamera</string>
     <string name="status_ip">Adres Wi-Fi: %1$s</string>
     <string name="status_no_wifi">Brak połączenia Wi-Fi</string>
+    <string name="permission_text">Poproś rodzica o zgodę na aparat</string>
+    <string name="permission_retry">Spróbuj ponownie</string>
+    <string name="camera_starting">Kamera: uruchamianie…</string>
+    <string name="camera_ready">Kamera gotowa</string>
+    <string name="camera_error">Błąd kamery: %1$s</string>
 </resources>

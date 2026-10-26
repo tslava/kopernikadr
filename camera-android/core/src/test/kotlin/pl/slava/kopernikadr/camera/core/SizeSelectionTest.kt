@@ -117,4 +117,59 @@ class SizeSelectionTest {
         assertEquals(Size(1280, 960), SizeSelection.selectAnalysis(list))
         assertEquals(Size(1280, 960), SizeSelection.selectFull(list))
     }
+
+    // ---- preview ----
+
+    @Test
+    fun `preview picks 960x720 from the g05 list`() {
+        assertEquals(Size(960, 720), SizeSelection.selectPreview(g05All))
+    }
+
+    @Test
+    fun `preview falls back to the largest 4 by 3 at most 1280x960`() {
+        assertEquals(Size(1280, 960), SizeSelection.selectPreview(g05All - Size(960, 720)))
+        assertEquals(Size(640, 480), SizeSelection.selectPreview(noise + sizes(640 to 480, 2560 to 1920)))
+        assertEquals(Size(960, 720), SizeSelection.selectPreview(sizes(720 to 960)))
+    }
+
+    @Test
+    fun `preview rejects lists without a suitable 4 by 3`() {
+        assertThrows(NoSuitableSizeException::class.java) { SizeSelection.selectPreview(emptyList()) }
+        assertThrows(NoSuitableSizeException::class.java) { SizeSelection.selectPreview(noise + sizes(1440 to 1080)) }
+    }
+
+    // ---- prioritize (CameraX ResolutionFilter order) ----
+
+    @Test
+    fun `prioritize puts the preferred sizes first in preference order`() {
+        val supported = sizes(1280 to 960, 1024 to 768, 960 to 720, 640 to 480)
+        assertEquals(
+            sizes(1280 to 960, 960 to 720, 1024 to 768, 640 to 480),
+            SizeSelection.prioritize(supported, listOf(SizeSelection.ANALYSIS_PREFERRED, SizeSelection.ANALYSIS_FALLBACK)),
+        )
+    }
+
+    @Test
+    fun `prioritize skips missing preferred sizes and keeps the rest in order`() {
+        val supported = sizes(1440 to 1080, 1024 to 768, 960 to 720, 640 to 480)
+        assertEquals(
+            sizes(960 to 720, 1440 to 1080, 1024 to 768, 640 to 480),
+            SizeSelection.prioritize(supported, listOf(SizeSelection.ANALYSIS_PREFERRED, SizeSelection.ANALYSIS_FALLBACK)),
+        )
+        assertEquals(supported, SizeSelection.prioritize(supported, emptyList()))
+        assertEquals(emptyList<Size>(), SizeSelection.prioritize(emptyList(), listOf(Size(960, 720))))
+    }
+
+    @Test
+    fun `prioritize matches portrait sizes and returns the supported instances`() {
+        val supported = sizes(720 to 960, 960 to 1280)
+        assertEquals(sizes(960 to 1280, 720 to 960), SizeSelection.prioritize(supported, listOf(Size(1280, 960))))
+    }
+
+    @Test
+    fun `g05 lists give the planned stream sizes`() {
+        assertEquals(Size(960, 720), SizeSelection.selectPreview(g05All))
+        assertEquals(Size(1280, 960), SizeSelection.selectAnalysis(g05All))
+        assertEquals(Size(3264, 2448), SizeSelection.selectFull(g05All))
+    }
 }

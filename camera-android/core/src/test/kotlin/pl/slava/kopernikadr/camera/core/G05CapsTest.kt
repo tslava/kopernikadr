@@ -52,6 +52,11 @@ class G05CapsTest {
     }
 
     @Test
+    fun `preview is 960x720 from the real PRIVATE list`() {
+        assertEquals(Size(960, 720), SizeSelection.selectPreview(g05.privateSizes))
+    }
+
+    @Test
     fun `preview, play and analysis 4 by 3 sizes are offered by the streams`() {
         for (s in listOf(Size(3264, 2448), Size(1440, 1080), Size(1280, 960), Size(960, 720))) {
             assertTrue("PRIVATE has $s", s in g05.privateSizes)

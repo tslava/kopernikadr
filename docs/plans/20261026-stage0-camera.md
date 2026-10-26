@@ -258,6 +258,26 @@
 - **Implementation Steps** (`[ ]`): code, tests, docs, and on-device checks on the phone.
 - **Post-Completion**: things needing the child account in real conditions, or the tablet.
 
+## ➕ Fast track (owner request, 2026-10-26): a working rig today
+The kid is waiting, so the order changes. Before the remaining probes we build a working phone
+camera plus a browser remote served by the phone itself.
+
+- **Steps:**
+  1. Task 4 (binding);
+  2. in parallel: the `:core` server (`/info`, `/frames`, static `/`, `/ws/control` with
+     hello/ping/capture/listFrames/ack/getStatus/getControls/setControl, `/ws/preview`), the
+     `:core` controls logic (freeze/fallback, fence, confirmation), and `remote-lite` (a static
+     browser remote in `core/src/main/resources/remote-lite/`);
+  3. Task 5 (still pipeline + Spool);
+  4. integration in `:app` (camera ports → server, controls adapter);
+  5. on-device test from the laptop browser and the tablet's Chrome.
+- **remote-lite behaviour:** a projects list; capture with onion skin, strip, delete + Undo and
+  playback; a parent drawer with the locks; **video export via MediaRecorder** (MP4 if Chrome
+  supports it, else WebM) for today.
+- **Frames:** stored on the phone and never acked/deleted for now.
+- **Deferred until after the fast track:** probes `streams`/`locks`/`focus`/`grid` (Tasks 6, 9),
+  NSD + `/diag` routes (Task 14), the Task 15 full probe run.
+
 ## Implementation Steps
 
 ### Task 1: Gradle skeleton (:core + :app), toolchain, pinned versions, build types
@@ -339,21 +359,23 @@
   `app/src/main/kotlin/.../ui/StatusScreen.kt` (with `PreviewView`)
 - Create: `app/src/test/kotlin/.../camera/ResultSummaryMapperTest.kt`
 
-- [ ] `CameraController`:
-  - [ ] Preview (`PreviewView` on the status screen) + ImageAnalysis (KEEP_ONLY_LATEST) +
+- [x] `CameraController`:
+  - [x] Preview (`PreviewView` on the status screen) + ImageAnalysis (KEEP_ONLY_LATEST) +
         ImageCapture (in-memory) in one `UseCaseGroup`, `ViewPort(4:3, ROTATION_90)`, all
         target rotations `ROTATION_90`;
-  - [ ] variant B without Preview;
-  - [ ] strict bind (`FALLBACK_RULE_NONE`), then fallback bind;
-  - [ ] expose the resolved sizes
-- [ ] session capture callbacks on the Preview and ImageCapture builders → `ResultSummary` stream
+  - [x] variant B without Preview;
+  - [x] strict bind (`FALLBACK_RULE_NONE`), then fallback bind;
+  - [x] expose the resolved sizes
+- [x] session capture callbacks on the Preview and ImageCapture builders → `ResultSummary` stream
       with frame numbers
-- [ ] `CameraPort` adapter (`takePicture` → JPEG bytes + paired `ResultSummary`; analysis frames
+- [x] `CameraPort` adapter (`takePicture` → JPEG bytes + paired `ResultSummary`; analysis frames
       on demand)
-- [ ] write tests: `ResultSummaryMapper` from plain values (null keys, units)
-- [ ] on the phone: the viewfinder shows landscape 4:3 with the full FOV; resolved sizes are
-      logged; the camera releases on screen lock and rebinds on unlock
-- [ ] run tests — must pass before task 5
+- [x] write tests: `ResultSummaryMapper` from plain values (null keys, units)
+- [x] on the phone: the viewfinder shows landscape 4:3 with the full FOV; resolved sizes are
+      logged (strict A bind fails → fallback: preview 960×720, analysis **960×720**, still 3264×2448)
+- [ ] ⚠️ pending on the phone (disconnected): screen lock/unlock rebind, permission-denied screenshot,
+      variant B strict bind, probe-build capture-test, preview fps in normal light
+- [x] run tests — must pass before task 5
 
 ### Task 5: Still pipeline, durable files, Spool 0a (TDD + on device)
 
