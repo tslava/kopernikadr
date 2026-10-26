@@ -1,0 +1,544 @@
+{
+  "cameraId": "0",
+  "cameraPermissionGranted": true,
+  "keysNeedingPermission": [],
+  "lensFacing": "BACK",
+  "hardwareLevel": "FULL",
+  "capabilities": [
+    "BACKWARD_COMPATIBLE",
+    "MANUAL_SENSOR",
+    "MANUAL_POST_PROCESSING",
+    "READ_SENSOR_SETTINGS",
+    "BURST_CAPTURE",
+    "CONSTRAINED_HIGH_SPEED_VIDEO"
+  ],
+  "aeModes": [
+    "OFF",
+    "ON",
+    "ON_AUTO_FLASH",
+    "ON_ALWAYS_FLASH"
+  ],
+  "aeAntibandingModes": [
+    "OFF",
+    "50HZ",
+    "60HZ",
+    "AUTO"
+  ],
+  "aeTargetFpsRanges": [
+    {
+      "lower": 10,
+      "upper": 10
+    },
+    {
+      "lower": 15,
+      "upper": 15
+    },
+    {
+      "lower": 15,
+      "upper": 20
+    },
+    {
+      "lower": 20,
+      "upper": 20
+    },
+    {
+      "lower": 5,
+      "upper": 30
+    },
+    {
+      "lower": 30,
+      "upper": 30
+    }
+  ],
+  "awbModes": [
+    "OFF",
+    "AUTO",
+    "INCANDESCENT",
+    "FLUORESCENT",
+    "WARM_FLUORESCENT",
+    "DAYLIGHT",
+    "CLOUDY_DAYLIGHT",
+    "TWILIGHT",
+    "SHADE"
+  ],
+  "afModes": [
+    "OFF",
+    "AUTO",
+    "MACRO",
+    "CONTINUOUS_VIDEO",
+    "CONTINUOUS_PICTURE"
+  ],
+  "aeLockAvailable": true,
+  "awbLockAvailable": true,
+  "aeCompensationRange": {
+    "lower": -4,
+    "upper": 4
+  },
+  "aeCompensationStep": {
+    "num": 1,
+    "den": 2
+  },
+  "isoRange": {
+    "lower": 100,
+    "upper": 16000
+  },
+  "exposureTimeRangeNs": {
+    "lower": 100000,
+    "upper": 32000000000
+  },
+  "maxFrameDurationNs": 32000000000,
+  "jpegSizes": [
+    {
+      "width": 3072,
+      "height": 3072
+    },
+    {
+      "width": 4080,
+      "height": 2296
+    },
+    {
+      "width": 2944,
+      "height": 2944
+    },
+    {
+      "width": 3840,
+      "height": 2160
+    },
+    {
+      "width": 3264,
+      "height": 2448
+    },
+    {
+      "width": 4080,
+      "height": 1840
+    },
+    {
+      "width": 2560,
+      "height": 1920
+    },
+    {
+      "width": 2320,
+      "height": 1296
+    },
+    {
+      "width": 1920,
+      "height": 1440
+    },
+    {
+      "width": 2400,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 1088
+    },
+    {
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 864
+    },
+    {
+      "width": 1440,
+      "height": 1088
+    },
+    {
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "width": 1280,
+      "height": 960
+    },
+    {
+      "width": 1080,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 720
+    },
+    {
+      "width": 1560,
+      "height": 720
+    },
+    {
+      "width": 1520,
+      "height": 720
+    },
+    {
+      "width": 1440,
+      "height": 720
+    },
+    {
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "width": 1024,
+      "height": 768
+    },
+    {
+      "width": 1080,
+      "height": 720
+    },
+    {
+      "width": 960,
+      "height": 720
+    },
+    {
+      "width": 640,
+      "height": 480
+    },
+    {
+      "width": 640,
+      "height": 360
+    },
+    {
+      "width": 480,
+      "height": 320
+    },
+    {
+      "width": 320,
+      "height": 240
+    }
+  ],
+  "jpegHighResolutionSizes": [
+    {
+      "width": 4080,
+      "height": 3072
+    },
+    {
+      "width": 4032,
+      "height": 3024
+    },
+    {
+      "width": 720,
+      "height": 720
+    }
+  ],
+  "yuvSizes": [
+    {
+      "width": 3072,
+      "height": 3072
+    },
+    {
+      "width": 4080,
+      "height": 2296
+    },
+    {
+      "width": 2944,
+      "height": 2944
+    },
+    {
+      "width": 3840,
+      "height": 2160
+    },
+    {
+      "width": 3264,
+      "height": 2448
+    },
+    {
+      "width": 4080,
+      "height": 1840
+    },
+    {
+      "width": 2560,
+      "height": 1920
+    },
+    {
+      "width": 2560,
+      "height": 1440
+    },
+    {
+      "width": 2320,
+      "height": 1296
+    },
+    {
+      "width": 1920,
+      "height": 1440
+    },
+    {
+      "width": 2400,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 1088
+    },
+    {
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 864
+    },
+    {
+      "width": 1440,
+      "height": 1088
+    },
+    {
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "width": 1280,
+      "height": 960
+    },
+    {
+      "width": 1080,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 720
+    },
+    {
+      "width": 1560,
+      "height": 720
+    },
+    {
+      "width": 1520,
+      "height": 720
+    },
+    {
+      "width": 1440,
+      "height": 720
+    },
+    {
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "width": 1024,
+      "height": 768
+    },
+    {
+      "width": 1080,
+      "height": 720
+    },
+    {
+      "width": 960,
+      "height": 720
+    },
+    {
+      "width": 720,
+      "height": 480
+    },
+    {
+      "width": 640,
+      "height": 480
+    },
+    {
+      "width": 640,
+      "height": 360
+    },
+    {
+      "width": 480,
+      "height": 320
+    },
+    {
+      "width": 352,
+      "height": 288
+    },
+    {
+      "width": 320,
+      "height": 240
+    },
+    {
+      "width": 192,
+      "height": 144
+    },
+    {
+      "width": 176,
+      "height": 144
+    },
+    {
+      "width": 192,
+      "height": 108
+    },
+    {
+      "width": 160,
+      "height": 96
+    }
+  ],
+  "privateSizes": [
+    {
+      "width": 3072,
+      "height": 3072
+    },
+    {
+      "width": 4080,
+      "height": 2296
+    },
+    {
+      "width": 2944,
+      "height": 2944
+    },
+    {
+      "width": 3840,
+      "height": 2160
+    },
+    {
+      "width": 3264,
+      "height": 2448
+    },
+    {
+      "width": 4080,
+      "height": 1840
+    },
+    {
+      "width": 2560,
+      "height": 1920
+    },
+    {
+      "width": 2560,
+      "height": 1440
+    },
+    {
+      "width": 2320,
+      "height": 1296
+    },
+    {
+      "width": 1920,
+      "height": 1440
+    },
+    {
+      "width": 2400,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 1088
+    },
+    {
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "width": 1920,
+      "height": 864
+    },
+    {
+      "width": 1440,
+      "height": 1088
+    },
+    {
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 900
+    },
+    {
+      "width": 1280,
+      "height": 960
+    },
+    {
+      "width": 1080,
+      "height": 1080
+    },
+    {
+      "width": 1600,
+      "height": 720
+    },
+    {
+      "width": 1560,
+      "height": 720
+    },
+    {
+      "width": 1520,
+      "height": 720
+    },
+    {
+      "width": 1440,
+      "height": 720
+    },
+    {
+      "width": 1280,
+      "height": 720
+    },
+    {
+      "width": 1024,
+      "height": 768
+    },
+    {
+      "width": 1080,
+      "height": 720
+    },
+    {
+      "width": 960,
+      "height": 720
+    },
+    {
+      "width": 720,
+      "height": 480
+    },
+    {
+      "width": 640,
+      "height": 480
+    },
+    {
+      "width": 640,
+      "height": 360
+    },
+    {
+      "width": 480,
+      "height": 320
+    },
+    {
+      "width": 352,
+      "height": 288
+    },
+    {
+      "width": 320,
+      "height": 240
+    },
+    {
+      "width": 192,
+      "height": 144
+    },
+    {
+      "width": 176,
+      "height": 144
+    },
+    {
+      "width": 192,
+      "height": 108
+    },
+    {
+      "width": 160,
+      "height": 96
+    }
+  ],
+  "activeArraySize": {
+    "left": 0,
+    "top": 0,
+    "right": 4080,
+    "bottom": 3072
+  },
+  "pixelArraySize": {
+    "width": 4080,
+    "height": 3072
+  },
+  "sensorOrientation": 90,
+  "minFocusDistanceDiopters": 10.0,
+  "hyperfocalDistanceDiopters": 0.33333334,
+  "focusDistanceCalibration": "UNCALIBRATED",
+  "focalLengthsMm": [
+    4.266
+  ],
+  "maxDigitalZoom": 4.0
+}

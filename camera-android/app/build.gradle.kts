@@ -35,6 +35,9 @@ android {
         }
     }
 
+    // Debug carries the same diagnostics as probe (src/probe); release has none.
+    sourceSets.getByName("debug").kotlin.srcDir("src/probe/kotlin")
+
     // Kotlin's jvmTarget follows targetCompatibility under built-in Kotlin.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

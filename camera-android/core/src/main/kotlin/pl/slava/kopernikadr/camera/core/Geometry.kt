@@ -1,8 +1,10 @@
 package pl.slava.kopernikadr.camera.core
 
 import kotlin.math.abs
+import kotlinx.serialization.Serializable
 
 /** Pixel dimensions, both > 0. */
+@Serializable
 data class Size(val width: Int, val height: Int) {
     init {
         require(width > 0 && height > 0) { "size must be positive: ${width}x$height" }
@@ -22,6 +24,7 @@ data class Size(val width: Int, val height: Int) {
 }
 
 /** Integer rectangle, half-open: covers `[left, right) × [top, bottom)`. */
+@Serializable
 data class IntRect(val left: Int, val top: Int, val right: Int, val bottom: Int) {
     init {
         require(right >= left && bottom >= top) { "inverted rect: $this" }

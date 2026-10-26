@@ -289,7 +289,7 @@
       and sets WAL + `synchronous=FULL`. If it fails, switch to `sqlite-jdbc` in tests behind a
       `SqlDriver` seam and record it with ⚠️
 - [x] `./gradlew-jbr :core:test :app:assembleDebug :app:assembleProbe :app:assembleRelease` green
-- [ ] ⚠️ on the phone: `adb install -r` of the debug build; it launches in landscape — pending, the phone was disconnected during Task 1
+- [x] on the phone: `adb install -r` of the debug build; it launches in landscape (done in Task 3)
 - [x] run tests — must pass before task 2
 
 ### Task 2: Pure core — Ulid, geometry, size selection, capability mapping (TDD)
@@ -319,17 +319,17 @@
   `app/src/main/kotlin/.../camera/CharacteristicsReader.kt`
 - Create: `core/src/test/resources/g05-caps.json` (after the run)
 
-- [ ] `ProbeRunnerCore` (`:core`, TDD): one probe at a time, run dir + `report.json`, a failure is
+- [x] `ProbeRunnerCore` (`:core`, TDD): one probe at a time, run dir + `report.json`, a failure is
       captured in the report, steps can wait on "camera bound" and on user "Continue"
-- [ ] ➕ (from Task 2) tests first, then `CapabilityMapper` + `CharacteristicsSnapshot` in `:core`
-- [ ] `ProbeRunner` (Application-scoped) + `CharacteristicsReader` → `CharacteristicsSnapshot`
+- [x] ➕ (from Task 2) tests first, then `CapabilityMapper` + `CharacteristicsSnapshot` in `:core`
+- [x] `ProbeRunner` (Application-scoped) + `CharacteristicsReader` → `CharacteristicsSnapshot`
       (all `caps` fields from Technical Details)
-- [ ] diagnostics screen: probe buttons, progress, full-screen prompt with Continue, last report
+- [x] diagnostics screen: probe buttons, progress, full-screen prompt with Continue, last report
       summary
-- [ ] on the phone (probe build): run `caps`; `adb pull` the report; save it as `g05-caps.json`
-- [ ] write tests: `CapabilityMapper` and `SizeSelection` against the **real** `g05-caps.json`
+- [x] on the phone (probe build): run `caps`; `adb pull` the report; save it as `g05-caps.json`
+- [x] write tests: `CapabilityMapper` and `SizeSelection` against the **real** `g05-caps.json`
       (fixes the fakes if reality differs)
-- [ ] run tests — must pass before task 4
+- [x] run tests — must pass before task 4
 
 ### Task 4: CameraController — binding, viewfinder, resolved sizes (on device)
 
@@ -568,7 +568,7 @@
       lock during a probe
 - [ ] full suite: `cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest`;
       `cd protocol/tools/probe-client && node --test`
-- [ ] `assembleRelease` contains no `diag` classes (class-list check)
+- [ ] `assembleRelease` contains no **app-side** diag classes (ProbeRunner, probes, DiagnosticsScreen); ➕ the pure `:core` `.diag` classes (Metrics, Aligner, ProbeRunnerCore) do ship in release — either accept (they are inert) or move them to a test-fixtures/probe-only module; decide in Task 17
 
 ### Task 17: [Final] Update documentation
 - [ ] `docs/ARCHITECTURE.md`:
