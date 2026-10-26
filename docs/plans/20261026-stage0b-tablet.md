@@ -268,22 +268,22 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Modify: `camera-android/core/build.gradle.kts`, `camera-android/core/src/main/resources/remote-lite/lib/i18n.js` (uses `i18n-core.js`), `.gitignore`
 - Delete (git mv): `camera-android/core/src/main/resources/remote-lite/lib/{protocol,connection,backoff,preview,preview-frame}.js` and their tests → remote-core
 
-- [ ] root workspaces + `@kopernikadr/remote-core` (`"type":"module"`, `"exports"`)
-- [ ] `git mv` the five modules + their tests unchanged; extract `pickLang`/`makeTranslator`
+- [x] root workspaces + `@kopernikadr/remote-core` (`"type":"module"`, `"exports"`)
+- [x] `git mv` the five modules + their tests unchanged; extract `pickLang`/`makeTranslator`
       into `i18n-core.js` (STRINGS stay in remote-lite `lib/i18n.js`)
-- [ ] the `syncRemoteCore` Sync task (dedicated root, fails if the source is missing) wired with
+- [x] the `syncRemoteCore` Sync task (dedicated root, fails if the source is missing) wired with
       `resources.srcDir(syncRemoteCore)`
-- [ ] write the module rule test (only relative `./x.js` imports in remote-core)
-- [ ] write the contract tests against `protocol/fixtures` (ControlClient resolves `*.res`,
+- [x] write the module rule test (only relative `./x.js` imports in remote-core)
+- [x] write the contract tests against `protocol/fixtures` (ControlClient resolves `*.res`,
       `*.req` key sets, preview frame from `preview.header.json`)
-- [ ] write `imports.test.mjs`: every relative import of `app.js` and `lib/*.js` resolves in
+- [x] write `imports.test.mjs`: every relative import of `app.js` and `lib/*.js` resolves in
       `build/resources/main/remote-lite`
-- [ ] gates:
-  - [ ] `:core:test` (StaticRoutes tests green + classpath has `remote-lite/lib/protocol.js`);
-  - [ ] `:app:assembleProbe` + `unzip -l` shows `remote-lite/lib/protocol.js`;
-  - [ ] the fake camera `--serve camera-android/core/build/resources/main/remote-lite`;
-  - [ ] a Chrome run (preview, capture, playback, export) via DevTools MCP
-- [ ] run tests — must pass before Task 4
+- [x] gates:
+  - [x] `:core:test` (StaticRoutes tests green + classpath has `remote-lite/lib/protocol.js`);
+  - [x] `:app:assembleProbe` + `unzip -l` shows `remote-lite/lib/protocol.js`;
+  - [x] the fake camera `--serve camera-android/core/build/resources/main/remote-lite`;
+  - [x] a Chrome run (preview, capture, playback, export) via DevTools MCP
+- [x] run tests — must pass before Task 4
 
 ### Task 2: Camera NSD advertiser (`TxtRecord` TDD + `Advertiser`)
 
@@ -292,26 +292,26 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/net/Advertiser.kt`
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/host/ServerHost.kt` (register after the server binds, unregister on stop)
 
-- [ ] tests first, then `TxtRecord` (keys, value limits, `pv` format)
-- [ ] `Advertiser`: `NsdManager.registerService` `_kopernikadr._tcp` with the bound port and the
+- [x] tests first, then `TxtRecord` (keys, value limits, `pv` format)
+- [x] `Advertiser`: `NsdManager.registerService` `_kopernikadr._tcp` with the bound port and the
       TXT; unregister on stop; the instance name is "Kopernikadr Kamera (xxxx)"; failures logged,
       never fatal
-- [ ] write tests for the ServerHost wiring order with a fake advertiser
-- [ ] on the phone: install as an upgrade of the **same `.probe` package** (`install -r`; the
+- [x] write tests for the ServerHost wiring order with a fake advertiser
+- [ ] ⚠️ on the phone: upgrade installed (firstInstallTime kept), but Family Link downtime (22:11) suspended all apps — dns-sd/`/info` check pending. Verified on an Android 15 emulator instead. Install as an upgrade of the **same `.probe` package** (`install -r`; the
       spool survives); `dns-sd -B _kopernikadr._tcp` and `dns-sd -L` on the Mac show the service
       + TXT
-- [ ] run tests — must pass before Task 7
+- [x] run tests — must pass before Task 7
 
 ### Task 3: Fake camera CORS + remote-lite dev workflow
 
 **Files:**
 - Modify: `protocol/tools/probe-client/fake-camera.mjs`, `protocol/tools/probe-client/commands.test.mjs` (or a new test), `protocol/tools/probe-client/README.md`
 
-- [ ] CORS echo for `localhost`/`127.0.0.1`/`10.0.2.2` origins on `/info` and `/frames`
-- [ ] `--serve` docs/comment point at `camera-android/core/build/resources/main/remote-lite`
+- [x] CORS echo for `localhost`/`127.0.0.1`/`10.0.2.2` origins on `/info` and `/frames`
+- [x] `--serve` docs/comment point at `camera-android/core/build/resources/main/remote-lite`
       (built by `./gradlew-jbr :core:processResources`)
-- [ ] write tests: CORS header present for allowed origins and absent for others
-- [ ] run tests — must pass before Task 11
+- [x] write tests: CORS header present for allowed origins and absent for others
+- [x] run tests — must pass before Task 11
 
 ### Task 4: `remote/` skeleton — Next 16 + Capacitor 8 Android
 
@@ -424,23 +424,23 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 **Files:**
 - Create: `README.md`, `docs/ACCEPTANCE.md` (0b section; 0a items carried over)
 
-- [ ] README sections:
-  - [ ] what this is; layout;
-  - [ ] build (`gradlew-jbr`, npm workspaces);
-  - [ ] install (scripts);
-  - [ ] remote-lite usage (URL/QR on the phone screen);
-  - [ ] the remote-lite dev workflow (fake camera `--serve` of the merged dir);
-  - [ ] diagnostics; known limitations
-- [ ] **parent checklist (Family Link)** with the actual paths:
-  - [ ] developer mode: Informacje o telefonie → Numer kompilacji ×7;
-  - [ ] Family Link → Ustawienia urządzenia → Opcje programisty, Aplikacje z nieznanych źródeł;
+- [x] README sections:
+  - [x] what this is; layout;
+  - [x] build (`gradlew-jbr`, npm workspaces);
+  - [x] install (scripts);
+  - [x] remote-lite usage (URL/QR on the phone screen);
+  - [x] the remote-lite dev workflow (fake camera `--serve` of the merged dir);
+  - [x] diagnostics; known limitations
+- [x] **parent checklist (Family Link)** with the actual paths:
+  - [x] developer mode: Informacje o telefonie → Numer kompilacji ×7;
+  - [x] Family Link → Ustawienia urządzenia → Opcje programisty, Aplikacje z nieznanych źródeł;
         USB debugging;
-  - [ ] what to turn off after;
-  - [ ] a DHCP reservation for the phone;
-  - [ ] "uninstalling the remote deletes projects"; keystore backup;
-  - [ ] lighting tips: lock after the light is set, constant light, 50 Hz;
+  - [x] what to turn off after;
+  - [x] a DHCP reservation for the phone;
+  - [x] "uninstalling the remote deletes projects"; keystore backup;
+  - [x] lighting tips: lock after the light is set, constant light, 50 Hz;
   - [ ] limits/downtime behaviour (placeholder, filled in Task 14)
-- [ ] `docs/ACCEPTANCE.md` 0b checklist (to fill in Tasks 13–14)
+- [x] `docs/ACCEPTANCE.md` 0b checklist (to fill in Tasks 13–14)
 
 ### Task 10: Probes — runner, env, report, diagnostics view
 
