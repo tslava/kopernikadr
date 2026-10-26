@@ -178,7 +178,8 @@ object ConfirmationMachine {
             LockControl.EXPOSURE -> if (freeze) {
                 val f = s.frozenExposure ?: return false
                 val time = r.exposureTimeNs ?: return false
-                r.aeMode == Camera2.AE_MODE_OFF && r.iso == f.iso &&
+                val iso = r.iso ?: return false
+                r.aeMode == Camera2.AE_MODE_OFF && abs(iso - f.iso) <= cfg.isoTolerance * f.iso &&
                     abs(time - f.exposureTimeNs) <= cfg.exposureTimeTolerance * f.exposureTimeNs
             } else {
                 r.aeState == Camera2.AE_STATE_LOCKED

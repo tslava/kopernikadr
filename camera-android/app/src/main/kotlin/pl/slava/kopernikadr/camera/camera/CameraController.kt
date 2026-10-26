@@ -464,6 +464,12 @@ class CameraController(
 
     override fun latestResult(): ResultSummary? = streamResults.latest()
 
+    /**
+     * The CameraX camera of the current bind (its `cameraControl` takes the controls' option sets
+     * and AF triggers), or null while unbound. Not necessarily open: see [status].
+     */
+    fun boundCamera(): Camera? = current?.camera
+
     // ---- analysis ----
 
     private fun onAnalysisFrame(bindId: Long, proxy: ImageProxy) {

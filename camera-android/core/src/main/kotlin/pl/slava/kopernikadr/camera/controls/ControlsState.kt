@@ -83,6 +83,8 @@ data class ControlsConfig(
     val confirmTimeoutMs: Long = 3_000L,
     /** Relative. */
     val exposureTimeTolerance: Double = 0.01,
+    /** Relative. The HAL quantizes a manual ISO (moto g05: 9781 requested → 9775 reported). */
+    val isoTolerance: Double = 0.01,
     /** Absolute, per gain and per transform element. */
     val colorTolerance: Double = 1e-3,
     val focusToleranceDiopters: Double = 0.05,

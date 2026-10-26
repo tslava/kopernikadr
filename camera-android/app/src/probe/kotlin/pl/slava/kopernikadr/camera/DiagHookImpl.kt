@@ -30,7 +30,7 @@ internal object DiagnosticsHook : DiagHook {
 
     override fun onAppCreate(app: App) {
         runner = ProbeRunner(app)
-        actions = DebugActions(app.camera, runner.rootDir)
+        actions = DebugActions(app.camera, runner.rootDir, app::ensureControls)
     }
 
     override fun onCameraBound(bound: Boolean) {
@@ -40,7 +40,8 @@ internal object DiagnosticsHook : DiagHook {
     override fun onIntent(intent: Intent): Boolean {
         intent.getStringExtra(EXTRA_ACTION)?.let { action ->
             intent.removeExtra(EXTRA_ACTION)
-            val extras = intent.extras?.keySet().orEmpty().associateWith { intent.getStringExtra(it) }
+            // String extras; `--ei` ints are passed as their decimal text.
+            val extras = intent.extras?.let { b -> b.keySet().associateWith { k -> b.getString(k) ?: b.getInt(k, Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }?.toString() } }.orEmpty()
             if (!actions.start(action, extras)) Log.w(ProbeRunner.TAG, "unknown $EXTRA_ACTION '$action'")
         }
         val name = intent.getStringExtra(EXTRA_PROBE) ?: return false

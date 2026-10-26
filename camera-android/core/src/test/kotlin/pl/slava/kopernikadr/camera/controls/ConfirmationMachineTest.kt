@@ -97,10 +97,20 @@ class ConfirmationMachineTest {
         rig.fence()
         rig.result(::autoResult)
         rig.fence()
-        assertFalse(rig.result { frozenResult(it).copy(iso = 401) }.controls.exposure.confirmed)
+        assertFalse(rig.result { frozenResult(it).copy(iso = 405) }.controls.exposure.confirmed)
         assertFalse(rig.result { frozenResult(it).copy(exposureTimeNs = 20_300_000L) }.controls.exposure.confirmed)
         assertFalse(rig.result { frozenResult(it).copy(aeMode = Camera2.AE_MODE_ON) }.controls.exposure.confirmed)
         assertTrue(rig.result(::frozenResult).controls.exposure.confirmed)
+    }
+
+    @Test
+    fun `ISO quantized by the HAL within 1 percent confirms`() {
+        val rig = Rig()
+        rig.lock(EXPOSURE)
+        rig.fence()
+        rig.result(::autoResult)
+        rig.fence()
+        assertTrue(rig.result { frozenResult(it).copy(iso = 399) }.controls.exposure.confirmed)
     }
 
     @Test
