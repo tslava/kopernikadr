@@ -19,6 +19,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import pl.slava.kopernikadr.camera.camera.CameraCaptureException
 import pl.slava.kopernikadr.camera.camera.CameraNotReadyException
 import pl.slava.kopernikadr.camera.camera.CameraPort
 import pl.slava.kopernikadr.camera.image.StillPipeline
@@ -66,6 +68,7 @@ class SpoolCaptureService(
     private val clock: () -> Long = System::currentTimeMillis,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val log: (String) -> Unit = {},
+    private val takePictureTimeoutMs: Long = TAKE_PICTURE_TIMEOUT_MS,
 ) : CaptureService {
     private data class Key(val clientId: String, val reqId: String)
 
@@ -180,7 +183,9 @@ class SpoolCaptureService(
             val t0 = System.nanoTime()
             val still = try {
                 currentCoroutineContext().ensureActive()
-                camera.takePicture()
+                // A camera that never calls back would otherwise hold the admission mutex forever.
+                withTimeoutOrNull(takePictureTimeoutMs) { camera.takePicture() }
+                    ?: throw CameraCaptureException(-1, "takePicture timed out after $takePictureTimeoutMs ms")
             } finally {
                 permit.release()
             }
@@ -246,6 +251,8 @@ class SpoolCaptureService(
     }
 
     companion object {
+        /** Generous: a dark scene alone took ~0.8 s on the g05. */
+        const val TAKE_PICTURE_TIMEOUT_MS = 15_000L
         private val ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
         /** Dedup key of the args: same reqId with another hash → `REQ_ID_REUSED`. */

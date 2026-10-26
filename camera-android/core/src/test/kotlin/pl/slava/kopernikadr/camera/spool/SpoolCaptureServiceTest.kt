@@ -330,6 +330,20 @@ class SpoolCaptureServiceTest {
     }
 
     @Test
+    fun `a still that never returns times out as CAPTURE_FAILED and frees the mutex`() = runBlocking {
+        val pipeline = StillPipeline(ImageIoCodec())
+        val files = DurableFiles(DirSync.NONE)
+        val quick = SpoolCaptureService(
+            camera, pipeline, spool, files, DerivedFiles(spool, pipeline, files), scope,
+            takePictureTimeoutMs = 200,
+        )
+        camera.gate = CompletableDeferred() // never completed: CameraX never calls back
+        assertEquals(ErrorCodes.CAPTURE_FAILED, quick.capture("c1", "r1", args).code())
+        assertFalse(quick.admission.isLocked)
+        assertEquals(1, camera.calls.get())
+    }
+
+    @Test
     fun `a failing still releases the admission mutex`() = runBlocking {
         camera.failure = RuntimeException("hal error")
         assertEquals(ErrorCodes.CAPTURE_FAILED, service.capture("c1", "r1", args).code())
