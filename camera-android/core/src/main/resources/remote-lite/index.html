@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#141518">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Kopernikadr</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='10' y='10' width='28' height='28' rx='6' fill='%23e5533d'/%3E%3Crect x='16' y='16' width='16' height='16' rx='2' fill='%23fff4e0'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+
+<!-- Projects -->
+<section id="screen-projects" class="screen projects" hidden>
+  <header class="proj-bar">
+    <div class="brand"><span id="logo"></span><h1 id="proj-title"></h1></div>
+    <div class="proj-tools">
+      <div class="chip conn-chip" id="proj-conn" role="status"></div>
+      <button class="icon-btn light" id="btn-fullscreen" type="button"></button>
+    </div>
+  </header>
+  <div class="proj-grid" id="proj-grid"></div>
+</section>
+
+<!-- Capture -->
+<section id="screen-capture" class="screen capture" hidden>
+  <header class="cap-bar">
+    <button class="icon-btn" id="cap-back" type="button"></button>
+    <div class="counter" id="cap-counter" aria-live="polite"></div>
+    <div class="cap-title" id="cap-title"></div>
+    <div class="onion-ctl" id="onion-ctl">
+      <button class="pill-btn" id="onion-toggle" type="button" aria-pressed="true"></button>
+      <input type="range" id="onion-opacity" min="10" max="80" step="5">
+    </div>
+    <div class="chip conn-chip" id="cap-conn" role="status"></div>
+    <div class="chip battery-chip" id="cap-battery"></div>
+    <button class="icon-btn gear" id="cap-gear" type="button">
+      <svg class="gear-ring" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"/></svg>
+    </button>
+  </header>
+  <main class="cap-main">
+    <div class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="preview" width="640" height="480"></canvas>
+        <img id="onion" alt="" draggable="false">
+        <div class="stage-msg" id="stage-msg"></div>
+        <div class="flash" id="flash"></div>
+        <div class="offline-banner" id="offline-banner" role="alert"></div>
+      </div>
+    </div>
+    <aside class="cap-side">
+      <button class="capture-btn" id="btn-capture" type="button">
+        <span class="cap-face"><span class="cap-icon"></span><span class="cap-spinner"></span></span>
+        <span class="cap-label"></span>
+      </button>
+      <button class="side-btn" id="btn-delete-last" type="button"></button>
+      <button class="side-btn watch" id="btn-watch" type="button"></button>
+    </aside>
+  </main>
+  <footer class="strip" id="strip"></footer>
+</section>
+
+<!-- Playback -->
+<section id="screen-playback" class="screen playback" hidden>
+  <canvas id="play-canvas" width="640" height="480"></canvas>
+  <div class="play-empty" id="play-empty"></div>
+  <div class="play-counter" id="play-counter"></div>
+  <div class="play-bar">
+    <button class="icon-btn" id="play-back" type="button"></button>
+    <button class="play-btn" id="play-toggle" type="button"></button>
+    <label class="speed">
+      <span class="speed-ic" id="ic-turtle"></span>
+      <input type="range" id="play-fps" min="4" max="12" step="1">
+      <span class="speed-ic" id="ic-hare"></span>
+      <output id="play-fps-label"></output>
+    </label>
+    <button class="save-btn" id="play-save" type="button"></button>
+  </div>
+  <div class="export-panel" id="export-panel" hidden>
+    <div class="export-card" role="dialog" aria-modal="true">
+      <div class="export-icon" id="export-icon"></div>
+      <p class="export-text" id="export-text"></p>
+      <div class="progress" id="export-progress"><div class="bar" id="export-bar"></div></div>
+      <p class="export-sub" id="export-sub"></p>
+      <button class="big-btn" id="export-action" type="button"></button>
+    </div>
+  </div>
+</section>
+
+<!-- Frame viewer -->
+<div class="viewer" id="viewer" hidden>
+  <img id="viewer-img" alt="" draggable="false">
+  <div class="viewer-label" id="viewer-label"></div>
+  <div class="viewer-actions">
+    <button class="big-btn danger" id="viewer-delete" type="button"></button>
+    <button class="big-btn" id="viewer-close" type="button"></button>
+  </div>
+</div>
+
+<!-- Project sheet (long-press a card) -->
+<div class="sheet-backdrop" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true">
+    <label class="sheet-label" for="sheet-name" id="sheet-label"></label>
+    <input class="sheet-input" id="sheet-name" type="text" maxlength="60" autocomplete="off">
+    <div class="sheet-actions">
+      <button class="big-btn danger" id="sheet-delete" type="button"></button>
+      <button class="big-btn primary" id="sheet-done" type="button"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Parent drawer -->
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-labelledby="drawer-title"></aside>
+
+<div class="snackbar" id="snackbar" hidden role="status">
+  <span class="snack-text" id="snack-text"></span>
+  <button class="snack-action" id="snack-action" type="button"></button>
+</div>
+
+<noscript>Kopernikadr needs JavaScript.</noscript>
+</body>
+</html>
