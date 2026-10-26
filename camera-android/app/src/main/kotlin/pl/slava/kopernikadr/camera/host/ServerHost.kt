@@ -28,6 +28,10 @@ import pl.slava.kopernikadr.camera.core.CapabilityMapper
 import pl.slava.kopernikadr.camera.image.AndroidImageCodec
 import pl.slava.kopernikadr.camera.image.PreviewEncoder
 import pl.slava.kopernikadr.camera.image.StillPipeline
+import pl.slava.kopernikadr.camera.net.AdvertisedServer
+import pl.slava.kopernikadr.camera.net.Advertisement
+import pl.slava.kopernikadr.camera.net.NsdAdvertiser
+import pl.slava.kopernikadr.camera.net.ServiceAdvertiser
 import pl.slava.kopernikadr.camera.protocol.Capabilities
 import pl.slava.kopernikadr.camera.protocol.CaptureArgs
 import pl.slava.kopernikadr.camera.protocol.FrameInfo
@@ -63,8 +67,14 @@ data class ServerState(
  * granted) and [stop] on ON_STOP. Start/stop run in order on one background thread (stop blocks
  * ~1.2 s). The spool and the capture service are built on the first start and kept for the
  * process lifetime (captures outlive a server restart); every start gets a new `bootId`.
+ *
+ * While bound, the server is advertised over DNS-SD ([AdvertisedServer]: registered after the
+ * bind with the bound port, unregistered before the server stops).
  */
-class ServerHost(private val app: App) {
+class ServerHost(
+    private val app: App,
+    private val advertiser: ServiceAdvertiser = NsdAdvertiser(app),
+) {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "kopernikadr-server") }
     private val serial = executor.asCoroutineDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -74,7 +84,7 @@ class ServerHost(private val app: App) {
 
     // Confined to [serial].
     private var stack: Stack? = null
-    private var server: CameraServer? = null
+    private var server: AdvertisedServer? = null
     private var sessions: SessionManager? = null
     private var poll: Job? = null
 
@@ -94,7 +104,14 @@ class ServerHost(private val app: App) {
             val s = stack ?: build()?.also { stack = it } ?: return
             val bootId = UUID.randomUUID().toString()
             val sm = SessionManager()
-            val srv = CameraServer(s.ports(bootId), ServerConfig(sessions = sm))
+            val cs = CameraServer(s.ports(bootId), ServerConfig(sessions = sm))
+            val srv = AdvertisedServer(
+                bind = cs::start,
+                unbind = cs::stop,
+                advertiser = advertiser,
+                advertisement = { p -> Advertisement.forCamera(s.cameraId, NAME, p) },
+                log = { Log.w(TAG, it) },
+            )
             val t0 = SystemClock.elapsedRealtime()
             val port = srv.start()
             Log.i(TAG, "server bound on port $port in ${SystemClock.elapsedRealtime() - t0} ms (bootId $bootId, cameraId ${s.cameraId})")
