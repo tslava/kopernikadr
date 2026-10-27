@@ -461,20 +461,20 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/app/globals.css`
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the `stripModel.ts` tests first:
+- [x] write the `stripModel.ts` tests first:
   - tile state (on/off/hidden/downloading/unavailable/hold badge/sticker bar);
   - the visible index window for virtualization;
   - selection survives timeline changes (by entry id) and clears when the entry is gone;
   - tile image choice: thumb → play → placeholder, never full.
-- [ ] implement the strip:
+- [x] implement the strip:
   - tap selects and pauses playback, and shows that frame on the stage;
   - a second tap opens the big view (full frame + stickers, Back closes; it joins the overlay stack).
-- [ ] layout: stage left, controls right, strip bottom, 100dvh, no page scroll at 1280×754.
-- [ ] tablet run:
+- [x] layout: stage left, controls right, strip bottom, 100dvh, no page scroll at 1280×754. (verified at 1280x728 on the emulator; CSS is height-agnostic)
+- [x] tablet run (Film 1, 9 frames; tiles, big view, system Back x2, scrollHeight 728 == innerHeight 728, screencap checked):
   - open a 5-frame movie, tap tiles, open and close the big view, Back;
   - check `scrollHeight == innerHeight`;
   - screencap.
-- [ ] run tests — must pass before Task 8.
+- [x] run tests — must pass before Task 8.
 
 ### Task 8: Edit tools (delete/Undo, duplicate, hold, move, off, trim, Cofnij)
 

@@ -151,7 +151,7 @@ function PlayRoute({ t, id, app, urls, onBack }: { t: Translate; id: string; app
   const snap = useStore(app.client.store);
   const link = useMemo(() => ({ online: snap.status === 'online' && snap.hello !== null, cameraId: snap.hello?.cameraId ?? null }), [snap.status, snap.hello]);
   const onFps = (fps: number) => void app.store.updateProject(id, (p) => setFps(p, fps)).catch(() => {});
-  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} exportEnv={exportEnv} link={link} onFps={onFps} />;
+  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} urls={urls} exportEnv={exportEnv} link={link} onFps={onFps} />;
 }
 
 /** A small per-tablet setting in localStorage (try/catch: storage can be unavailable). */

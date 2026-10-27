@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import type { FrameUrls } from '@/lib/app/frames';
 import type { OverlayStack } from '@/lib/app/overlays';
+import { reconcileSelection, stripTiles } from '@/lib/app/stripModel';
 import type { Translate } from '@/lib/i18n';
 import type { Project } from '@/lib/projects/model';
 import { createFrameSource, PLAY_HEIGHT, PLAY_WIDTH, type FrameUrl } from '@/lib/play/frameSource';
@@ -16,6 +18,7 @@ import type { Store } from '@/lib/state/store';
 import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
 import ExportDialog from './ExportDialog';
+import FrameStrip from './FrameStrip';
 import Icon from './Icon';
 import { FPS_CHOICES } from '@/lib/projects/model';
 
@@ -41,6 +44,8 @@ export interface PlayViewProps {
   project?: Project | null;
   /** `(projectId, frameId, kind) => Capacitor.convertFileSrc(...)`. */
   frameUrl?: FrameUrl;
+  /** Frame files for the strip's thumbs (thumb, then play); without it the tiles are placeholders. */
+  urls?: FrameUrls | null;
   /** What the export needs from the app; without it there is no export button. */
   exportEnv?: { key: object; transfer: TransferPause; exporting: Store<boolean>; overlays?: OverlayStack };
   /** Camera connection, for the export gate (frames of a gone camera are skippable). */
@@ -52,7 +57,7 @@ const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), s
 
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
-export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, link, onFps, ref }: PlayViewProps) {
+export default function PlayView({ t, id, onBack, project = null, frameUrl, urls, exportEnv, link, onFps, ref }: PlayViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stickerCanvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<SpriteCache | null>(null);
@@ -163,6 +168,28 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
   }, [project, frameUrl, id, exportBusy]);
   useEffect(() => paintStickers.current(shownRef.current), [project?.stickers]);
 
+  // The strip: a tap selects the entry (and pauses on it); a second tap opens the big view.
+  const [selected, setSelected] = useState<string | null>(null);
+  const [big, setBig] = useState(false);
+  const tiles = useMemo(() => stripTiles({ frames: project?.frames ?? [], cut: project?.cut, stickers: project?.stickers }), [project?.frames, project?.cut, project?.stickers]);
+  useEffect(() => setSelected((cur) => reconcileSelection(cur, tiles)), [tiles]);
+  const bigOpen = big && selected !== null;
+  const onTile = (entryId: string) => {
+    if (entryId === selected) {
+      setBig(true);
+      return;
+    }
+    setSelected(entryId);
+    player.current?.seekTo(entryId);
+  };
+  // Android Back closes the big view first.
+  useEffect(() => {
+    if (!bigOpen || !overlays) return;
+    return overlays.push(() => setBig(false));
+  }, [bigOpen, overlays]);
+  // the stage changes size: repaint stickers at the new device-pixel size
+  useEffect(() => paintStickers.current(shownRef.current), [bigOpen]);
+
   return (
     <main className="screen play" data-project={id}>
       <header className="bar">
@@ -171,7 +198,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
         </button>
         <h1>{t('play.title')}</h1>
       </header>
-      <div className="play-stage">
+      <div className={`play-stage${bigOpen ? ' big' : ''}`} onClick={bigOpen ? () => setBig(false) : undefined} role={bigOpen ? 'button' : undefined} aria-label={bigOpen ? t('strip.closeBig') : undefined}>
         <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
         <canvas ref={stickerCanvas} className="play-stickers" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
       </div>
@@ -224,6 +251,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
           </button>
         )}
       </div>
+      {project && <FrameStrip t={t} project={project} selected={selected} onTap={onTile} urls={urls} />}
       {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
       {status.downloading > 0 && <p className="note">{t('play.downloading', { n: status.downloading })}</p>}
       {exporter && exportOpen && project && (
