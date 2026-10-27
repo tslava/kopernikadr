@@ -17,6 +17,8 @@ export interface FileAdapter {
   mkdir(dir: string): Promise<void>;
   /** Idempotent (a missing path is fine). `recursive` is required for a directory. */
   remove(path: string, opts?: { recursive?: boolean }): Promise<void>;
+  /** Renames `from` to `to` (overwrites an existing `to`). Both store-relative; `to`'s directory must exist. */
+  move(from: string, to: string): Promise<void>;
   /** Native file URI of `path` (for downloads and `convertFileSrc`). */
   uri(path: string): Promise<string>;
 }
@@ -66,6 +68,9 @@ export function createAppFileAdapter(): FileAdapter {
       } catch (e) {
         if (!isMissing(e)) throw e;
       }
+    },
+    async move(from, to) {
+      await Filesystem.rename({ from: `${ROOT}/${from}`, to: `${ROOT}/${to}`, directory: Directory.Data, toDirectory: Directory.Data });
     },
     uri: async (path) => (await Filesystem.getUri(inData(path))).uri,
   };

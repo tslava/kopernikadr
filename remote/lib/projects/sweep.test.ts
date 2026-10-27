@@ -4,7 +4,7 @@ import { INDEX_PATH, projectJsonPath } from './files';
 import type { FrameInfo, Project } from './model';
 import { hideFrame, hideProject, mergeFrame, renameProject, setLocal } from './reducers';
 import { ProjectStore } from './store';
-import { createWebVerify, runStartupSweep, type VerifyFn } from './sweep';
+import { createFetchBytes, createWebVerify, runStartupSweep, type VerifyFn } from './sweep';
 
 const T0 = Date.parse('2026-10-27T10:00:00.000Z');
 let n = 0;
@@ -67,7 +67,7 @@ describe('interrupted install (pending -> local)', () => {
     expect(fs.files.has(fp(pid, 'F1'))).toBe(true);
   });
 
-  it('mismatch: the file is deleted and the frame stays pending', async () => {
+  it('mismatch: the file is quarantined (never deleted) and the frame stays pending', async () => {
     const fs = new FakeFs();
     const { pid } = await seed(fs, [['F1']]);
     fs.files.set(fp(pid, 'F1'), content('b')); // wrong sha
@@ -75,6 +75,8 @@ describe('interrupted install (pending -> local)', () => {
     const r = await sweep(store, fs);
     expect(r.mismatched).toEqual([{ projectId: pid, frameId: 'F1' }]);
     expect(fs.files.has(fp(pid, 'F1'))).toBe(false);
+    expect(fs.files.get(`quarantine/${pid}-F1.full.jpg`)).toBe(content('b'));
+    expect(r.warnings.map((w) => w.kind)).toContain('quarantined');
     expect(store.state.get().projects[pid]!.frames[0]!.state).toBe('pending');
   });
 
@@ -496,5 +498,27 @@ describe('createWebVerify', () => {
       throw new Error('404');
     });
     await expect(bad('p', 10, 'x')).rejects.toThrow('404');
+  });
+});
+
+describe('createFetchBytes', () => {
+  it('throws on a non-2xx answer (so verify keeps the file) and returns the bytes on 200', async () => {
+    const buf = new ArrayBuffer(3);
+    const ok = createFetchBytes((async () => ({ ok: true, status: 200, arrayBuffer: async () => buf })) as any, (u) => u);
+    expect(await ok('file:///x')).toBe(buf);
+    const bad = createFetchBytes((async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) })) as any, (u) => u);
+    await expect(bad('file:///x')).rejects.toThrow('404');
+  });
+
+  it('a 404 from the webview keeps the install file and the frame (verify throws -> warn)', async () => {
+    const fs = new FakeFs();
+    const { pid } = await seed(fs, [['F1']]);
+    fs.files.set(fp(pid, 'F1'), content());
+    const store = await restart(fs);
+    const verify = createWebVerify(fs, createFetchBytes((async () => ({ ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) })) as any, (u) => u));
+    const r = await runStartupSweep(store, fs, { verify, now: () => T0 });
+    expect(fs.files.has(fp(pid, 'F1'))).toBe(true);
+    expect(r.mismatched).toEqual([]);
+    expect(r.warnings.map((w) => w.kind)).toContain('verify_failed');
   });
 });

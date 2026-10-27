@@ -17,7 +17,8 @@
  *     index entry (empty frames). Index name wins over project.json name (window 3).
  *  5. Per project: hidden frames past their Undo deadline expire (tombstone commit, files go in 6);
  *     `pending` frames whose `frames/{id}.full.jpg` verifies (size + sha256) -> `local`; a file that
- *     does not verify is deleted and the frame stays `pending`; a `verify` that throws keeps the file.
+ *     really does not verify is MOVED to `quarantine/{project}-{file}` (never deleted: it may be the
+ *     only copy) and the frame stays `pending`; a `verify` that throws (I/O, HTTP error) keeps the file.
  *  6. Files under `frames/` with no live frame entry are deleted if the frame is tombstoned
  *     (`deletedFrameIds`) or the file is a `play`/`thumb` cache. A `full` that is neither live nor
  *     tombstoned is KEPT with a warning (metadata loss: it may be the only copy). Unknown names are
@@ -40,6 +41,7 @@ export type SweepWarningKind =
   | 'orphan_dir_mismatch'
   | 'project_recreated'
   | 'verify_failed'
+  | 'quarantined'
   | 'full_kept_unreferenced'
   | 'unknown_file_kept'
   | 'sweep_step_failed';
@@ -61,7 +63,7 @@ export interface SweepReport {
   namesAligned: string[];
   framesExpired: { projectId: string; frameId: string }[];
   promoted: { projectId: string; frameId: string }[];
-  /** Install files that did not match size/sha256 and were deleted (frame stays `pending`). */
+  /** Install files that did not match size/sha256 and were moved to `quarantine/` (frame stays `pending`). */
   mismatched: { projectId: string; frameId: string }[];
   filesRemoved: string[];
   warnings: SweepWarning[];
@@ -79,6 +81,17 @@ const errMsg = (e: unknown): string => String((e as { message?: unknown } | null
  * App `verify`: `fetchBytes(uri)` is `(u) => fetch(convertFileSrc(u)).then((r) => r.arrayBuffer())`,
  * hash via `crypto.subtle`. Loads the whole file (a few MB; startup only, rare).
  */
+export function createFetchBytes(
+  fetchFn: typeof fetch,
+  toUrl: (uri: string) => string,
+): (uri: string) => Promise<ArrayBuffer> {
+  return async (uri) => {
+    const r = await fetchFn(toUrl(uri));
+    if (!r.ok) throw new Error(`HTTP ${r.status} reading ${uri}`); // a throw means "could not verify": file kept
+    return r.arrayBuffer();
+  };
+}
+
 export function createWebVerify(
   fs: Pick<FileAdapter, 'uri'>,
   fetchBytes: (uri: string) => Promise<ArrayBuffer>,
@@ -163,7 +176,16 @@ export async function runStartupSweep(store: ProjectStore, fs: FileAdapter, opts
       }
       if (good) ok.push(f);
       else {
-        await fs.remove(path);
+        // a real size/sha mismatch: quarantine, never delete (it may be the only copy of the frame)
+        const q = `quarantine/${id}-${f.frameId}.full.jpg`;
+        try {
+          await fs.mkdir('quarantine');
+          await fs.move(path, q);
+          r.warnings.push({ kind: 'quarantined', id, path: q, detail: 'install file did not match size/sha256; moved to quarantine' });
+        } catch (e) {
+          r.warnings.push({ kind: 'verify_failed', id, path, detail: `quarantine failed: ${errMsg(e)}; file kept` });
+          continue;
+        }
         r.mismatched.push({ projectId: id, frameId: f.frameId });
       }
     }

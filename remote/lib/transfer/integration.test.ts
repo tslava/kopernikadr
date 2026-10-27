@@ -124,8 +124,8 @@ async function rig(): Promise<Rig> {
         fs,
         verify,
         nsd,
-        createTransfer: ({ store, request, target }) => {
-          service = createTransfer({ store, io: makeIO(fs, hooks), request, target, clock });
+        createTransfer: ({ store, request, target, cameraId }) => {
+          service = createTransfer({ store, io: makeIO(fs, hooks), request, target, cameraId, clock });
           hook = createReconcile({ store, transfer: service });
           return service;
         },

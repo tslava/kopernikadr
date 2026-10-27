@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { nativeNsdAdapter } from '../discovery';
 import { createAppFileAdapter } from '../projects/files';
-import { createWebVerify } from '../projects/sweep';
+import { createFetchBytes, createWebVerify } from '../projects/sweep';
 import { createStore } from '../state/store';
 import { createAppTransferIO } from '../transfer/appIO';
 import { createTransfer, type TransferService } from '../transfer/queue';
@@ -27,10 +27,10 @@ export function startApp(): Promise<void> {
       let hook: Reconcile | undefined;
       const app = await boot({
         fs,
-        verify: createWebVerify(fs, (u) => fetch(Capacitor.convertFileSrc(u)).then((r) => r.arrayBuffer())),
+        verify: createWebVerify(fs, createFetchBytes((u) => fetch(u), (u) => Capacitor.convertFileSrc(u))),
         nsd: nativeNsdAdapter(),
-        createTransfer: ({ store, request, target }) => {
-          const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target });
+        createTransfer: ({ store, request, target, cameraId }) => {
+          const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target, cameraId });
           hook = createReconcile({ store, transfer: service });
           return service;
         },

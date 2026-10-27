@@ -1,7 +1,7 @@
 /** In-memory FileAdapter with failure injection and crash points, for tests. */
 import type { FileAdapter } from './files';
 
-export type FsOp = 'readText' | 'writeTextAtomic' | 'list' | 'mkdir' | 'remove' | 'uri';
+export type FsOp = 'move' | 'readText' | 'writeTextAtomic' | 'list' | 'mkdir' | 'remove' | 'uri';
 
 export class CrashError extends Error {
   constructor() {
@@ -108,6 +108,15 @@ export class FakeFs implements FileAdapter {
       for (const d of [...this.dirs]) if (d === path || d.startsWith(`${path}/`)) this.dirs.delete(d);
     }
     this.done(`remove ${path}`);
+  }
+  async move(from: string, to: string): Promise<void> {
+    this.gate('move', from);
+    const t = this.files.get(from);
+    if (t === undefined) throw new Error(`no such file: ${from}`);
+    this.files.set(to, t);
+    this.files.delete(from);
+    this.addParents(to);
+    this.done(`move ${from} ${to}`);
   }
   async uri(path: string): Promise<string> {
     this.gate('uri', path);

@@ -30,6 +30,8 @@ export interface TransferEnv {
   request: (op: string, args: object, opts?: { timeoutMs?: number }) => Promise<any>;
   /** The connected camera's address, or null while not online. */
   target: () => { host: string; port: number } | null;
+  /** The connected camera's `hello.cameraId`, or null while not online. */
+  cameraId: () => string | null;
 }
 
 export interface BootDeps {
@@ -62,6 +64,10 @@ export async function boot(deps: BootDeps): Promise<AppContext> {
     target: () => {
       const snap = client.snapshot;
       return snap.status === 'online' && snap.target ? { host: snap.target.host, port: snap.target.port } : null;
+    },
+    cameraId: () => {
+      const snap = client.snapshot;
+      return snap.status === 'online' ? (snap.hello?.cameraId ?? null) : null;
     },
   });
   const capture = (deps.createCapture ?? createCapture)({

@@ -93,6 +93,9 @@ interface Env {
   /** state of project.json (frame states) at the moment of every ack */
   ackSnapshots: Record<string, string | undefined>[];
   online: { on: boolean };
+  /** the connected camera's id (null = offline) and ids the camera answers `unknown` for */
+  cam: { id: string | null };
+  unknown: Set<string>;
   clock: ReturnType<typeof manualClock>;
   mk: (fs?: FakeFs, store?: ProjectStore) => ReturnType<typeof createTransfer>;
   tr: ReturnType<typeof createTransfer>;
@@ -114,6 +117,8 @@ async function mkEnv(frames: [string, string?][] = [['F1'], ['F2'], ['F3']], opt
   const ackFails = { on: false };
   const ackSnapshots: Env['ackSnapshots'] = [];
   const online = { on: true };
+  const cam: { id: string | null } = { id: 'cam' };
+  const unknown = new Set<string>();
   const clock = manualClock();
   const calls: string[] = [];
   const downloads: string[] = [];
@@ -158,12 +163,13 @@ async function mkEnv(frames: [string, string?][] = [['F1'], ['F2'], ['F3']], opt
     const pj = fs.json(projectJsonPath(p.id)) as Project | undefined;
     for (const id of args.frameIds as string[]) snap[id] = pj?.frames.find((f) => f.frameId === id)?.state;
     ackSnapshots.push(snap);
-    return { acked: args.frameIds.length, unknown: [] };
+    const unk = (args.frameIds as string[]).filter((i) => unknown.has(i));
+    return { acked: args.frameIds.length - unk.length, unknown: unk };
   });
   const mk = (_fs?: FakeFs, st?: ProjectStore) =>
-    createTransfer({ store: st ?? store, io, request, clock: clock.clock, target: () => (online.on ? { host: '10.0.0.2', port: 8080 } : null) });
+    createTransfer({ store: st ?? store, io, request, clock: clock.clock, target: () => (online.on ? { host: '10.0.0.2', port: 8080 } : null), cameraId: () => cam.id });
   const tr = mk();
-  return { fs, store, pid: p.id, io, hooks, server, acks, ackFails, ackSnapshots, online, clock, mk, tr };
+  return { fs, store, pid: p.id, io, hooks, server, acks, ackFails, ackSnapshots, online, cam, unknown, clock, mk, tr };
 }
 
 const proj = (e: Env): Project => e.store.state.get().projects[e.pid]!;
@@ -452,6 +458,7 @@ describe('retries', () => {
       request: async () => ({ acked: 1 }),
       clock: e.clock.clock,
       target: () => ({ host: 'h', port: 1 }),
+      cameraId: () => 'cam',
       fullTimeoutMs: 20,
     });
     const gate = deferred();
@@ -778,6 +785,66 @@ describe('kill points', () => {
     await settle();
     expect(e.acks).toEqual([]); // nothing was acked: the frame stays on the phone until reconcile asks
     await r.tr.ackNow(['F1']); // what reconcile does for ack-eligible listFrames rows
+    expect(e.acks).toEqual([['F1']]);
+  });
+});
+
+describe('camera binding and `unknown` answers', () => {
+  it('ids the camera answers `unknown` for are not marked acked: a later want is sent again', async () => {
+    const e = await mkEnv([['F1']]);
+    e.unknown.add('F1');
+    e.tr.enqueue('F1', e.pid);
+    await e.tr.idle();
+    expect(e.acks.length).toBeGreaterThan(0);
+    expect(e.tr.status.get().ackPending).toBe(0); // dropped from the want-set (reconcile re-derives it on the right camera)
+    e.unknown.clear();
+    const before = e.acks.length;
+    await e.tr.ackNow(['F1']);
+    expect(e.acks.length).toBe(before + 1); // not blocked by the in-session acked set
+    await e.tr.ackNow(['F1']);
+    expect(e.acks.length).toBe(before + 1); // now really acked
+  });
+
+  it('kick() (new session) clears the in-session acked set', async () => {
+    const e = await mkEnv([['F1']]);
+    e.tr.enqueue('F1', e.pid);
+    await e.tr.idle();
+    await e.tr.ackNow(['F1']);
+    expect(e.acks).toEqual([['F1']]); // already acked this session
+    e.tr.kick();
+    await e.tr.ackNow(['F1']);
+    expect(e.acks).toEqual([['F1'], ['F1']]);
+  });
+
+  it('acks only frames of the connected camera; others wait (not dropped) until that camera connects', async () => {
+    const e = await mkEnv([['F1']]);
+    e.tr.enqueue('F1', e.pid);
+    await e.tr.idle();
+    expect(e.acks).toEqual([['F1']]);
+    // a local frame of this project, but another camera is connected now
+    await e.store.updateProject(e.pid, (p) => ({ ...p, frames: [...p.frames, { frameId: 'L2', seq: 9, bytes: 10, sha256: sha('a'), state: 'local' as const, hiddenUntil: null }] }));
+    e.cam.id = 'other';
+    await e.tr.ackNow(['L2']);
+    expect(e.acks).toEqual([['F1']]);
+    expect(e.tr.status.get().ackPending).toBe(1); // still wanted
+    e.cam.id = 'cam';
+    e.tr.kick();
+    await e.tr.idle();
+    expect(e.acks).toEqual([['F1'], ['L2']]);
+  });
+
+  it('downloads only frames of the connected camera; the others stay queued and resume on kick', async () => {
+    const e = await mkEnv([['F1']]);
+    e.cam.id = 'other';
+    e.tr.enqueue('F1', e.pid);
+    await e.tr.idle();
+    expect(e.io.downloads).toEqual([]);
+    expect(frameState(e, 'F1')).toBe('pending');
+    expect(e.tr.status.get().queued).toBe(1);
+    e.cam.id = 'cam';
+    e.tr.kick();
+    await e.tr.idle();
+    expect(frameState(e, 'F1')).toBe('local');
     expect(e.acks).toEqual([['F1']]);
   });
 });
