@@ -58,9 +58,13 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            buildConfigField("boolean", "CORS_LOCALHOST_ANY_PORT", "true")
         }
         release {
             isMinifyEnabled = false
+            // CORS for http://localhost:<any port> (the remote's `next dev` in desktop Chrome):
+            // debug and probe only; release allows exactly http://localhost.
+            buildConfigField("boolean", "CORS_LOCALHOST_ANY_PORT", "false")
             // Unsigned when there is no keystore.properties (see releaseKeystoreProps above).
             if (releaseKeystoreProps != null) signingConfig = signingConfigs.getByName("release")
         }
@@ -71,6 +75,7 @@ android {
             applicationIdSuffix = ".probe"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += "release"
+            buildConfigField("boolean", "CORS_LOCALHOST_ANY_PORT", "true")
         }
     }
 
@@ -85,6 +90,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // UI languages: Polish (default resources) and Russian; drops other library translations.

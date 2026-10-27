@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import pl.slava.kopernikadr.camera.App
+import pl.slava.kopernikadr.camera.BuildConfig
 import pl.slava.kopernikadr.camera.camera.CharacteristicsReader
 import pl.slava.kopernikadr.camera.core.CapabilityMapper
 import pl.slava.kopernikadr.camera.image.AndroidImageCodec
@@ -104,7 +105,8 @@ class ServerHost(
             val s = stack ?: build()?.also { stack = it } ?: return
             val bootId = UUID.randomUUID().toString()
             val sm = SessionManager()
-            val cs = CameraServer(s.ports(bootId), ServerConfig(sessions = sm))
+            val config = ServerConfig(sessions = sm, allowLocalhostAnyPort = BuildConfig.CORS_LOCALHOST_ANY_PORT)
+            val cs = CameraServer(s.ports(bootId), config)
             val srv = AdvertisedServer(
                 bind = cs::start,
                 unbind = cs::stop,
