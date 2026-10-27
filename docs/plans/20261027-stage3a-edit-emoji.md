@@ -644,14 +644,14 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - [x] A review by a Claude `code-reviewer` agent on the stage diff; fix the findings. (16 findings + 3 acceptance observations fixed in 3 commits; checked on emulator-5584: phone and tablet arithmetic confirms, sticker drag, Od początku selection, no sticker chrome while playing.)
 
 ### Task 16: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
+- [x] `docs/ARCHITECTURE.md`:
   - §5.4: `cut`, `stickers`, `timeline()`;
   - §4.6: the 7-day reclaim and ScreenPolicy as built;
   - §8: stage 3 split into 3a+emoji / 3b;
   - decisions: trim is non-destructive, a curated OpenMoji set, "shoot on twos" dropped.
-- [ ] `docs/ROADMAP.md`: mark 3a + emoji done; the next steps are 3b and the rest of the effects layer.
-- [ ] `README.md`: how to edit a movie and add emoji; where quarantine is cleared.
-- [ ] Move this plan to `docs/plans/completed/`.
+- [x] `docs/ROADMAP.md`: mark 3a + emoji done; the next steps are 3b and the rest of the effects layer.
+- [x] `README.md`: how to edit a movie and add emoji; where quarantine is cleared.
+- [ ] Move this plan to `docs/plans/completed/`. (orchestrator moves it after merge)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — informational only*
