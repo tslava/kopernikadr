@@ -621,13 +621,13 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/e2e/lib.test.mjs`
 - Modify: `remote/e2e/README.md`
 
-- [ ] add a step after capture:
+- [x] add a step after capture:
   - duplicate, hold ×3, off one frame, add a sticker with a range;
   - export;
   - check the gallery file exists and that its duration = Σ hold / fps ± 1 tick (via `ffprobe` on the pulled file);
   - check that `project.json` matches.
-- [ ] add the pure helper `expectedDurationS(items, fps)` + a unit test.
-- [ ] run the full E2E flow on the emulator (all steps PASS).
+- [x] add the pure helper `expectedDurationS(items, fps)` + a unit test.
+- [x] run the full E2E flow on the emulator (all steps PASS; emulator-5584, 10/10 PASS: edit step 1.750 s = 14 ticks / 8 fps, project.json 12 entries; old steps 8-9 are now 9-10).
 
 ### Task 15: Verify acceptance criteria
 - [ ] Every item in the Overview works on the real tablet + Pixel (agent-run touch scripts, screencaps in `docs/diagnostics/<date>-stage3a-tablet.md`).

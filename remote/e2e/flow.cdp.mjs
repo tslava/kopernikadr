@@ -10,7 +10,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { expectedGalleryName, parseArgs, pickPage, projectFrames } from './lib.mjs';
+import { expectedDurationS, expectedGalleryName, newestGalleryRow, parseArgs, pickPage, projectFrames } from './lib.mjs';
 
 const sh = promisify(exec);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -20,6 +20,8 @@ const T = {
   newMovie: 'Nowy film', shutter: 'Zrób zdjęcie', play: 'Oglądaj film', backToMovies: 'Wróć do filmów',
   del: 'Usuń film', delConfirm: 'Usuń', exportBtn: 'Zapisz film w galerii', exportDone: 'Zapisano w galerii',
   exportGo: ['Zapisz', 'Zapisz bez nich'], undoPrefix: 'Cofnij', playEmpty: 'Nie ma jeszcze klatek do obejrzenia.',
+  tile: (n) => `Klatka ${n}`, duplicate: 'Powiel', holdUp: 'Dłużej', off: 'Wyłącz', emoji: '+ Emoji', pickerTitle: 'Wybierz naklejkę',
+  stickerTo: 'Naklejka do tego kadru',
 };
 const UNDO_WINDOW_MS = 5000; // remote/lib/projects/model.ts
 
@@ -187,8 +189,8 @@ steps.push(['6 play view shows frames', async () => {
   return 'play view open, playable frames';
 }]);
 
-steps.push(['7 export to the gallery', async () => {
-  ctx.galleryDate = await ev(`(() => { const d = new Date(); return [d.getFullYear(), d.getMonth() + 1, d.getDate()]; })()`);
+/** Clicks the export button and drives the dialog to "Zapisano w galerii", then closes it. */
+async function doExport() {
   await waitFor('export button enabled', `(() => { const b = ${btn(T.exportBtn)}; return !!b && !b.disabled; })()`, 10_000);
   await ev(`${btn(T.exportBtn)}.click(); true`);
   const t0 = Date.now();
@@ -206,10 +208,106 @@ steps.push(['7 export to the gallery', async () => {
     if (Date.now() - t0 > 120_000) throw new Error('timeout (120s) waiting for "Zapisano w galerii"');
     await sleep(500);
   }
-  const [y, m, d] = ctx.galleryDate;
-  const name = expectedGalleryName(ctx.movieName, new Date(y, m - 1, d));
   await ev(`[...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent === 'Zamknij')?.click(); true`);
-  return `expected gallery file (MediaStore display name): ${name}`;
+}
+
+steps.push(['7 export to the gallery', async () => {
+  ctx.galleryDate = await ev(`(() => { const d = new Date(); return [d.getFullYear(), d.getMonth() + 1, d.getDate()]; })()`);
+  await doExport();
+  const [y, m, d] = ctx.galleryDate;
+  return `expected gallery file (MediaStore display name): ${expectedGalleryName(ctx.movieName, new Date(y, m - 1, d))}`;
+}]);
+
+// ---- edit + sticker + export (plan Task 14) ----
+
+const MEDIA = 'content://media/external/video/media';
+const galleryRows = async (prefix) => {
+  const { stdout } = await sh(`${args.adb} shell content query --uri ${MEDIA} --projection _id:_display_name:_data:duration`);
+  return newestGalleryRow(stdout, prefix);
+};
+const readProject = async () => {
+  const { stdout } = await sh(`${args.adb} shell run-as ${args.pkg} cat files/kopernikadr/projects/${ctx.projectId}/project.json`);
+  return JSON.parse(stdout);
+};
+const tile = (n) => `[...document.querySelectorAll('button.strip-tile')].find((b) => b.getAttribute('aria-label') === ${J(T.tile(n))})`;
+const tool = (label) => `[...document.querySelectorAll('.edit-tools button')].find((b) => b.getAttribute('aria-label') === ${J(label)} && !b.disabled)`;
+const tileCount = `document.querySelectorAll('button.strip-tile').length`;
+
+async function pickTile(n) {
+  await waitFor(`tile ${n}`, `!!${tile(n)}`, 10_000);
+  await ev(`${tile(n)}.click(); true`);
+  await waitFor(`tile ${n} selected`, `${tile(n)}.getAttribute('aria-pressed') === 'true'`, 5_000);
+}
+async function press(label) {
+  await waitFor(`tool "${label}" enabled`, `!!${tool(label)}`, 5_000);
+  await ev(`${tool(label)}.click(); true`);
+  await sleep(500);
+}
+
+steps.push(['8 edit (duplicate, hold x3, off, sticker with range) + export, duration and project.json', async () => {
+  const baseline = (await galleryRows(`kopernikadr-${ctx.movieName.trim().replace(/\s+/g, '_')}-`))?.id ?? 0;
+  await goto(`#/play/${ctx.projectId}`);
+  await waitFor('strip with the 11 frames', `${tileCount} >= 8`, 30_000);
+  const before = await readProject();
+  const nFrames = before.frames.length;
+
+  await pickTile(2);
+  await press(T.duplicate);
+  await pickTile(4);
+  for (let i = 0; i < 3; i++) await press(T.holdUp);
+  await waitFor('hold x4 badge on tile 4', `${tile(4)}.textContent.includes('×4')`, 5_000);
+  await pickTile(6);
+  await press(T.off);
+  await waitFor('tile 6 off', `${tile(6)}.classList.contains('off')`, 5_000);
+
+  await pickTile(3);
+  await press(T.emoji);
+  await waitFor('emoji picker with items', `!!document.querySelector('[role=dialog] .picker-item')`, 15_000);
+  await ev(`document.querySelector('[role=dialog] .picker-item').click(); true`);
+  await waitFor('picker closed', `!document.querySelector('[role=dialog].picker')`, 5_000);
+  await waitFor('sticker marks on the strip', `document.querySelectorAll('.strip-mark').length > 0`, 5_000);
+  await pickTile(7);
+  await press(T.stickerTo);
+  await waitFor('sticker marks on tiles 3..7 only', `document.querySelectorAll('.strip-mark').length === 5`, 5_000);
+
+  // project.json is the source of truth of what the export must produce
+  let p;
+  const t0 = Date.now();
+  for (;;) {
+    p = await readProject();
+    const cut = p.cut ?? [];
+    const dupes = cut.length - new Set(cut.map((e) => e.frameId)).size;
+    if (cut.length === nFrames + 1 && dupes === 1 && cut.filter((e) => e.off).length === 1 && cut.some((e) => e.hold === 4) && p.stickers?.length === 1 && p.stickers[0].on.length === 5) break;
+    if (Date.now() - t0 > 15_000) throw new Error(`project.json does not match the edits: cut ${cut.length}/${nFrames + 1} entries, dupes ${dupes}, off ${cut.filter((e) => e.off).length}, holds [${cut.map((e) => e.hold)}], stickers ${JSON.stringify(p.stickers)}`);
+    await sleep(500);
+  }
+  const expected = expectedDurationS(p.cut, p.fps);
+  const tick = 1 / p.fps;
+
+  await doExport();
+  let row = null;
+  const t1 = Date.now();
+  while (!row) {
+    const r = await galleryRows(`kopernikadr-${ctx.movieName.trim().replace(/\s+/g, '_')}-`);
+    if (r && r.id > baseline) row = r;
+    else if (Date.now() - t1 > 15_000) throw new Error('no new gallery file after the export');
+    else await sleep(500);
+  }
+  let duration;
+  let how;
+  try {
+    const dir = await sh('mktemp -d');
+    const local = `${dir.stdout.trim()}/out.mp4`;
+    await sh(`${args.adb} pull ${J(row.data)} ${local}`);
+    duration = Number((await sh(`ffprobe -v error -show_entries format=duration -of csv=p=0 ${local}`)).stdout.trim());
+    how = 'ffprobe';
+  } catch {
+    if (row.durationMs === null) throw new Error('neither ffprobe nor the MediaStore duration is available');
+    duration = row.durationMs / 1000;
+    how = 'MediaStore duration';
+  }
+  if (!(Math.abs(duration - expected) <= tick + 1e-6)) throw new Error(`duration ${duration}s (${how}) differs from sum(hold)/fps = ${expected}s by more than ${tick}s`);
+  return `${row.name}: ${duration.toFixed(3)}s (${how}) vs expected ${expected.toFixed(3)}s (tick ${tick}s); project.json: ${p.cut.length} entries, 1 off, hold 4, 1 sticker on 5 entries`;
 }]);
 
 const card = () => `document.querySelector(${J(`[data-testid=movie-card][data-project-id="${ctx.projectId}"]`)})`;
@@ -217,7 +315,7 @@ const deleteBtn = () => `${card()}?.querySelector(${J(`button[aria-label="${T.de
 const confirmBtn = `[...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent === ${J(T.delConfirm)})`;
 const undoBtn = `[...document.querySelectorAll('.undo-toast button')].find((b) => b.textContent.startsWith(${J(T.undoPrefix)}))`;
 
-steps.push(['8 delete + Undo keeps the movie', async () => {
+steps.push(['9 delete + Undo keeps the movie', async () => {
   await goto('#/projects');
   await waitFor('movie card', `!!${card()}`, 15_000);
   await ev(`${deleteBtn()}.click(); true`);
@@ -232,7 +330,7 @@ steps.push(['8 delete + Undo keeps the movie', async () => {
   return 'listed again, survived past the window';
 }]);
 
-steps.push(['9 delete past the Undo window: gone + all frames acked', async () => {
+steps.push(['10 delete past the Undo window: gone + all frames acked', async () => {
   await ev(`${deleteBtn()}.click(); true`);
   await waitFor('delete confirmation', `!!${confirmBtn}`, 3_000);
   await ev(`${confirmBtn}.click(); true`);
@@ -257,7 +355,7 @@ let broken = null;
 await attach();
 for (const [name, fn] of steps) {
   let r;
-  if (broken && /^[2-9]/.test(name)) r = { name, status: 'FAIL', reason: `skipped: ${broken} failed` };
+  if (broken && /^([2-9]|10) /.test(name)) r = { name, status: 'FAIL', reason: `skipped: ${broken} failed` };
   else {
     const t0 = Date.now();
     try { r = { name, status: 'PASS', reason: await fn(), ms: Date.now() - t0 }; } catch (e) { r = { name, status: 'FAIL', reason: e.message, ms: Date.now() - t0 }; }

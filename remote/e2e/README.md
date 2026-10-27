@@ -3,8 +3,10 @@
 `flow.cdp.mjs` drives the debug build of the remote in the Android emulator over Chrome DevTools
 Protocol (no dependencies, Node >= 22) against `protocol/tools/probe-client/fake-camera.mjs`.
 Steps: create a movie, connect, shoot 10, kill the app mid-transfer and relaunch (all 10 local and
-acked), dropped capture response, play, export to the gallery, delete + Undo, delete past the window
-(all frames acked). It prints `PASS`/`FAIL` per step, then a JSON summary; exit code 1 on any FAIL.
+acked), dropped capture response, play, export to the gallery, edit (duplicate, hold x3, off, a sticker
+with a range) + export again with the gallery file's duration checked against Sum(hold)/fps (+-1 tick,
+`ffprobe` on the pulled file, MediaStore `duration` if ffprobe is missing) and `project.json` read via
+`run-as`, delete + Undo, delete past the window (all frames acked). It prints `PASS`/`FAIL` per step, then a JSON summary; exit code 1 on any FAIL.
 
 ## Run
 
@@ -29,6 +31,8 @@ acked), dropped capture response, play, export to the gallery, delete + Undo, de
      --adb-restart "adb shell 'am force-stop pl.slava.kopernikadr.remote; am start -n pl.slava.kopernikadr.remote/.MainActivity'" \
      --reforward "sh -c 'sleep 4; adb forward tcp:9222 localabstract:webview_devtools_remote_\$(adb shell pidof pl.slava.kopernikadr.remote | tr -d \"\\r\") >/dev/null'"
    ```
+   Also pass `--adb "adb -s emulator-5584"` (the adb command used for `run-as` and MediaStore; default `adb`)
+   and `--package pl.slava.kopernikadr.remote.debug` (default; the debug build, `run-as` needs it).
    Optional: `--camera-from-app 10.0.2.2:8765` (address typed into the connect view when the app is not online).
 
 ## After the run

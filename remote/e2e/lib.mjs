@@ -1,8 +1,8 @@
 // Pure helpers of flow.cdp.mjs (unit-tested in lib.test.mjs; no I/O here).
 
 export function parseArgs(argv) {
-  const out = { devtools: null, camera: 'http://127.0.0.1:8765', adbRestart: null, reforward: null, cameraFromApp: '10.0.2.2:8765' };
-  const keys = { '--devtools': 'devtools', '--camera': 'camera', '--adb-restart': 'adbRestart', '--reforward': 'reforward', '--camera-from-app': 'cameraFromApp' };
+  const out = { devtools: null, camera: 'http://127.0.0.1:8765', adbRestart: null, reforward: null, cameraFromApp: '10.0.2.2:8765', adb: 'adb', pkg: 'pl.slava.kopernikadr.remote.debug' };
+  const keys = { '--devtools': 'devtools', '--camera': 'camera', '--adb-restart': 'adbRestart', '--reforward': 'reforward', '--camera-from-app': 'cameraFromApp', '--adb': 'adb', '--package': 'pkg' };
   for (let i = 0; i < argv.length; i += 2) {
     const k = keys[argv[i]];
     if (!k || argv[i + 1] === undefined) throw new Error(`bad argument: ${argv[i]}`);
@@ -32,4 +32,21 @@ export function expectedGalleryName(movieName, date) {
 export function pickPage(list) {
   const pages = list.filter((t) => t.type === 'page' && t.webSocketDebuggerUrl);
   return pages.find((t) => /localhost|capacitor/i.test(t.url ?? '')) ?? pages[0] ?? null;
+}
+
+/** Seconds the movie lasts: every entry that is not switched off shows for `hold` ticks of 1/fps. */
+export function expectedDurationS(items, fps) {
+  return items.filter((e) => !e.off).reduce((sum, e) => sum + e.hold, 0) / fps;
+}
+
+/** Newest MediaStore row (highest _id) whose display name starts with `prefix`, from `content query` output (`Row: 0 _id=1, _display_name=x, ...`). */
+export function newestGalleryRow(output, prefix) {
+  const rows = output.split('\n').map((l) => {
+    const m = /_id=(\d+)/.exec(l);
+    const n = /_display_name=(.*?)(?:, \w+=|$)/.exec(l);
+    const d = /_data=(.*?)(?:, \w+=|$)/.exec(l);
+    const dur = /duration=(\d+)/.exec(l);
+    return m && n ? { id: Number(m[1]), name: n[1], data: d ? d[1] : null, durationMs: dur ? Number(dur[1]) : null } : null;
+  }).filter((r) => r && r.name.startsWith(prefix));
+  return rows.sort((a, b) => b.id - a.id)[0] ?? null;
 }
