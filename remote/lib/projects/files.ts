@@ -25,6 +25,8 @@ export interface FileAdapter {
 
 export const ROOT = 'kopernikadr';
 export const INDEX_PATH = 'index.json';
+/** The clientId, written once (survives an unsalvageable index.json). */
+export const CLIENT_ID_PATH = 'client-id.txt';
 export const projectDir = (id: string): string => `projects/${id}`;
 export const projectJsonPath = (id: string): string => `${projectDir(id)}/project.json`;
 

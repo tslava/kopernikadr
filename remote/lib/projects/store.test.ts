@@ -103,6 +103,34 @@ describe('load', () => {
     expect(store.state.get().warnings[0]!.kind).toBe('index_corrupt');
   });
 
+  it('clientId is also kept in client-id.txt (written once); used when index.json is unsalvageable', async () => {
+    const { fs, store } = await loaded();
+    const id = store.state.get().index.clientId;
+    expect(fs.files.get('client-id.txt')).toBe(id);
+    fs.files.set(INDEX_PATH, '{{{');
+    const again = await loaded(fs);
+    expect(again.store.state.get().index.clientId).toBe(id);
+    expect(fs.files.get('client-id.txt')).toBe(id); // not rewritten
+  });
+
+  it('client-id.txt is created for an existing index (upgrade) and never overwritten', async () => {
+    const { fs, store } = await loaded();
+    const id = store.state.get().index.clientId;
+    fs.files.delete('client-id.txt');
+    await loaded(fs);
+    expect(fs.files.get('client-id.txt')).toBe(id);
+    fs.files.set('client-id.txt', 'older');
+    await loaded(fs);
+    expect(fs.files.get('client-id.txt')).toBe('older');
+  });
+
+  it('a failing client-id.txt write does not stop load', async () => {
+    const fs = new FakeFs();
+    fs.failOn({ op: 'writeTextAtomic', path: 'client-id.txt' });
+    const { store } = await loaded(fs);
+    expect(store.state.get().ready).toBe(true);
+  });
+
   it('corrupt project.json: renamed, warning, the project is absent from memory', async () => {
     const { fs, store } = await loaded();
     const p = await store.createProject('Film');

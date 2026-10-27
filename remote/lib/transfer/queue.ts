@@ -108,6 +108,8 @@ export function createTransfer(deps: TransferDeps): TransferService {
   let wakeCancel: (() => void) | null = null;
   let tmpN = 0;
   const waiters: (() => void)[] = [];
+  /** `pause()` callers: resolved when the job running at that time settles (even if `resume()` came meanwhile). */
+  const pauseWaiters: (() => void)[] = [];
 
   const status = createStore<TransferStatus>({ queued: 0, current: null, paused: null, unavailable: 0, ackPending: 0 });
 
@@ -183,6 +185,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
         pumping = false;
         current = null;
         refresh();
+        for (const w of pauseWaiters.splice(0)) w();
         for (const w of waiters.splice(0)) w();
       }
     })();
@@ -209,6 +212,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
       } finally {
         current = null;
         refresh();
+        for (const w of pauseWaiters.splice(0)) w();
       }
     }
   }
@@ -395,7 +399,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
     pause() {
       exportPaused = true;
       refresh();
-      return pumping ? new Promise<void>((r) => waiters.push(r)) : Promise.resolve();
+      return pumping ? new Promise<void>((r) => pauseWaiters.push(r)) : Promise.resolve();
     },
     resume() {
       exportPaused = false;

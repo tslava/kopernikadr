@@ -609,6 +609,29 @@ describe('storage', () => {
   });
 });
 
+describe('pause then resume before the job settles', () => {
+  it('the first pause() promise still resolves once the current job settles (not when the queue drains)', async () => {
+    const e = await mkEnv([['F1'], ['F2']]);
+    const g1 = deferred();
+    const g2 = deferred();
+    e.hooks.download = (url) => (url.includes('F1/full') ? g1.promise : url.includes('F2/full') ? g2.promise : undefined);
+    e.tr.enqueue('F1', e.pid);
+    await settle();
+    e.tr.enqueue('F2', e.pid);
+    let paused = false;
+    const p = e.tr.pause().then(() => (paused = true));
+    e.tr.resume();
+    await settle();
+    expect(paused).toBe(false);
+    g1.resolve();
+    await settle();
+    expect(paused).toBe(true); // F1 settled; F2 (gated) is still running
+    g2.resolve();
+    await p;
+    await e.tr.idle();
+  });
+});
+
 describe('delete during a download', () => {
   it('the project leaves the store mid-download: abort, no install, tmp deleted once the call settles', async () => {
     const e = await mkEnv([['F1']]);
