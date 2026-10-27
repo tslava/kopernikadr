@@ -211,7 +211,7 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Modify: `camera-android/core/src/main/kotlin/pl/slava/kopernikadr/camera/spool/{Spool.kt,SpoolFrameStore.kt}`, the process-start wiring in `:app` (before the server opens), `protocol/PROTOCOL.md` ("Today" notes in §4, §6 `getOperation`/`getStatus`, §9)
 - Create/Modify: tests in `camera-android/core/src/test/kotlin/.../spool/`, a contract fixture for `getOperation` → `failed(INTERRUPTED)`
 
-- [ ] tests first, then `Spool.recover()` per ARCHITECTURE §4.6, run once per process before the
+- [x] tests first, then `Spool.recover()` per ARCHITECTURE §4.6, run once per process before the
       server accepts commands:
   - `pending` + valid `full` (SOI/EOI, decodable) → sha256 → `committed`;
   - `pending` without a valid file → delete its tmp leftovers → `failed(INTERRUPTED)`;
@@ -219,15 +219,15 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - `reclaimedAt` set but files exist → delete the files;
   - stray files: the file rule from Technical Details (pattern only, quarantine a `full` with no
     row, never touch `spool.db*` or unknown names)
-- [ ] the wire for recovered rows, with no new codes:
+- [x] the wire for recovered rows, with no new codes:
   - `getOperation` answers `done` or `failed(INTERRUPTED)`, never a stale `pending`;
   - a `lost` frame answers `failed` with the existing integrity code (or `INTERNAL`); document
     the choice in PROTOCOL.md
-- [ ] `getStatus`:
+- [x] `getStatus`:
   - real `integrityErrors` (lost + quarantined);
   - real `orphanCount`: unacked frames of other clientIds, which today are remote-lite's movies.
     The doc wording says "frames of other remotes"
-- [ ] tests:
+- [x] tests:
   - each table row;
   - a crash between the rename and the commit;
   - an idempotent double run;
@@ -235,8 +235,8 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - `spool.db*` and unknown names are untouched;
   - other clients' (remote-lite's) frames are untouched;
   - a committed frame's files are never deleted
-- [ ] update PROTOCOL.md "Today" notes and add a changelog line (wire unchanged)
-- [ ] run the camera + remote-lite tests — must pass before Task 2
+- [x] update PROTOCOL.md "Today" notes and add a changelog line (wire unchanged)
+- [x] run the camera + remote-lite tests — must pass before Task 2
 
 ### Task 2: Camera: reclaim acked frames under low space (TDD)
 
@@ -244,22 +244,31 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Modify: `Spool.kt`, `SpoolFrameStore.kt`, `SpoolCaptureService.kt` (admission), `protocol/PROTOCOL.md` (§6 `STORAGE_LOW`, §9 "Today")
 - Create/Modify: spool tests
 
-- [ ] tests first, then admission step 2:
+- [x] tests first, then admission step 2:
   - when `free − 500 MB < 2 × expected full`, reclaim **acked** frames, oldest `ackedAt` first;
   - write `reclaimedAt` → commit → delete the files, until enough space is free;
   - else `STORAGE_LOW`
-- [ ] no timer and no 7-day expiry (deferred to stage 3)
-- [ ] lock ordering with `SpoolFrameStore` derived-file generation and prefetch: a reclaim never
+- [x] no timer and no 7-day expiry (deferred to stage 3)
+- [x] lock ordering with `SpoolFrameStore` derived-file generation and prefetch: a reclaim never
       races a `play`/`thumb` generation of the same frame. A request for a reclaimed frame's file
       answers 404 per PROTOCOL
-- [ ] tests:
+- [x] tests:
   - only acked frames are reclaimed, never unacked or other clients' frames;
   - `reclaimedAt` comes before the delete;
   - the crash in between is finished by `recover()`;
   - the race with a derived-file generation;
   - `STORAGE_LOW` when nothing acked is left
-- [ ] update PROTOCOL.md "Today" notes
-- [ ] run the camera + remote-lite tests — must pass before Task 3
+- [x] update PROTOCOL.md "Today" notes
+- [x] run the camera + remote-lite tests — must pass before Task 3
+
+- ➕ Tasks 1–2 notes (agent, accepted):
+  - tmp files are really named `….jpg.<uuid>.tmp` (DurableFiles); the name rule accepts that too;
+  - a pending row with a bad `full` is quarantined as well;
+  - `orphanCount` is relative to the session's client (0 without a session);
+  - quarantined files count in `integrityErrors` until removed by hand;
+  - recovered `capturedAt` = file mtime;
+  - admission sizes the next `full` as the max of the last 8 (5 MB default);
+  - `DerivedFiles` uses per-frame striped locks against reclaim
 
 ### Task 3: Fake camera: failure switches for §7
 
