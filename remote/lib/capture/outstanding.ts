@@ -131,7 +131,7 @@ export function createResolver(env: CaptureEnv): Resolver {
       return { result: { merge: merged.status as MergeStatus | 'deleted_project' | 'unknown_project', inserted: merged.status === 'inserted' }, projects: [merged.project] };
     });
     if (r.inserted) await transfer.enqueue(info.frameId, projectId);
-    else if (r.merge === 'deleted_project' || r.merge === 'tombstoned') await transfer.ackNow([info.frameId]);
+    else if (r.merge === 'deleted_project' || r.merge === 'tombstoned') await transfer.ackNow([info.frameId], { [info.frameId]: projectId });
     return { ok: true, frameId: info.frameId, projectId, merge: r.merge };
   }
 
