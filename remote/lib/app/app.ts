@@ -4,6 +4,7 @@
 // AppContext once boot finished (the existing store pattern, no React context needed).
 import { useSyncExternalStore } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { KeepAwake } from '@capacitor-community/keep-awake';
 import { nativeNsdAdapter } from '../discovery';
 import { createAppFileAdapter } from '../projects/files';
 import { createFetchBytes, createWebVerify } from '../projects/sweep';
@@ -29,6 +30,7 @@ export function startApp(): Promise<void> {
         fs,
         verify: createWebVerify(fs, createFetchBytes((u) => fetch(u), (u) => Capacitor.convertFileSrc(u))),
         nsd: nativeNsdAdapter(),
+        keepAwake: { acquire: () => KeepAwake.keepAwake(), release: () => KeepAwake.allowSleep() },
         createTransfer: ({ store, request, target, cameraId }) => {
           const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target, cameraId });
           hook = createReconcile({ store, transfer: service });

@@ -13,6 +13,7 @@ import { runStartupSweep, type SweepReport, type VerifyFn } from '../projects/sw
 import { ProjectStore } from '../projects/store';
 import { createStore, type Store } from '../state/store';
 import type { Transfer, TransferPause } from '../transfer/types';
+import { createLifecycle, type KeepAwakeAdapter, type Lifecycle } from './lifecycle';
 
 /** The per-session reconcile hook (plan Task 11). Runs after `resolveOutstanding`. */
 export type Reconcile = (ctx: SessionContext) => void | Promise<void>;
@@ -25,6 +26,8 @@ export interface AppContext {
   /** App-wide: an export is running (shooting is blocked, transfers are paused). Owned by the export controller. */
   exporting: Store<boolean>;
   sweep: SweepReport;
+  /** Pause/resume, the keep-awake owner, the Diagnostics yield (plan Task 19). */
+  lifecycle: Lifecycle;
 }
 
 export interface TransferEnv {
@@ -52,6 +55,8 @@ export interface BootDeps {
   /** Defaults to `createCapture` (a test seam for the hook order). */
   createCapture?: (env: CaptureEnv) => Capture;
   appVersion?: string;
+  /** The screen lock (defaults to a no-op, e.g. in tests). */
+  keepAwake?: KeepAwakeAdapter;
 }
 
 export async function boot(deps: BootDeps): Promise<AppContext> {
@@ -95,5 +100,12 @@ export async function boot(deps: BootDeps): Promise<AppContext> {
     reconcile: deps.reconcile,
   });
   client.start();
-  return { store, client, capture, transfer, exporting: createStore(false), sweep };
+  const exporting = createStore(false);
+  const lifecycle = createLifecycle({
+    client,
+    transfer,
+    exporting,
+    keepAwake: deps.keepAwake ?? { acquire: async () => {}, release: async () => {} },
+  });
+  return { store, client, capture, transfer, exporting, sweep, lifecycle };
 }

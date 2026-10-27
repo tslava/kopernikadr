@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { KeepAwake } from '@capacitor-community/keep-awake';
 import type { AppContext } from '@/lib/app/boot';
 import { badge } from '@/lib/app/connectModel';
 import { frameCount, hasOutstandingFor, onionSourceFor, pendingCount, shutterState, toastKey } from '@/lib/app/captureModel';
@@ -66,21 +65,20 @@ function usePreviewController(app: AppContext, quality: PreviewQuality): { contr
   useEffect(() => {
     const off = controller.attach(client);
     controller.start();
+    const unregister = app.lifecycle.registerPreview(controller); // stopped/restarted with the app state
     return () => {
+      unregister();
       off();
       controller.dispose();
     };
-  }, [controller, client]);
+  }, [controller, client, app]);
   useEffect(() => controller.setQuality(quality), [controller, quality]);
   return { controller, live };
 }
 
 /** The screen stays on while the kid shoots. */
-function useKeepAwake(): void {
-  useEffect(() => {
-    void KeepAwake.keepAwake().catch(() => {});
-    return () => void KeepAwake.allowSleep().catch(() => {});
-  }, []);
+function useKeepAwake(app: AppContext): void {
+  useEffect(() => app.lifecycle.keepAwake.hold('view'), [app]);
 }
 
 export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality = 'normal', exporting = false, grid = false, drawer }: CaptureViewProps) {
@@ -89,7 +87,7 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
   const snap = useStore(client.store);
   const project = projects[id] ?? null;
   const { controller, live } = usePreviewController(app, quality);
-  useKeepAwake();
+  useKeepAwake(app);
 
   const [pressing, setPressing] = useState(false);
   const [flashN, setFlashN] = useState(0);
