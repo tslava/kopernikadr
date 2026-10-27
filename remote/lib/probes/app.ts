@@ -6,10 +6,12 @@ import { FileTransfer } from '@capacitor/file-transfer';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 import { uuid } from '@kopernikadr/remote-core/protocol';
 import { discover } from '../discovery';
+import { createNativeWriter } from '../export/nativeWriter';
 import { KopernikadrNative } from '../native';
 import { cameraProbe, type SessionDeps } from './camera';
 import { downloadProbe, type DownloadNative } from './download';
 import { envProbe, storageProbe, type EnvGlobals } from './env';
+import { exportProbe } from './export';
 import { nsdProbe } from './nsd';
 import { reconnectProbe, cameraConnection } from './reconnect';
 import { buildReport, saveReport, type Report, type ReportWriter, type SaveResult } from './report';
@@ -103,6 +105,13 @@ export function buildProbes(native = Capacitor.isNativePlatform()): Probe<ProbeS
       createImageBitmap: (blob, opts) => createImageBitmap(blob, opts),
       VideoFrame: g.VideoFrame,
       now,
+    }),
+    exportProbe({
+      ...session,
+      native: native ? nativeDownload() : null,
+      projectId,
+      convertFileSrc: (uri) => Capacitor.convertFileSrc(uri),
+      createWriter: () => createNativeWriter(),
     }),
     reconnectProbe({ connect: cameraConnection({ clientId, appVersion: PROBE_APP_VERSION, platform }), now }),
   ];
