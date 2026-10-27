@@ -16,7 +16,7 @@ import type { ProjectStore } from './store';
 export interface DeletionDeps {
   store: Pick<ProjectStore, 'mutate' | 'state'>;
   fs: Pick<FileAdapter, 'remove'>;
-  transfer: { ackNow(frameIds: string[]): void | Promise<void> };
+  transfer: { ackNow(frameIds: string[], projectOf?: Readonly<Record<string, string>>): void | Promise<void> };
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -80,7 +80,9 @@ export class ProjectDeletion {
       const ids = frameIds.get(id) ?? [];
       if (ids.length > 0) {
         try {
-          await this.d.transfer.ackNow(ids);
+          // The project has left the store, so Transfer needs the frame → project map to see the
+          // tombstone (`deletedProjects`) when it re-checks eligibility.
+          await this.d.transfer.ackNow(ids, Object.fromEntries(ids.map((f) => [f, id])));
         } catch (e) {
           this.d.onError?.(e);
         }
