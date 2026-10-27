@@ -194,3 +194,66 @@ describe('download probe (fake camera)', () => {
     expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/^hello: cannot connect/) });
   });
 });
+
+describe('download probe: stalled downloads (Codex 0b review)', () => {
+  /** fetch whose frame downloads never answer until their signal aborts. */
+  const stalledFetch: typeof fetch = (input, init) => {
+    if (!String(input).includes('/frames/')) return fetch(input, init);
+    return new Promise((_, reject) => {
+      const signal = init?.signal;
+      if (!signal) return; // no signal: hangs forever, as before the fix
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  };
+
+  it('Stop interrupts a stalled frame download: the run settles promptly and acks nothing', async () => {
+    cam = await startFakeCamera();
+    const probeId = randomUUID();
+    await capture(cam, probeId, 1);
+    const ctl = new AbortController();
+    const t0 = performance.now();
+    setTimeout(() => ctl.abort(), 100);
+    const report = await runProbes([downloadProbe(deps(probeId, null, { fetch: stalledFetch }))], { shared: sharedFor(cam), signal: ctl.signal });
+    expect(performance.now() - t0).toBeLessThan(2_000);
+    expect(report.cancelled).toBe(true);
+    expect(report.results[0].ok).toBe(false);
+    expect(cam.state.acked.size).toBe(0);
+  });
+
+  it('a frame download past its deadline fails that frame without acking it', async () => {
+    cam = await startFakeCamera();
+    const probeId = randomUUID();
+    await capture(cam, probeId, 1);
+    const r = await run(deps(probeId, null, { fetch: stalledFetch, frameTimeoutMs: 50 }), sharedFor(cam));
+    const data = r.data as DownloadData;
+    expect(data.frames).toHaveLength(1);
+    expect(data.frames[0].verified).toBe(false);
+    expect(data.frames[0].error).toBeTruthy();
+    expect(data.ack).toBeNull();
+    expect(cam.state.acked.size).toBe(0);
+  });
+
+  it('native: a cancelled download that completes later has its tmp file removed after it settles', async () => {
+    cam = await startFakeCamera();
+    const probeId = randomUUID();
+    const [id] = await capture(cam, probeId, 1);
+    const { native, files, calls } = fakeNative();
+    let finish!: () => void;
+    native.download = async (_url, uri) => {
+      calls.push(`download ${uri.slice(ROOT.length)}`);
+      await new Promise<void>((r) => (finish = r));
+      files.set(uri.slice(ROOT.length), new Uint8Array([1, 2, 3]));
+    };
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 100);
+    const report = await runProbes([downloadProbe(deps(probeId, native))], { shared: sharedFor(cam), signal: ctl.signal });
+    expect(report.cancelled).toBe(true);
+    const tmp = `tmp/probe-${id}.jpg`;
+    expect(calls).not.toContain(`remove ${tmp}`);
+    finish();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls).toContain(`remove ${tmp}`);
+    expect(files.has(tmp)).toBe(false);
+    expect(cam.state.acked.size).toBe(0);
+  });
+});

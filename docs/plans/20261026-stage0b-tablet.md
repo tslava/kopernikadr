@@ -587,6 +587,13 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - [ ] fix what's found (➕ tasks if larger)
 - [ ] run the full suite — must pass before Task 14
 
+- [x] ➕ Codex review of the 0b batch (2026-10-27), two medium findings fixed:
+  - the plugin runs `videoCleanupAbandoned` at load (startup sweep), so an export killed
+    mid-encode/publish leaves no file or pending row (verified on the emulator:
+    `deletedFiles=1, deletedRows=1` after a kill);
+  - the download probe's frame fetch takes the probe signal + a 30 s deadline (headers and
+    body); a cancelled native download's tmp file is removed after it settles
+
 ### Task 14: Tablet session (owner connects the tablet) + Family Link
 
 **Files:**

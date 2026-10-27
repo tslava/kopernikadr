@@ -41,6 +41,17 @@ class KopernikadrNativePlugin : Plugin() {
         )
         debuggable = (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         executor = Executors.newSingleThreadExecutor { r -> Thread(r, "KopernikadrNative") }
+        // Startup sweep (§5.7): an export killed mid-encode or mid-publish leaves an exports/ file
+        // and maybe a pending gallery row. Queued first on the serial executor, so it finishes
+        // before any call from the page; this fresh `api` has no live handles yet.
+        executor.execute {
+            try {
+                val r = api.videoCleanupAbandoned(BridgeArgs { null })
+                log("startup sweep: $r")
+            } catch (e: Exception) {
+                Log.w(TAG, "startup sweep failed", e)
+            }
+        }
     }
 
     override fun handleOnDestroy() {

@@ -8,7 +8,7 @@ import type { InstallResult } from '../native';
 import { captureFrame, NO_TARGET, openSession, hostPort, resolveTarget, type FrameInfo, type ProbeSession, type SessionDeps } from './camera';
 import { errorText, ProbeFailure, ProbeSkip, type Probe } from './runner';
 import type { ProbeShared } from './shared';
-import { mbPerS, sha256Hex, throwIfAborted } from './util';
+import { mbPerS, raceAbort, sha256Hex, throwIfAborted } from './util';
 
 /** Where the last verified `full` is installed (relative to `filesDir/kopernikadr/`). */
 export const DOWNLOAD_DEST = 'probe/frame.jpg';
@@ -37,7 +37,12 @@ export interface DownloadProbeDeps extends SessionDeps {
   maxFrames?: number;
   sha256?: (bytes: Uint8Array) => Promise<string>;
   newReqId?: () => string;
+  /** Deadline for one frame's download and read (headers and body). */
+  frameTimeoutMs?: number;
 }
+
+/** A 3264×2448 JPEG is ~2–4 MB; 30 s is far beyond any healthy Wi-Fi download of one. */
+export const FRAME_TIMEOUT_MS = 30_000;
 
 export interface FrameCheck {
   frameId: string;
@@ -75,7 +80,7 @@ export function downloadProbe(deps: DownloadProbeDeps): Probe<ProbeShared> {
   const now = deps.now;
 
   /** Downloads one `full` and checks size + sha256; native: then installs it. Never throws. */
-  async function check(f: FrameInfo, url: string, shared: ProbeShared): Promise<FrameCheck> {
+  async function check(f: FrameInfo, url: string, shared: ProbeShared, cancel: AbortSignal): Promise<FrameCheck> {
     const rec: FrameCheck = {
       frameId: f.frameId,
       seq: f.seq,
@@ -88,16 +93,21 @@ export function downloadProbe(deps: DownloadProbeDeps): Probe<ProbeShared> {
       verified: false,
     };
     const tmp = `tmp/probe-${safeId(f.frameId)}.jpg`;
+    // Stop and a stalled phone must not hold the session and keep-awake (Codex 0b review).
+    const signal = AbortSignal.any([cancel, AbortSignal.timeout(deps.frameTimeoutMs ?? FRAME_TIMEOUT_MS)]);
+    let download: Promise<void> | undefined;
     try {
       let bytes: Uint8Array;
       const t0 = now();
       if (deps.native) {
         const uri = await deps.native.uriOf(tmp);
-        await deps.native.download(url, uri);
+        download = deps.native.download(url, uri);
+        await raceAbort(download, signal);
         rec.ms = Math.round(now() - t0);
-        bytes = await deps.native.read(uri);
+        bytes = await raceAbort(deps.native.read(uri), signal);
       } else {
-        const res = await deps.fetch(url);
+        // The signal also aborts the body read below.
+        const res = await deps.fetch(url, { signal });
         if (!res.ok) throw new Error(`GET ${url}: HTTP ${res.status}`);
         bytes = new Uint8Array(await res.arrayBuffer());
         rec.ms = Math.round(now() - t0);
@@ -118,7 +128,15 @@ export function downloadProbe(deps: DownloadProbeDeps): Probe<ProbeShared> {
       rec.verified = true;
     } catch (e) {
       rec.error = errorText(e);
-      if (deps.native) await deps.native.remove(tmp).catch(() => {});
+      const native = deps.native;
+      if (native) {
+        if (signal.aborted && download) {
+          // The native download can't be cancelled: delete its file once it settles, not before.
+          void download.catch(() => {}).then(() => native.remove(tmp)).catch(() => {});
+        } else {
+          await native.remove(tmp).catch(() => {});
+        }
+      }
     }
     return rec;
   }
@@ -165,7 +183,7 @@ export function downloadProbe(deps: DownloadProbeDeps): Probe<ProbeShared> {
         for (const f of frames) {
           throwIfAborted(ctx.signal);
           const url = `http://${hostPort(target)}/frames/${encodeURIComponent(f.frameId)}/full.jpg`;
-          const rec = await check(f, url, ctx.shared);
+          const rec = await check(f, url, ctx.shared, ctx.signal);
           data.frames.push(rec);
           if (rec.verified) verified.push(f.frameId);
           else data.errors.push(`${f.frameId}: ${rec.error ?? 'not verified'}`);

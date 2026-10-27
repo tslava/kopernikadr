@@ -26,6 +26,19 @@ export function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw abortError();
 }
 
+/**
+ * Settles like `p`, or rejects with the abort reason as soon as `signal` aborts. For calls that
+ * take no signal themselves (native plugin calls): the call itself keeps running.
+ */
+export function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason ?? abortError());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? abortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
 /** Nearest-rank percentile of an ascending array (null if empty). */
 export function percentile(sorted: readonly number[], p: number): number | null {
   if (!sorted.length) return null;
