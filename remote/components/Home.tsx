@@ -7,7 +7,11 @@ export default function Home({ t, onDiagnostics }: { t: Translate; onDiagnostics
   const [note, setNote] = useState(false);
   return (
     <main className="screen home">
-      <h1>{t('app.title')}</h1>
+      <div className="brand">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static export, no image optimizer */}
+        <img className="logo" src="/logo.svg" alt="" width={96} height={96} />
+        <h1>{t('app.title')}</h1>
+      </div>
       <p className="subtitle">{t('app.subtitle')}</p>
       <div className="actions">
         <button type="button" className="primary" onClick={() => setNote(true)}>

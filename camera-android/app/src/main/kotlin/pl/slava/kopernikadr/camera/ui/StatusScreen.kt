@@ -2,6 +2,7 @@ package pl.slava.kopernikadr.camera.ui
 
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -29,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,11 +79,15 @@ fun StatusScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    stringResource(R.string.status_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = if (onTitleHeld != null) Modifier.holdFor(DIAGNOSTICS_HOLD_MS, onTitleHeld) else Modifier,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.size(12.dp))
+                    Text(
+                        stringResource(R.string.status_title),
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = if (onTitleHeld != null) Modifier.holdFor(DIAGNOSTICS_HOLD_MS, onTitleHeld) else Modifier,
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
                 val port = server.port
                 when {
