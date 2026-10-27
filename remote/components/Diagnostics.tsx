@@ -5,6 +5,7 @@ import type { Key, Translate } from '@/lib/i18n';
 import type { DiagnosticsRun } from '@/lib/probes/app';
 import type { ProbeResult, PromptAnswer, PromptKey } from '@/lib/probes/runner';
 import { PROBE_ORDER, PROBE_STORAGE, readStored, writeStored } from '@/lib/probes/shared';
+import ParentMaintenance from './ParentMaintenance';
 
 type Status = { state: 'idle' } | { state: 'running' } | { state: 'done'; result: ProbeResult };
 
@@ -100,6 +101,8 @@ export default function Diagnostics({ t, onBack, yieldClient }: { t: Translate; 
         <h1>{t('diag.title')}</h1>
         <span className="count">{t('diag.count', { n: PROBE_ORDER.length })}</span>
       </header>
+
+      <ParentMaintenance />
 
       <label className="address">
         <span>{t('diag.address')}</span>

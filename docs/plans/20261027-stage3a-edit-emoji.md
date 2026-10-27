@@ -536,15 +536,15 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/ParentDrawer.tsx` (or `Diagnostics.tsx`, wherever the parent sections live)
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write tests first (fake fs):
+- [x] write tests first (fake fs): (6 tests; QuarantineFs seam, flat dir)
   - list `kopernikadr/quarantine/` files with sizes, newest first;
   - clear removes only files inside the quarantine dirs (path guard);
   - a missing dir = empty;
   - a partial failure is reported.
-- [ ] UI: count, size, downsampled thumbnails for the newest ≤ 12 `.jpg` files; "Wyczyść" with a confirm dialog that names the count and size.
-- [ ] "O aplikacji": app version, the OpenMoji attribution text (exact string from ROADMAP), the license link as text.
-- [ ] tablet run: seed a fake file into quarantine via the debug build, show it, clear it, check that it's gone.
-- [ ] run tests — must pass before Task 11.
+- [x] UI: count, size, downsampled thumbnails for the newest ≤ 12 `.jpg` files; "Wyczyść" with a confirm dialog that names the count and size. (on the Diagnostics screen behind the long-press wrench, parent-only; thumbnails via createImageBitmap resizeWidth 160 into a canvas)
+- [x] "O aplikacji": app version, the OpenMoji attribution text (exact string from ROADMAP), the license link as text. (version from package.json via NEXT_PUBLIC_APP_VERSION in next.config.mjs)
+- [x] tablet run: seed a fake file into quarantine via the debug build, show it, clear it, check that it's gone. (emulator-5584: real long-press, 2 seeded fulls listed with thumbs, confirm, cleared, dir empty)
+- [x] run tests — must pass before Task 11. (750 passed)
 
 ### Task 11: Phone — 7-day reclaim
 

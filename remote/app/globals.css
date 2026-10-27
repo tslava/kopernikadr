@@ -44,6 +44,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .probes li.running .status { color: var(--accent); }
 .probes li.pass .status { color: var(--pass); }
 .probes li.fail .status, p.fail { color: var(--fail); }
+.parent-sec { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+.parent-sec h2 { margin: 0 0 8px; font-size: 24px; }
+.parent-sec p { margin: 6px 0; }
+.q-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.q-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.q-thumb { width: 120px; height: 90px; object-fit: cover; background: var(--bg); border-radius: 8px; }
 .diagnostics details summary { color: var(--muted); cursor: pointer; }
 .diagnostics pre {
   font-size: 13px; line-height: 1.35; margin: 8px 0 0; padding: 12px; max-height: 360px; overflow: auto;
