@@ -18,6 +18,7 @@ export const ru: Strings = {
   'connect.state.online': 'подключена',
   'connect.state.connecting': 'подключаюсь…',
   'connect.state.available': 'доступна',
+  'connect.use': 'Подключить',
   'connect.status.searching': 'Ищу камеру…',
   'connect.status.connecting': 'Подключаюсь к камере…',
   'connect.status.online': 'Подключено к камере.',

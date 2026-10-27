@@ -16,6 +16,7 @@ export const pl = {
   'connect.state.online': 'połączona',
   'connect.state.connecting': 'łączę…',
   'connect.state.available': 'dostępna',
+  'connect.use': 'Połącz',
   'connect.status.searching': 'Szukam kamery…',
   'connect.status.connecting': 'Łączę z kamerą…',
   'connect.status.online': 'Połączono z kamerą.',

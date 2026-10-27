@@ -8,7 +8,7 @@ import { cameraRows, justWentOnline, manualErrorKey, statusView, type StatusKind
 import { useStore } from '@/lib/state/useStore';
 import Icon from './Icon';
 
-type ClientLike = Pick<CameraClient, 'store' | 'takeOver' | 'connectManual'>;
+type ClientLike = Pick<CameraClient, 'store' | 'takeOver' | 'connectManual' | 'connectTo'>;
 
 // Thin shell: all decisions live in lib/app/connectModel.ts (pure, unit-tested).
 export default function ConnectView({ t, onBack }: { t: Translate; onBack: () => void }) {
@@ -87,10 +87,18 @@ export function ConnectScreen({ t, client, onConnected }: { t: Translate; client
         ) : (
           <ul className="cameras">
             {rows.map((r) => (
-              <li key={r.cameraId} className={`camera ${r.state}`}>
-                <Icon name="camera" />
-                <span className="name">{t('connect.cameraName', { name: r.name })}</span>
-                <span className="state">{t(`connect.state.${r.state}`)}</span>
+              <li key={r.cameraId}>
+                {/* a found camera that is not the current one is a button: tap to switch to it */}
+                <button
+                  type="button"
+                  className={`camera ${r.state}`}
+                  disabled={r.state !== 'available'}
+                  onClick={() => client.connectTo(r.cameraId)}
+                >
+                  <Icon name="camera" />
+                  <span className="name">{t('connect.cameraName', { name: r.name })}</span>
+                  <span className="state">{t(r.state === 'available' ? 'connect.use' : `connect.state.${r.state}`)}</span>
+                </button>
               </li>
             ))}
           </ul>

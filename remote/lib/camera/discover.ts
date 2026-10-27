@@ -40,7 +40,9 @@ const fromService = (s: ParsedService): Target => ({ cameraId: s.cameraId, host:
 
 /**
  * 1. a project bound to a camera looks for that one: NSD, else the remembered one if it is that camera;
- * 2. otherwise the remembered camera (at its NSD address if NSD sees it now);
+ * 2. otherwise the remembered camera (at its NSD address if NSD sees it now) — unless, once the
+ *    window is over, NSD does not see it but sees exactly one other camera: that one (the tablet
+ *    used another phone before, e.g. a test camera, and the kid's camera is the only one around);
  * 3. otherwise the single camera found once the window is over;
  * 4. otherwise the connect screen.
  */
@@ -49,6 +51,7 @@ export function selectTarget({ requiredCameraId, remembered, found, settled }: S
   if (want) {
     const hit = found.find((s) => s.cameraId === want);
     if (hit) return { kind: 'target', target: fromService(hit) };
+    if (!requiredCameraId && settled && found.length === 1) return { kind: 'target', target: fromService(found[0]) };
     if (remembered && remembered.cameraId === want) return { kind: 'target', target: { ...remembered, source: 'remembered' } };
     return settled ? { kind: 'connect' } : { kind: 'searching' };
   }

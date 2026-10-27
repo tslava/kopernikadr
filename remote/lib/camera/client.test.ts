@@ -119,6 +119,13 @@ describe('selectTarget matrix', () => {
     expect(sel({ found: [svc('A', '1.1.1.1')] })).toEqual({ kind: 'searching' });
     expect(sel({ found: [svc('A', '1.1.1.1')], settled: true })).toMatchObject({ kind: 'target', target: { cameraId: 'A' } });
   });
+  it('unbound: the remembered camera is not around but exactly one other is → that one, once settled', () => {
+    expect(sel({ remembered: A, found: [svc('X', '9.9.9.9')], settled: true })).toMatchObject({ target: { cameraId: 'X', source: 'nsd' } });
+    expect(sel({ remembered: A, settled: true })).toMatchObject({ target: { cameraId: 'cam-A', source: 'remembered' } });
+    expect(sel({ remembered: A, found: [svc('X', '9.9.9.9'), svc('Y', '8.8.8.8')], settled: true })).toMatchObject({ target: { cameraId: 'cam-A' } });
+    // a bound project never switches cameras on its own
+    expect(sel({ requiredCameraId: 'cam-A', remembered: A, found: [svc('X', '9.9.9.9')], settled: true })).toMatchObject({ target: { cameraId: 'cam-A' } });
+  });
   it('unbound: none or several found → connect screen', () => {
     expect(sel({ settled: true })).toEqual({ kind: 'connect' });
     expect(sel({ found: [svc('A', '1.1.1.1'), svc('B', '2.2.2.2')], settled: true })).toEqual({ kind: 'connect' });
@@ -209,6 +216,36 @@ describe('CameraClient target selection', () => {
     expect(first.stopped).toBe(true);
     expect(r.conns).toHaveLength(2);
     expect(r.conn().url).toBe('ws://10.0.0.77:8765/ws/control');
+  });
+
+  it('remembered camera gone, the only camera around is another one: switches to it after the window', async () => {
+    const r = rig({ remembered: A });
+    r.client.start();
+    const first = r.conn();
+    r.nsd.found('kid', 'cam-K', '10.0.0.34');
+    expect(r.conns).toHaveLength(1); // still trying the remembered one inside the window
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(first.stopped).toBe(true);
+    expect(r.conn().url).toBe('ws://10.0.0.34:8765/ws/control');
+  });
+
+  it('connectTo: a tapped found camera replaces the current one; refused for unknown or wrong-project cameras', async () => {
+    const r = rig({ remembered: A });
+    r.client.start();
+    r.conn().hello();
+    r.nsd.found('b', 'cam-B', '10.0.0.6');
+    expect(r.client.connectTo('nope')).toBe(false);
+    expect(r.client.connectTo('cam-B')).toBe(true);
+    expect(r.conns).toHaveLength(2);
+    expect(r.conns[0].stopped).toBe(true);
+    expect(r.conn().url).toBe('ws://10.0.0.6:8765/ws/control');
+    r.conn().hello({ cameraId: 'cam-B' });
+    expect(r.saved.at(-1)).toEqual({ cameraId: 'cam-B', host: '10.0.0.6', port: 8765 });
+
+    const bound = rig({ requiredCameraId: 'cam-A' });
+    bound.client.start();
+    bound.nsd.found('b', 'cam-B', '10.0.0.6');
+    expect(bound.client.connectTo('cam-B')).toBe(false);
   });
 
   it('an NSD change never drops an online session', async () => {

@@ -202,6 +202,17 @@ export class CameraClient {
     return r;
   }
 
+  /** A found camera was tapped: connect to it. False if NSD no longer sees it, or the project needs another camera. */
+  connectTo(cameraId: string): boolean {
+    const s = [...this.#found.values()].find((x) => x.cameraId === cameraId);
+    if (!s || !this.#running || (this.#required !== null && this.#required !== cameraId)) return false;
+    this.#manual = { cameraId: s.cameraId, host: s.host, port: s.port, source: 'nsd' };
+    this.#wrongKey = null;
+    this.#dropConnection();
+    this.#reselect();
+    return true;
+  }
+
   // --- internals ---
 
   #patch(p: Partial<ClientSnapshot>): void {
