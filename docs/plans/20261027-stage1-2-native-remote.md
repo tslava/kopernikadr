@@ -493,35 +493,37 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/lib/app/boot.ts` + test, `remote/components/ConnectView.tsx`
 - Modify: `remote/components/AppShell.tsx`
 
-- [ ] boot: the native sweep (already at plugin load) → ProjectStore load + sweep → UI →
+- [x] boot: the native sweep (already at plugin load) → ProjectStore load + sweep → UI →
       CameraClient → hooks (`resolveOutstanding` → `reconcile`) on every session
-- [ ] the connect view:
+- [x] the connect view:
   - found cameras and their status;
   - a manual address field;
   - "Przejmij" after `4001`;
   - plain messages for BUSY and wrong-camera
-- [ ] from here on, the app runs the real flow end to end (no shooting UI yet)
-- [ ] write tests: the boot order with fakes; the connect view's states
-- [ ] the orchestrator runs it on the emulator against the fake camera: connects, reconciles
-- [ ] run tests — must pass before Task 13
+- [x] from here on, the app runs the real flow end to end (no shooting UI yet)
+- [x] write tests: the boot order with fakes; the connect view's states
+- [x] the orchestrator runs it on the emulator against the fake camera: connects, reconciles
+- [x] run tests — must pass before Task 13
+
+- ➕ Task 12: emulator check 2026-10-27 — manual connect to the fake camera at `10.0.2.2:8765` → online, back to projects with the badge. Transfer and reconcile are stubs in `remote/lib/app/app.ts` until Tasks 10/11
 
 ### Task 13: Preview with watchdog + onion skin
 
 **Files:**
 - Create: `remote/components/{Preview.tsx,OnionSkin.tsx}`, `remote/lib/camera/previewController.ts` + test
 
-- [ ] `previewController` over remote-core `PreviewLoop`:
+- [x] `previewController` over remote-core `PreviewLoop`:
   - the 3 s watchdog;
   - restart on resume / new `bootId` / new session;
   - closes the previous bitmap;
   - the preview quality is a parent setting
-- [ ] onion skin:
+- [x] onion skin:
   - the last local frame's `play`, else `thumb`, else nothing ("no frames yet" state);
   - opacity and toggle (as in remote-lite);
   - the 3×3 grid is a parent toggle
-- [ ] write tests: the watchdog fires, restart on a new bootId, no double loops, the "no frames
+- [x] write tests: the watchdog fires, restart on a new bootId, no double loops, the "no frames
       yet" state
-- [ ] run tests — must pass before Task 14
+- [x] run tests — must pass before Task 14
 
 ### Task 14: Capture view (kid UI)
 
@@ -580,17 +582,19 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Modify: `remote/components/PlayView.tsx`
 - Create: `remote/lib/play/{player.ts,ring.ts,frameSource.ts}` + tests
 
-- [ ] `frameSource`: local `play`, else `full` with `createImageBitmap(..., {resizeWidth: 1440,
+- [x] `frameSource`: local `play`, else `full` with `createImageBitmap(..., {resizeWidth: 1440,
       resizeHeight: 1080})`; shared with export
-- [ ] the canvas player:
+- [x] the canvas player:
   - a ring buffer of 8 bitmaps, closed on eviction;
   - rAF timing at the project's fps;
   - play/pause, loop
-- [ ] non-local and `unavailable` frames are skipped, with a "N klatek jeszcze się pobiera" note
-- [ ] the ring buffer is released before an export and when leaving the view
-- [ ] write tests: the scheduler with a fake clock, eviction closes bitmaps, the `full` fallback,
+- [x] non-local and `unavailable` frames are skipped, with a "N klatek jeszcze się pobiera" note
+- [x] the ring buffer is released before an export and when leaving the view
+- [x] write tests: the scheduler with a fake clock, eviction closes bitmaps, the `full` fallback,
       skipping
-- [ ] run tests — must pass before Task 18
+- [x] run tests — must pass before Task 18
+
+- ➕ Task 17: `PlayView` takes `project`/`frameUrl` props; `AppShell` wiring comes with Task 14/16 (UI wiring)
 
 ### Task 18: Export from the app
 
