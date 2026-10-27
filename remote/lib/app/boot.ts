@@ -24,13 +24,21 @@ export interface AppContext {
   sweep: SweepReport;
 }
 
+export interface TransferEnv {
+  store: ProjectStore;
+  /** `client.request`; rejects while offline. */
+  request: (op: string, args: object, opts?: { timeoutMs?: number }) => Promise<any>;
+  /** The connected camera's address, or null while not online. */
+  target: () => { host: string; port: number } | null;
+}
+
 export interface BootDeps {
   fs: FileAdapter;
   verify: VerifyFn;
   nsd: NsdAdapter;
-  /** Task 10 provides the real one; it gets the store so it can read/merge frames. */
-  createTransfer: (store: ProjectStore) => Transfer;
-  /** Task 11 provides the real one. */
+  /** Builds the transfer layer; `request`/`target` read the client lazily (it is created after capture). */
+  createTransfer: (env: TransferEnv) => Transfer;
+  /** The per-session hook (after `resolveOutstanding`). It is responsible for `transfer.kick()`. */
   reconcile: Reconcile;
   /** Test seams: connection factory, search window, fetch, ... */
   clientDeps?: Partial<CameraClientDeps>;
@@ -46,9 +54,16 @@ export async function boot(deps: BootDeps): Promise<AppContext> {
   await store.load();
   const sweep = await (deps.sweep ?? runStartupSweep)(store, deps.fs, { verify: deps.verify });
 
-  const transfer = deps.createTransfer(store);
   // CameraClient needs capture.resolveOutstanding, capture needs the client: tie the knot lazily.
   let client!: CameraClient;
+  const transfer = deps.createTransfer({
+    store,
+    request: (op, args, opts) => client.request(op, args, opts),
+    target: () => {
+      const snap = client.snapshot;
+      return snap.status === 'online' && snap.target ? { host: snap.target.host, port: snap.target.port } : null;
+    },
+  });
   const capture = (deps.createCapture ?? createCapture)({
     store,
     transfer,

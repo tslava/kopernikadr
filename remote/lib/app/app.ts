@@ -8,20 +8,14 @@ import { nativeNsdAdapter } from '../discovery';
 import { createAppFileAdapter } from '../projects/files';
 import { createWebVerify } from '../projects/sweep';
 import { createStore } from '../state/store';
-import type { Transfer } from '../transfer/types';
-import { boot, type AppContext, type Reconcile } from './boot';
+import { createAppTransferIO } from '../transfer/appIO';
+import { createTransfer, type TransferService } from '../transfer/queue';
+import { createReconcile, type Reconcile } from '../transfer/reconcile';
+import { boot, type AppContext } from './boot';
 
 export type BootState = { phase: 'booting' } | { phase: 'ready'; app: AppContext } | { phase: 'failed'; error: string };
 
 export const bootState = createStore<BootState>({ phase: 'booting' });
-
-// TODO Task 10/11: replace stub. Transfer (queue/download/ack) is being written in parallel.
-export const stubTransfer: Transfer = {
-  enqueue: () => {},
-  ackNow: () => {},
-};
-// TODO Task 10/11: replace stub. Reconcile (§5.7, Task 11) is being written in parallel.
-export const stubReconcile: Reconcile = () => {};
 
 let started: Promise<void> | undefined;
 
@@ -30,12 +24,18 @@ export function startApp(): Promise<void> {
   return (started ??= (async () => {
     try {
       const fs = createAppFileAdapter();
+      let hook: Reconcile | undefined;
       const app = await boot({
         fs,
         verify: createWebVerify(fs, (u) => fetch(Capacitor.convertFileSrc(u)).then((r) => r.arrayBuffer())),
         nsd: nativeNsdAdapter(),
-        createTransfer: () => stubTransfer, // TODO Task 10/11: replace stub
-        reconcile: stubReconcile, // TODO Task 10/11: replace stub
+        createTransfer: ({ store, request, target }) => {
+          const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target });
+          hook = createReconcile({ store, transfer: service });
+          return service;
+        },
+        // runs after resolveOutstanding on every session; calls transfer.kick() itself (also when the listing fails)
+        reconcile: (ctx) => hook!(ctx),
       });
       bootState.set({ phase: 'ready', app });
     } catch (e) {
