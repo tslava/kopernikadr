@@ -368,18 +368,19 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `remote/android/app/src/main/java/pl/slava/kopernikadr/remote/native/{GalleryPublisher.kt,KopernikadrNativePlugin.kt}`, `remote/lib/native.ts`
 - Modify: `remote/android/app/src/main/java/.../MainActivity.java|kt` (`registerPlugin`)
 
-- [ ] `GalleryPublisher`:
-  - [ ] free-space check;
-  - [ ] insert pending → copy → `IS_PENDING=0` → delete the temp → URI;
-  - [ ] on failure, delete our pending row;
-  - [ ] cleanup queries pending rows with `QUERY_ARG_MATCH_PENDING`, our own only
-- [ ] thin `@PluginMethod`s for every API in `native.ts`; base64 decode for `videoWriteAt`
-- [ ] write tests: `GalleryPublisher` decision logic behind a `MediaStoreGateway` seam (order of
+- [x] `GalleryPublisher`:
+  - [x] free-space check;
+  - [x] insert pending → copy → `IS_PENDING=0` → delete the temp → URI;
+  - [x] on failure, delete our pending row;
+  - [x] cleanup queries pending rows with `QUERY_ARG_MATCH_PENDING`, our own only
+- [x] thin `@PluginMethod`s for every API in `native.ts`; base64 decode for `videoWriteAt`
+- [x] write tests: `GalleryPublisher` decision logic behind a `MediaStoreGateway` seam (order of
       calls, cleanup filter)
-- [ ] on the emulator:
-  - [ ] publish a small MP4 → visible in the gallery;
-  - [ ] pending-row cleanup: insert pending, kill the app, run cleanup, and the row is gone
-- [ ] run tests — must pass before Task 10
+- [x] on the emulator:
+  - [x] publish a small MP4 → visible in the gallery;
+  - [x] pending-row cleanup: insert pending, kill the app, run cleanup, and the row is gone
+        (2026-10-27: `deletedRows: 1`, the published row stayed)
+- [x] run tests — must pass before Task 10
 
 ### Task 7: NSD discovery (plugin or own bridge) + parsing (TDD)
 
@@ -387,15 +388,15 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `packages/remote-core/src/nsd.js` + test, `remote/lib/discovery.ts` + test
 - Modify: `remote/package.json` (if the plugin is chosen) or add `NsdBridge.kt` to KopernikadrNative
 
-- [ ] tests first, then `parseService` (TXT, trailing dot, `pv`, missing `id`)
-- [ ] evaluate `@mhaberler/capacitor-zeroconf-nsd` (≥14 days, peer Capacitor 8, Android
+- [x] tests first, then `parseService` (TXT, trailing dot, `pv`, missing `id`)
+- [x] evaluate `@mhaberler/capacitor-zeroconf-nsd` (≥14 days, peer Capacitor 8, Android
       NsdManager). Use it if OK, else write `NsdBridge` (discover + resolve + events). Record the
-      choice
-- [ ] `discovery.ts` (probe scope only): discover for N s, list results, report latency
-- [ ] write tests with a fake plugin (found, none, two cameras, bad TXT)
-- [ ] emulator: try discovery of the phone. ⚠️ mDNS usually doesn't cross the emulator NAT; if
-      so, record it and verify on the tablet (Task 14)
-- [ ] run tests — must pass before Task 11
+      choice → own `KopernikadrNsd` plugin (`remote/.../nsd/`): `registerServiceInfoCallback` on API 34+, serial `resolveService` below
+- [x] `discovery.ts` (probe scope only): discover for N s, list results, report latency
+- [x] write tests with a fake plugin (found, none, two cameras, bad TXT)
+- [x] emulator: try discovery of the phone. ⚠️ mDNS doesn't cross the emulator NAT (confirmed);
+      discovery is verified on the tablet (Task 14)
+- [x] run tests — must pass before Task 11
 
 ### Task 8: Release signing + scripts
 
