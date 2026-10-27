@@ -7,6 +7,8 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import java.io.Closeable
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -283,9 +285,19 @@ class Spool private constructor(
     }
 
     /** Deletes the three files of [frameId] (none of its other rows' data). Call it for a reclaimed frame only. */
-    internal fun deleteFiles(frameId: String) {
-        for (v in FrameVariant.entries) file(frameId, v).delete()
+    internal fun deleteFiles(frameId: String): Long {
+        var freed = 0L
+        for (v in FrameVariant.entries) {
+            val f = file(frameId, v)
+            val size = f.length()
+            if (!f.exists()) continue
+            if (f.delete()) freed += size else failedDeletes += f.name
+        }
+        return freed
     }
+
+    /** Names the last [deleteFiles] calls could not delete (a failed delete is reported, never ignored). */
+    internal val failedDeletes = mutableListOf<String>()
 
     /**
      * ARCHITECTURE §4.6. Run once per process, before the server accepts commands, and nothing else
@@ -312,9 +324,30 @@ class Spool private constructor(
             val full = file(r.frameId, FrameVariant.FULL)
             when {
                 r.state == STATE_PENDING -> {
-                    val bytes = if (full.isFile) runCatching { full.readBytes() }.getOrNull() else null
+                    fun valid(f: File): ByteArray? {
+                        val b = if (f.isFile) runCatching { f.readBytes() }.getOrNull() else null
+                        return b?.takeIf { JpegCheck.dimensions(it) != null && runCatching { isDecodable(it) }.getOrDefault(false) }
+                    }
+                    var bytes = valid(full)
+                    if (bytes == null) {
+                        // process death between the fsync of the tmp and its rename leaves a complete photo in the tmp:
+                        // finish the rename instead of discarding it
+                        val tmps = dir.listFiles().orEmpty().sortedBy { it.name }.filter {
+                            val m = SpoolFiles.NAME.matchEntire(it.name)
+                            it.isFile && m != null && m.groupValues[1] == r.frameId && m.groupValues[2] == "full" &&
+                                m.groupValues[3].isNotEmpty()
+                        }
+                        for (t in tmps) {
+                            val b = valid(t) ?: continue
+                            if (full.exists() && !SpoolFiles.quarantine(dir, full)) break
+                            val moved = runCatching {
+                                Files.move(t.toPath(), full.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                            }.isSuccess
+                            if (moved) { bytes = b; break }
+                        }
+                    }
                     val dims = bytes?.let { JpegCheck.dimensions(it) }
-                    if (bytes != null && dims != null && runCatching { isDecodable(bytes) }.getOrDefault(false)) {
+                    if (bytes != null && dims != null) {
                         commit(
                             r.frameId,
                             CommitMeta(
@@ -350,6 +383,8 @@ class Spool private constructor(
             val m = SpoolFiles.NAME.matchEntire(f.name) ?: continue
             val isTmp = m.groupValues[3].isNotEmpty()
             when {
+                // a full tmp may be the only copy of a photo: never deleted, only play/thumb tmps are
+                isTmp && m.groupValues[2] == "full" -> if (SpoolFiles.quarantine(dir, f)) quarantined++
                 isTmp -> if (f.delete()) deleted++
                 m.groupValues[1] in known -> Unit
                 m.groupValues[2] == "full" -> if (SpoolFiles.quarantine(dir, f)) quarantined++

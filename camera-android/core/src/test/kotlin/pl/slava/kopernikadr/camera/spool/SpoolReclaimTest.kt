@@ -101,6 +101,23 @@ class SpoolReclaimTest {
     }
 
     @Test
+    fun `a failed delete is not counted as freed and reclaiming stops`() {
+        val a = frame("native", "r1", ackedAt = 10)
+        val b = frame("native", "r2", ackedAt = 20)
+        // the thumb cannot be deleted: a non-empty directory sits in its place
+        val thumb = spool.file(a, FrameVariant.THUMB)
+        thumb.delete()
+        thumb.mkdir()
+        File(thumb, "x").writeText("x")
+        val logs = mutableListOf<String>()
+        val r = SpoolReclaimer(spool, derived, freeBytes = { 0L }, log = { logs += it })
+        assertEquals(0, r.reclaimUntil(Long.MAX_VALUE))
+        assertTrue(logs.any { it.contains("failed") })
+        assertTrue(exists(b)) // the next acked frame was not touched
+        assertFalse(spool.isReclaimed(b))
+    }
+
+    @Test
     fun `nothing is reclaimed when there is enough space`() {
         val a = frame("native", "r1", ackedAt = 10)
         assertEquals(0, reclaimer(budget = 100 * one).reclaimUntil(one))
