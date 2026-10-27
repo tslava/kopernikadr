@@ -641,7 +641,7 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
   - remote android build;
   - `cd remote && npm run test:scripts`;
   - `remote-core`, `probe-client`, `remote-lite`, `scripts` tests.
-- [ ] A review by a Claude `code-reviewer` agent on the stage diff; fix the findings.
+- [x] A review by a Claude `code-reviewer` agent on the stage diff; fix the findings. (16 findings + 3 acceptance observations fixed in 3 commits; checked on emulator-5584: phone and tablet arithmetic confirms, sticker drag, Od początku selection, no sticker chrome while playing.)
 
 ### Task 16: [Final] Update documentation
 - [ ] `docs/ARCHITECTURE.md`:
