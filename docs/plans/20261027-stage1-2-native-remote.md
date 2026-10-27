@@ -380,21 +380,21 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/lib/camera/{client.ts,discover.ts}` + tests
 - Modify (only if a gap is found, additive): `packages/remote-core/src/connection.js` + its tests
 
-- [ ] tests first, then target selection:
+- [x] tests first, then target selection:
   - a project bound to a `cameraId` looks for that one;
   - otherwise the remembered camera, else the single one found;
   - else the connect screen.
 
   Manual `host:port` is checked with `GET /info`; `rememberedCamera` is saved through the store.
-- [ ] reuse `CameraConnection`'s loop. Never open a second one. App resume uses `reconnectNow()`
-- [ ] status: `searching | connecting | online | offline | busy | replaced | wrong-camera`
-- [ ] the `hello` cameraId ≠ the project's → `wrong-camera`; a `bootId` change is surfaced
-- [ ] hooks run on **every** new session, a reconnect with the same `bootId` included:
+- [x] reuse `CameraConnection`'s loop. Never open a second one. App resume uses `reconnectNow()`
+- [x] status: `searching | connecting | online | offline | busy | replaced | wrong-camera`
+- [x] the `hello` cameraId ≠ the project's → `wrong-camera`; a `bootId` change is surfaced
+- [x] hooks run on **every** new session, a reconnect with the same `bootId` included:
       `resolveOutstanding()` then `reconcile()`, in that order
-- [ ] write tests: target selection, wrong camera, hook order, hooks on every session, resume. Add
+- [x] write tests: target selection, wrong camera, hook order, hooks on every session, resume. Add
       core tests only for gaps (e.g. 4002 on a superseded socket) and then run the remote-lite
       tests
-- [ ] run tests — must pass before Task 9
+- [x] run tests — must pass before Task 9
 
 ### Task 9: Capture flow: outstanding, timeouts, resolveOutstanding (TDD)
 
