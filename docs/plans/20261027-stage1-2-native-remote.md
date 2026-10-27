@@ -474,7 +474,7 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Create: `remote/lib/transfer/reconcile.ts` + test, `remote/lib/transfer/integration.test.ts`
 
-- [ ] tests first, then `reconcile()` over `listFrames` (our clientId, unacked, paged):
+- [x] tests first, then `reconcile()` over `listFrames` (our clientId, unacked, paged):
   - ack-eligible → ack;
   - pending → resume;
   - unknown in a live project → merge only if `project.cameraId` is null or equals the current
@@ -484,10 +484,10 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - a camera mismatch → recovered project;
   - a local `pending` frame that vanished from `listFrames` → `unavailable` with "lost on the
     phone", surfaced to the parent
-- [ ] integration test against `fake-camera.mjs`:
+- [x] integration test against `fake-camera.mjs`:
   - capture → transfer → ack → reconnect → reconcile;
   - plus the Task 3 switches: new `bootId`, `cameraId` change, 404 `full`, reclaim
-- [ ] run tests — must pass before Task 12
+- [x] run tests — must pass before Task 12
 
 ### Task 12: Boot wiring + connect view
 
