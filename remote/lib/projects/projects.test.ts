@@ -441,6 +441,58 @@ describe('validation: index.json / project.json v1', () => {
     expect(parseProject(JSON.parse(JSON.stringify(p)))).toEqual(p);
     expect(parseProject(JSON.parse(JSON.stringify(project)))).toEqual(project);
   });
+  describe('cut and stickers', () => {
+    const sticker = { id: 's1', emoji: '1F436', x: 0.5, y: 0.5, size: 0.3, rot: 15, on: ['F1', 'F2'] };
+    it('absent -> undefined', () => {
+      const p = parseProject(goodProject());
+      expect(p.cut).toBeUndefined();
+      expect(p.stickers).toBeUndefined();
+      expect('cut' in p).toBe(false);
+      expect('stickers' in p).toBe(false);
+    });
+    it('a valid round-trip', () => {
+      const raw = { ...goodProject(), cut: [{ id: 'F1', frameId: 'F1', hold: 2 }, { id: 'U1', frameId: 'F1', hold: 1, off: true }], stickers: [sticker] };
+      const p = parseProject(JSON.parse(JSON.stringify(raw)));
+      expect(p.cut).toEqual(raw.cut);
+      expect(p.stickers).toEqual(raw.stickers);
+      expect(parseProject(JSON.parse(JSON.stringify(p)))).toEqual(p);
+    });
+    it('a malformed entry is dropped, the rest survives', () => {
+      const raw = {
+        ...goodProject(),
+        cut: [{ id: 'F1', frameId: 'F1', hold: 1 }, { id: '', frameId: 'F1', hold: 1 }, { id: 'a', hold: 1 }, { id: 'b', frameId: 'F2', hold: 'x' }, 7, null, { id: 'F2', frameId: 'F2', hold: 3, off: 'yes' }],
+        stickers: [sticker, { ...sticker, id: 's2', emoji: 5 }, { ...sticker, id: 's3', on: 'F1' }, 'x'],
+      };
+      const p = parseProject(raw);
+      expect(p.cut).toEqual([{ id: 'F1', frameId: 'F1', hold: 1 }, { id: 'F2', frameId: 'F2', hold: 3 }]);
+      expect(p.stickers).toEqual([sticker]);
+    });
+    it('a malformed field -> undefined, the project stays readable', () => {
+      const p = parseProject({ ...goodProject(), cut: 'nope', stickers: { a: 1 } });
+      expect(p.cut).toBeUndefined();
+      expect(p.stickers).toBeUndefined();
+      expect(p.frames).toHaveLength(2);
+    });
+    it('clamps hold, size and position; non-string `on` members are dropped', () => {
+      const p = parseProject({
+        ...goodProject(),
+        cut: [{ id: 'a', frameId: 'F1', hold: 99 }, { id: 'b', frameId: 'F1', hold: -3 }, { id: 'c', frameId: 'F1', hold: 2.6 }],
+        stickers: [{ ...sticker, x: 9, y: -9, size: 5, on: ['F1', 3, ''] }, { ...sticker, id: 's2', size: 0 }],
+      });
+      expect(p.cut?.map((c) => c.hold)).toEqual([8, 1, 3]);
+      expect(p.stickers?.[0]).toMatchObject({ x: 1.25, y: -0.25, size: 1, on: ['F1'] });
+      expect(p.stickers?.[1].size).toBe(0.05);
+    });
+    it('a later duplicate id is dropped', () => {
+      const p = parseProject({
+        ...goodProject(),
+        cut: [{ id: 'a', frameId: 'F1', hold: 1 }, { id: 'a', frameId: 'F2', hold: 4 }],
+        stickers: [sticker, { ...sticker, x: 0.1 }],
+      });
+      expect(p.cut).toEqual([{ id: 'a', frameId: 'F1', hold: 1 }]);
+      expect(p.stickers).toEqual([sticker]);
+    });
+  });
   it('unknown version -> unknown_version (future 2, 0, and a non-number is bad_type)', () => {
     expect(code(() => parseIndex({ ...goodIndex(), version: 2 }))).toBe('unknown_version index.version');
     expect(code(() => parseProject({ ...goodProject(), version: 0 }))).toBe('unknown_version project.version');

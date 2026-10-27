@@ -293,21 +293,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/projects/timeline.test.ts`
 - Modify: `remote/lib/projects/projects.test.ts`
 
-- [ ] write tests first:
+- [x] write tests first:
   - `timeline()` with no `cut` = frames in seq order, `id == frameId`, hold 1;
   - with `cut`: cut order, then unreferenced frames appended in seq order;
   - entries of frames gone from `frames` are skipped;
   - `playableItems()` filters off, hidden, pending and unavailable.
-- [ ] write parse tests:
+- [x] write parse tests:
   - `cut`/`stickers` absent → undefined;
   - a valid round-trip;
   - a malformed entry is dropped;
   - a malformed field → undefined, project still readable;
   - clamps;
   - a later duplicate entry id is dropped.
-- [ ] add the `CutEntry` and `Sticker` types and the optional `Project.cut?`/`stickers?`; extend `parseProject` (lenient).
-- [ ] implement `timeline(project)` and `playableItems(project)` in `timeline.ts`.
-- [ ] run tests — must pass before Task 2.
+- [x] add the `CutEntry` and `Sticker` types and the optional `Project.cut?`/`stickers?`; extend `parseProject` (lenient).
+- [x] implement `timeline(project)` and `playableItems(project)` in `timeline.ts`.
+- [x] run tests — must pass before Task 2.
 
 ### Task 2: Edit reducers + history (TDD)
 

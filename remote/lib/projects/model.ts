@@ -26,6 +26,39 @@ export interface FrameEntry {
   unavailable?: Unavailable;
 }
 
+/** One shown slot of the movie (the edit list over the frame pool; see `timeline.ts`). */
+export interface CutEntry {
+  /** == frameId for a frame's first entry; a new ULID for a duplicate. */
+  id: string;
+  frameId: string;
+  /** Ticks the entry stays on screen (a tick = 1/fps). */
+  hold: number;
+  /** Not in the movie (trim / "remove from movie"); the frame itself is kept. */
+  off?: true;
+}
+
+export interface Sticker {
+  id: string;
+  /** OpenMoji hexcode, e.g. "1F436". */
+  emoji: string;
+  /** Centre, 0..1 of the 4:3 frame (may hang partly off-frame). */
+  x: number;
+  y: number;
+  /** Width as a fraction of the frame width. */
+  size: number;
+  /** Degrees. */
+  rot: number;
+  /** CutEntry ids it is shown on. */
+  on: string[];
+}
+
+export const HOLD_MIN = 1;
+export const HOLD_MAX = 8;
+export const STICKER_SIZE_MIN = 0.05;
+export const STICKER_SIZE_MAX = 1;
+export const STICKER_POS_MIN = -0.25;
+export const STICKER_POS_MAX = 1.25;
+
 export interface Outstanding {
   reqId: string;
   cameraId: string;
@@ -45,6 +78,10 @@ export interface Project {
   frames: FrameEntry[];
   deletedFrameIds: string[];
   outstanding: Outstanding[];
+  /** Edit list over `frames`; absent until the first edit (additive, optional). */
+  cut?: CutEntry[];
+  /** Emoji stickers, drawn in array order (last = on top) (additive, optional). */
+  stickers?: Sticker[];
 }
 
 export interface IndexProject {
@@ -181,6 +218,53 @@ export function parseIndex(raw: unknown): ProjectIndex {
   };
 }
 
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v !== '';
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Lenient: a malformed entry is dropped, and so is a later duplicate id; a non-array field is `undefined`. */
+function parseCut(raw: unknown): CutEntry[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const out: CutEntry[] = [];
+  for (const e of raw) {
+    if (typeof e !== 'object' || e === null || Array.isArray(e)) continue;
+    const c = e as Obj;
+    if (!nonEmpty(c.id) || !nonEmpty(c.frameId) || !finite(c.hold) || seen.has(c.id)) continue;
+    seen.add(c.id);
+    out.push({
+      id: c.id,
+      frameId: c.frameId,
+      hold: clamp(Math.round(c.hold), HOLD_MIN, HOLD_MAX),
+      ...(c.off === true ? { off: true as const } : {}),
+    });
+  }
+  return out;
+}
+
+function parseStickers(raw: unknown): Sticker[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const out: Sticker[] = [];
+  for (const e of raw) {
+    if (typeof e !== 'object' || e === null || Array.isArray(e)) continue;
+    const s = e as Obj;
+    if (!nonEmpty(s.id) || !nonEmpty(s.emoji) || !finite(s.x) || !finite(s.y) || !finite(s.size) || !finite(s.rot)) continue;
+    if (!Array.isArray(s.on) || seen.has(s.id)) continue;
+    seen.add(s.id);
+    out.push({
+      id: s.id,
+      emoji: s.emoji,
+      x: clamp(s.x, STICKER_POS_MIN, STICKER_POS_MAX),
+      y: clamp(s.y, STICKER_POS_MIN, STICKER_POS_MAX),
+      size: clamp(s.size, STICKER_SIZE_MIN, STICKER_SIZE_MAX),
+      rot: s.rot,
+      on: s.on.filter(nonEmpty),
+    });
+  }
+  return out;
+}
+
 export function parseProject(raw: unknown): Project {
   const o = obj(raw, 'project');
   version1(o, 'project');
@@ -215,6 +299,9 @@ export function parseProject(raw: unknown): Project {
     const oo = obj(x, path);
     return { reqId: nonEmptyStr(oo, 'reqId', path), cameraId: nonEmptyStr(oo, 'cameraId', path), sentAt: nonEmptyStr(oo, 'sentAt', path) };
   });
+  // non-critical: a malformed edit list or sticker list is ignored, the project stays readable
+  const cut = parseCut(o.cut);
+  const stickers = parseStickers(o.stickers);
   return {
     version: 1,
     id: nonEmptyStr(o, 'id', 'project'),
@@ -227,5 +314,7 @@ export function parseProject(raw: unknown): Project {
     frames,
     deletedFrameIds: strList(o, 'deletedFrameIds', 'project'),
     outstanding,
+    ...(cut ? { cut } : {}),
+    ...(stickers ? { stickers } : {}),
   };
 }
