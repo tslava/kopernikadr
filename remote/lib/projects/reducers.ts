@@ -233,8 +233,11 @@ export function hideProject(index: ProjectIndex, projectId: string, nowMs: numbe
   };
 }
 
-export function unhideProject(index: ProjectIndex, projectId: string): ProjectIndex {
-  if (!index.pendingProjectDeletes.some((p) => p.id === projectId)) return index;
+/** Undo. With `nowMs`, refused (same index) once the deadline has passed: the window is over. */
+export function unhideProject(index: ProjectIndex, projectId: string, nowMs?: number): ProjectIndex {
+  const pending = index.pendingProjectDeletes.find((p) => p.id === projectId);
+  if (!pending) return index;
+  if (nowMs !== undefined && Date.parse(pending.deadline) <= nowMs) return index;
   return { ...index, pendingProjectDeletes: index.pendingProjectDeletes.filter((p) => p.id !== projectId) };
 }
 

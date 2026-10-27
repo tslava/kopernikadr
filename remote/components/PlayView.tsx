@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import type { OverlayStack } from '@/lib/app/overlays';
 import type { Translate } from '@/lib/i18n';
 import type { Project } from '@/lib/projects/model';
 import { createFrameSource, PLAY_HEIGHT, PLAY_WIDTH, type FrameUrl } from '@/lib/play/frameSource';
 import { createPlayer, type Clock, type Player, type PlayerStatus } from '@/lib/play/player';
 import { createRing } from '@/lib/play/ring';
 import { createNativeWriter } from '@/lib/export/nativeWriter';
-import { createExportController } from '@/lib/export/projectExport';
+import { isActive, type CameraLink } from '@/lib/export/projectExport';
+import { sharedExportFor } from '@/lib/export/sharedExport';
 import type { Store } from '@/lib/state/store';
 import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
@@ -35,7 +37,9 @@ export interface PlayViewProps {
   /** `(projectId, frameId, kind) => Capacitor.convertFileSrc(...)`. */
   frameUrl?: FrameUrl;
   /** What the export needs from the app; without it there is no export button. */
-  exportEnv?: { transfer: TransferPause; exporting: Store<boolean> };
+  exportEnv?: { key: object; transfer: TransferPause; exporting: Store<boolean>; overlays?: OverlayStack };
+  /** Camera connection, for the export gate (frames of a gone camera are skippable). */
+  link?: CameraLink;
   ref?: Ref<PlayViewHandle>;
 }
 
@@ -43,7 +47,7 @@ const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), s
 
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
-export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, ref }: PlayViewProps) {
+export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, link, ref }: PlayViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const player = useRef<Player | null>(null);
   const [status, setStatus] = useState<PlayerStatus>(IDLE);
@@ -53,25 +57,37 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
   // Export (Task 18): the controller reads the latest project through a ref.
   const projectRef = useRef(project);
   projectRef.current = project;
-  const exporter = useMemo(
-    () =>
-      exportEnv && frameUrl
-        ? createExportController({
-            getProject: () => projectRef.current,
-            transfer: exportEnv.transfer,
-            exporting: exportEnv.exporting,
-            releasePlayer: () => player.current?.release(),
-            frameSource: createFrameSource({ frameUrl }),
-            createWriter: () => createNativeWriter(),
-          })
-        : null,
-    [exportEnv, frameUrl],
+  const linkRef = useRef(link);
+  linkRef.current = link;
+  // One controller per app: coming back to Play while an export runs shows that export.
+  const shared = useMemo(
+    () => (exportEnv ? sharedExportFor(exportEnv.key, { transfer: exportEnv.transfer, exporting: exportEnv.exporting, createWriter: () => createNativeWriter() }) : null),
+    [exportEnv],
   );
+  const exporter = frameUrl ? (shared?.controller ?? null) : null;
+  useEffect(() => {
+    if (!shared || !frameUrl) return;
+    shared.bind({
+      getProject: () => projectRef.current,
+      link: () => linkRef.current,
+      releasePlayer: () => player.current?.release(),
+      frameSource: createFrameSource({ frameUrl }),
+    });
+  }, [shared, frameUrl]);
   const exportPhase = useStore(exporter?.state ?? NOT_ACTIVE, (s) => s.phase);
   const exportBusy = exportPhase !== 'idle' && exportPhase !== 'done' && exportPhase !== 'cancelled' && exportPhase !== 'failed';
-  const [exportOpen, setExportOpen] = useState(false);
-  // Leaving the screen: stop an export that is still cancellable (later phases run to the end).
-  useEffect(() => () => void exporter?.cancel(), [exporter]);
+  const [exportOpen, setExportOpen] = useState(() => (exporter ? isActive(exporter.state.get()) : false));
+  // Android Back closes the dialog first (an active export keeps it: there is nothing to dismiss).
+  const overlays = exportEnv?.overlays;
+  useEffect(() => {
+    if (!exportOpen || !overlays || !exporter) return;
+    return overlays.push(() => {
+      if (!isActive(exporter.state.get())) {
+        exporter.reset();
+        setExportOpen(false);
+      } else setExportOpen(true);
+    });
+  }, [exportOpen, overlays, exporter]);
 
   useEffect(() => {
     if (!frameUrl) return;
@@ -92,9 +108,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
   }, [id, frameUrl]);
 
   useEffect(() => {
+    if (exportBusy) return; // the ring is released for the export: do not reload it meanwhile
     player.current?.setFps(project?.fps ?? 8);
     player.current?.setFrames(project?.frames ?? []);
-  }, [project, frameUrl, id]);
+  }, [project, frameUrl, id, exportBusy]);
 
   return (
     <main className="screen" data-project={id}>
@@ -135,7 +152,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
       {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
       {status.downloading > 0 && <p className="note">{t('play.downloading', { n: status.downloading })}</p>}
       {exporter && exportOpen && project && (
-        <ExportDialog t={t} project={project} controller={exporter} onClose={() => setExportOpen(false)} />
+        <ExportDialog t={t} project={project} controller={exporter} link={link} onClose={() => setExportOpen(false)} />
       )}
     </main>
   );

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { Key, Translate } from '@/lib/i18n';
-import { canCancel, exportGate, isActive, type ExportController, type ExportFailure } from '@/lib/export/projectExport';
+import { canCancel, exportGate, isActive, type CameraLink, type ExportController, type ExportFailure } from '@/lib/export/projectExport';
 import type { Project } from '@/lib/projects/model';
 import { useStore } from '@/lib/state/useStore';
 
@@ -18,14 +18,16 @@ export interface ExportDialogProps {
   /** The live project: the gate follows it (frames arriving, going unavailable). */
   project: Project;
   controller: ExportController;
+  /** Camera connection: when it is gone, the frames still downloading become skippable. */
+  link?: CameraLink;
   onClose: () => void;
 }
 
 /** Thin view over the export gate + controller state (all logic lives in lib/export/projectExport.ts). */
-export default function ExportDialog({ t, project, controller, onClose }: ExportDialogProps) {
+export default function ExportDialog({ t, project, controller, link, onClose }: ExportDialogProps) {
   const state = useStore(controller.state);
   const [confirmed, setConfirmed] = useState(false);
-  const gate = exportGate(project, confirmed);
+  const gate = exportGate(project, confirmed, link);
 
   const start = (confirmedSkip: boolean) => void controller.start({ confirmedSkip });
   const close = () => {

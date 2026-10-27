@@ -85,15 +85,28 @@ export type ExportGate =
 
 const visible = (p: Project): FrameEntry[] => p.frames.filter((f) => f.hiddenUntil === null);
 
+/** What the gate needs to know about the camera connection. */
+export interface CameraLink {
+  online: boolean;
+  /** The connected camera's id (null while not online). */
+  cameraId: string | null;
+}
+
+const cameraGone = (project: Project, link: CameraLink): boolean =>
+  !link.online || (project.cameraId !== null && link.cameraId !== project.cameraId);
+
 /**
  * `unavailable` frames are not "downloading" (the download gave up on them), so they never
  * deadlock the gate. `confirmedSkip`: the parent agreed to skip them.
  */
-export function exportGate(project: Project, confirmedSkip = false): ExportGate {
+export function exportGate(project: Project, confirmedSkip = false, link?: CameraLink): ExportGate {
   const frames = visible(project);
   const downloading = frames.filter((f) => f.state !== 'local' && !f.unavailable).length;
-  if (downloading > 0) return { kind: 'waiting', downloading };
-  const unavailable = frames.filter((f) => f.unavailable).length;
+  // The camera is gone (or it is another camera): the not-yet-local frames cannot arrive, so they
+  // are treated like `unavailable` ones (skip them, with a confirm) instead of waiting forever.
+  const stuck = downloading > 0 && link !== undefined && cameraGone(project, link);
+  if (downloading > 0 && !stuck) return { kind: 'waiting', downloading };
+  const unavailable = frames.filter((f) => f.unavailable).length + (stuck ? downloading : 0);
   const playable = playableFrames(project.frames).length;
   if (playable === 0) return { kind: 'empty' };
   if (unavailable > 0 && !confirmedSkip) return { kind: 'confirm', unavailable, frames: playable };
@@ -140,6 +153,8 @@ export function classifyFailure(e: unknown): ExportFailure {
 export interface ExportDeps {
   /** The current project (read at start and again after the pause). */
   getProject: () => Project | null;
+  /** Camera connection, for the gate (frames that cannot arrive any more are skippable). */
+  link?: () => CameraLink | undefined;
   transfer: TransferPause;
   /** App-wide flag; shooting is blocked while it is on. */
   exporting: Store<boolean>;
@@ -224,6 +239,8 @@ export function createExportController(deps: ExportDeps): ExportController {
       // always: success, failure and cancel
       try {
         deps.transfer.resume();
+      } catch (e) {
+        console.error('export: transfer.resume failed', e); // the final state must still be set
       } finally {
         deps.exporting.set(false);
       }
@@ -235,10 +252,10 @@ export function createExportController(deps: ExportDeps): ExportController {
   return {
     state,
     async start(opts = {}) {
-      if (running || isActive(state.get())) return { started: false, reason: 'busy' };
+      if (running || isActive(state.get()) || deps.exporting.get()) return { started: false, reason: 'busy' };
       const project = deps.getProject();
       if (!project) return { started: false, reason: 'no-project' };
-      const gate = exportGate(project, opts.confirmedSkip === true);
+      const gate = exportGate(project, opts.confirmedSkip === true, deps.link?.());
       if (gate.kind !== 'ready') return { started: false, reason: gate.kind };
       running = true;
       try {

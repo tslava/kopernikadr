@@ -13,6 +13,8 @@ import { runStartupSweep, type SweepReport, type VerifyFn } from '../projects/sw
 import { ProjectStore } from '../projects/store';
 import { createStore, type Store } from '../state/store';
 import type { Transfer, TransferPause } from '../transfer/types';
+import { createOverlayStack, type OverlayStack } from './overlays';
+import { createOutstandingRetry } from './outstandingRetry';
 import { createLifecycle, type KeepAwakeAdapter, type Lifecycle } from './lifecycle';
 
 /** The per-session reconcile hook (plan Task 11). Runs after `resolveOutstanding`. */
@@ -28,6 +30,8 @@ export interface AppContext {
   sweep: SweepReport;
   /** Pause/resume, the keep-awake owner, the Diagnostics yield (plan Task 19). */
   lifecycle: Lifecycle;
+  /** Open drawers/dialogs: Android Back closes the topmost one first. */
+  overlays: OverlayStack;
 }
 
 export interface TransferEnv {
@@ -107,5 +111,12 @@ export async function boot(deps: BootDeps): Promise<AppContext> {
     exporting,
     keepAwake: deps.keepAwake ?? { acquire: async () => {}, release: async () => {} },
   });
-  return { store, client, capture, transfer, exporting, sweep, lifecycle };
+  // A stuck outstanding capture on a healthy connection is retried every 5 s (stops itself otherwise).
+  createOutstandingRetry({
+    client,
+    projects: store.state,
+    resolve: capture.resolveOutstanding,
+    active: () => !lifecycle.background,
+  });
+  return { store, client, capture, transfer, exporting, sweep, lifecycle, overlays: createOverlayStack() };
 }

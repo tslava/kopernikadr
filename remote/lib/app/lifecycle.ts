@@ -63,7 +63,10 @@ export class KeepAwakeManager {
     const want = this.#counts.export > 0 || (this.#counts.view > 0 && !this.#background);
     if (want === this.#held) return;
     this.#held = want;
-    void (want ? this.#a.acquire() : this.#a.release()).catch(() => {});
+    // A failed call leaves the lock as it was: reset the flag so the next change retries.
+    void (want ? this.#a.acquire() : this.#a.release()).catch(() => {
+      if (this.#held === want) this.#held = !want;
+    });
   }
 }
 
@@ -97,6 +100,8 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
   const previews = new Set<PreviewLike>();
   let background = false;
   let probing = 0;
+  // the client was stopped for probes that ended in the background: start it on the next foreground
+  let needsStart = false;
   // our own transfer pause (not the export's)
   let paused = false;
 
@@ -147,7 +152,10 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
         for (const p of previews) p.stop();
         pauseTransfer();
       } else if (probing === 0) {
-        deps.client.resume();
+        if (needsStart) {
+          needsStart = false;
+          deps.client.start();
+        } else deps.client.resume();
         for (const p of previews) p.start();
         resumeTransfer();
       }
@@ -169,11 +177,13 @@ export function createLifecycle(deps: LifecycleDeps): Lifecycle {
         done = true;
         probing--;
         if (probing > 0) return;
-        deps.client.start();
-        if (!background) {
-          for (const p of previews) p.start();
-          resumeTransfer();
+        if (background) {
+          needsStart = true; // never connect from the background; setActive(true) starts it
+          return;
         }
+        deps.client.start();
+        for (const p of previews) p.start();
+        resumeTransfer();
       };
     },
     dispose() {

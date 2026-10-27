@@ -51,8 +51,9 @@ export class ProjectDeletion {
 
   /** Resolves true when the project was restored (false: it was not pending, e.g. already expired). */
   async undo(projectId: string): Promise<boolean> {
+    const nowMs = this.now();
     const restored = await this.d.store.mutate((s) => {
-      const index = unhideProject(s.index, projectId);
+      const index = unhideProject(s.index, projectId, nowMs);
       return { result: index !== s.index, index };
     });
     this.schedule();

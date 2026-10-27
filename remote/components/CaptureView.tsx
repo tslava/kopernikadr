@@ -196,6 +196,7 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
         </button>
         <ShutterButton enabled={shutter.enabled} label={t('capture.shutter')} onPress={() => void onPress()} />
         {exporting && <span className="note">{t('capture.exporting')}</span>}
+        {(shutter.blocked === 'outstanding' || shutter.blocked === 'reconciling') && <span className="note" role="status">{t('capture.arriving')}</span>}
       </div>
       {toast && (
         <div className="toast" role="alert" onClick={() => setToast(null)}>

@@ -30,6 +30,8 @@ export interface ParentDrawerProps {
   freeBytes?: (() => Promise<{ bytes: number }>) | null;
 }
 
+const EXPOSURE_DEBOUNCE_MS = 400;
+
 const LOCKS: Array<{ key: LockKey; label: Key }> = [
   { key: 'exposure', label: 'drawer.exposure' },
   { key: 'whiteBalance', label: 'drawer.whiteBalance' },
@@ -52,6 +54,7 @@ export default function ParentDrawer({
   const [error, setError] = useState<Key | null>(null);
   const [free, setFree] = useState<number | null>(null);
   const dragging = useRef(false);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [steps, setSteps] = useState<number | null>(null);
 
   // Follow the camera: refresh on a timer (fast while settling), and right after a change.
@@ -81,6 +84,13 @@ export default function ParentDrawer({
     return r;
   };
 
+  useEffect(() => () => clearTimeout(commitTimer.current), []);
+  // Send the exposure value: on pointer release/cancel/leave, on keyboard key-up, or debounced after a keyboard change.
+  const commitSteps = (n: number) => {
+    clearTimeout(commitTimer.current);
+    dragging.current = false;
+    void send({ control: 'exposureCompensation', steps: n }).finally(() => setSteps(null));
+  };
   const comp = compensationView(controls, caps);
   const rot = project ? rotationView(project, caps) : null;
   const qualities = PREVIEW_QUALITIES.filter((q) => !caps?.previewQualities || caps.previewQualities.includes(q));
@@ -119,12 +129,18 @@ export default function ParentDrawer({
                     <div className="row-head"><h3>{t('drawer.compensation')}</h3><span className="state">{comp.label}</span></div>
                     <input type="range" min={comp.min} max={comp.max} step={1} value={steps ?? comp.steps} disabled={!online}
                       onPointerDown={() => { dragging.current = true; }}
-                      onChange={(e) => setSteps(Number(e.target.value))}
-                      onPointerUp={(e) => {
-                        dragging.current = false;
-                        const n = Number((e.target as HTMLInputElement).value);
-                        void send({ control: 'exposureCompensation', steps: n }).finally(() => setSteps(null));
-                      }} />
+                      onChange={(e) => {
+                        const n = Number(e.target.value);
+                        setSteps(n);
+                        if (!dragging.current) {
+                          clearTimeout(commitTimer.current);
+                          commitTimer.current = setTimeout(() => commitSteps(n), EXPOSURE_DEBOUNCE_MS);
+                        }
+                      }}
+                      onPointerUp={(e) => commitSteps(Number(e.currentTarget.value))}
+                      onPointerCancel={(e) => dragging.current && commitSteps(Number(e.currentTarget.value))}
+                      onPointerLeave={(e) => dragging.current && commitSteps(Number(e.currentTarget.value))}
+                      onKeyUp={(e) => commitSteps(Number(e.currentTarget.value))} />
                   </>
                 )}
               </section>
