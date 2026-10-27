@@ -362,17 +362,22 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Create: `remote/lib/projects/sweep.ts` + tests
 
-- [ ] tests first, then the startup sweep (§5.8):
+- [x] tests first, then the startup sweep (§5.8):
   - promote matching `pending` installs;
   - empty `tmp/`;
   - delete unreferenced files under `frames/`;
   - remove tombstoned dirs;
   - re-add missing project dirs;
   - expire past `pendingProjectDeletes` deadlines
-- [ ] corrupt or unknown-version JSON per Technical Details
-- [ ] write tests for the crash points: a kill after `installFile` before `local`; a kill between
+- [x] corrupt or unknown-version JSON per Technical Details
+- [x] write tests for the crash points: a kill after `installFile` before `local`; a kill between
       the tombstone commit and the unlink; a corrupt `project.json`; a missing index entry
-- [ ] run tests — must pass before Task 8
+- [x] run tests — must pass before Task 8
+
+- ➕ Task 7 decisions (agent, accepted):
+  - an unreferenced `full` that is not tombstoned is **kept** with a warning (a corrupt `project.json` rebuilds the project empty, and deleting would destroy the only copy); caches are deleted;
+  - the corrupt-index rebuild is done by the sweep re-adding project dirs (not via `onIndexCorrupt`, which would deadlock the queue). `rememberedCamera` and project tombstones are lost with a corrupt index;
+  - hidden-frame expiry also runs in the sweep
 
 ### Task 8: CameraClient: target selection over `CameraConnection` (TDD)
 
