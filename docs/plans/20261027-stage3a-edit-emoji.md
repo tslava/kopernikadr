@@ -486,20 +486,20 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/ProjectsView.tsx` (share the Undo toast component)
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the `editController` tests first:
+- [x] write the `editController` tests first (9 tests incl. `toolStates`):
   - every tool calls the right reducer through `store.updateProject`;
   - pushes history;
   - Cofnij restores the previous `{cut, stickers}`;
   - Delete of a duplicate entry removes the entry (in history); Delete of the last entry uses `hideFrame` + the Undo toast and expires through `FrameDeletion` (Task 2);
   - the tools are disabled while an export runs;
   - tools are disabled when they make no sense (move at the edge, hold at 8).
-- [ ] implement the tools row. Kid-sized buttons with icons + short labels. Delete is NOT long-press (it has Undo), the rest are plain taps.
-- [ ] tablet run, 5 frames:
+- [x] implement the tools row. Kid-sized buttons with icons + short labels. Delete is NOT long-press (it has Undo), the rest are plain taps. (72x80 icon-over-label buttons in the right column, 4 per row; the shared `UndoToast` serves projects and frames)
+- [x] tablet run (emulator-5584, 7 frames in a new Film 3 shot on the fake camera: the real camera 192.168.1.34:8765 refused connections today; real touches via adb; scrollHeight 728 == innerHeight 728, screencaps checked; Film 2 untouched). Done: duplicate, hold x4, move to first, off, start here, Cofnij x2, delete duplicate (original stays), delete + Undo, delete + expiry (files gone, tombstone, frame acked on the fake camera; all of its frames were already acked on download, so the check is idempotent). Playback order/timing not re-run (covered by Task 5/6 device runs); original steps:
   - duplicate frame 2, hold frame 3 ×4, move frame 5 to first;
   - off frame 4; start here at 2; Cofnij ×2;
   - delete the duplicate of frame 2 (the original stays); delete frame 1 and Undo; delete frame 1 and let it expire (files gone, tombstone, ack sent to the camera — check the Pixel's `getStatus` counts);
   - check `project.json` via CDP and the playback order/timing.
-- [ ] run tests — must pass before Task 9.
+- [x] run tests — must pass before Task 9. (vitest 732 passed, typecheck clean)
 
 ### Task 9: Sticker UI
 

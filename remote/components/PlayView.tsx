@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { toolStates, type EditController, type EditTool } from '@/lib/app/editController';
 import type { FrameUrls } from '@/lib/app/frames';
 import type { OverlayStack } from '@/lib/app/overlays';
 import { reconcileSelection, stripTiles } from '@/lib/app/stripModel';
@@ -17,9 +18,12 @@ import { sharedExportFor } from '@/lib/export/sharedExport';
 import type { Store } from '@/lib/state/store';
 import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
+import type { FrameDeletion } from '@/lib/projects/frameDeletion';
+import EditTools from './EditTools';
 import ExportDialog from './ExportDialog';
 import FrameStrip from './FrameStrip';
 import Icon from './Icon';
+import UndoToast from './UndoToast';
 import { FPS_CHOICES } from '@/lib/projects/model';
 
 /** For export (Task 18): closes the ring buffer and pauses. Playing again reloads it. */
@@ -50,6 +54,8 @@ export interface PlayViewProps {
   exportEnv?: { key: object; transfer: TransferPause; exporting: Store<boolean>; overlays?: OverlayStack };
   /** Camera connection, for the export gate (frames of a gone camera are skippable). */
   link?: CameraLink;
+  /** The edit tools (Task 8); without it there is no tools row. */
+  edit?: { controller: EditController; frameDeletion: Pick<FrameDeletion, 'undo'> };
   ref?: Ref<PlayViewHandle>;
 }
 
@@ -57,7 +63,7 @@ const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), s
 
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
-export default function PlayView({ t, id, onBack, project = null, frameUrl, urls, exportEnv, link, onFps, ref }: PlayViewProps) {
+export default function PlayView({ t, id, onBack, project = null, frameUrl, urls, exportEnv, link, onFps, edit, ref }: PlayViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const stickerCanvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<SpriteCache | null>(null);
@@ -182,6 +188,29 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
     setSelected(entryId);
     player.current?.seekTo(entryId);
   };
+  // The tools row: one controller call per tap; the project store update re-renders the strip.
+  const states = toolStates(project, selected, { exporting: exportBusy, canUndo: edit?.controller.canUndo(id) ?? false });
+  const selectedOff = tiles.find((x) => x.entryId === selected)?.state === 'off';
+  const onTool = (tool: EditTool) => {
+    const c = edit?.controller;
+    if (!c || (selected === null && tool !== 'undo')) return;
+    const sel = selected ?? '';
+    const run: Promise<unknown> =
+      tool === 'delete' ? c.delete(id, sel).then((r) => { if (r === 'frame') setSelected(null); })
+      : tool === 'duplicate' ? c.duplicate(id, sel)
+      : tool === 'holdUp' ? c.hold(id, sel, 1)
+      : tool === 'holdDown' ? c.hold(id, sel, -1)
+      : tool === 'moveLeft' ? c.move(id, sel, -1)
+      : tool === 'moveRight' ? c.move(id, sel, 1)
+      : tool === 'off' ? c.off(id, sel, !selectedOff)
+      : tool === 'startHere' ? c.startHere(id, sel)
+      : tool === 'endHere' ? c.endHere(id, sel)
+      : c.undo(id);
+    run.catch((e) => console.error('edit', e));
+  };
+  const toolsShown = !!edit && (selected !== null || states.undo);
+  // the latest frame in its Undo window (the Undo toast of a frame Delete)
+  const hiding = project?.frames.filter((f) => f.hiddenUntil !== null).sort((a, b) => Date.parse(a.hiddenUntil!) - Date.parse(b.hiddenUntil!)).pop();
   // Android Back closes the big view first.
   useEffect(() => {
     if (!bigOpen || !overlays) return;
@@ -202,58 +231,64 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
         <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
         <canvas ref={stickerCanvas} className="play-stickers" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
       </div>
-      <div className="play-controls">
-        <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={() => player.current?.seekToStart()} disabled={status.playable === 0}>
-          <Icon name="restart" />
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={status.playing ? t('play.pause') : t('play.play')}
-          title={status.playing ? t('play.pause') : t('play.play')}
-          onClick={() => player.current?.toggle()}
-          disabled={status.playable === 0}
-        >
-          <Icon name={status.playing ? 'pause' : 'play'} />
-        </button>
-        <button
-          type="button"
-          className={`icon-btn${loop ? ' on' : ''}`}
-          aria-label={t('play.loop')}
-          title={t('play.loop')}
-          aria-pressed={loop}
-          onClick={() => setLoop((v) => !v)}
-        >
-          <Icon name="repeat" />
-        </button>
-        <label className="speed">
-          <span>{t('play.speed', { n: fps })}</span>
-          <input
-            type="range"
-            min={0}
-            max={FPS_CHOICES.length - 1}
-            step={1}
-            value={fpsIndex}
-            disabled={!project || !onFps}
-            onChange={(e) => onFps?.(FPS_CHOICES[Number(e.target.value)])}
-          />
-        </label>
-        {exporter && (
+      <div className="play-side">
+        <div className="play-controls">
+          <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={() => player.current?.seekToStart()} disabled={status.playable === 0}>
+            <Icon name="restart" />
+          </button>
           <button
             type="button"
             className="icon-btn"
-            aria-label={t('export.button')}
-            title={t('export.button')}
-            onClick={() => setExportOpen(true)}
-            disabled={!project || project.frames.length === 0}
+            aria-label={status.playing ? t('play.pause') : t('play.play')}
+            title={status.playing ? t('play.pause') : t('play.play')}
+            onClick={() => player.current?.toggle()}
+            disabled={status.playable === 0}
           >
-            <Icon name="save" />
+            <Icon name={status.playing ? 'pause' : 'play'} />
           </button>
-        )}
+          <button
+            type="button"
+            className={`icon-btn${loop ? ' on' : ''}`}
+            aria-label={t('play.loop')}
+            title={t('play.loop')}
+            aria-pressed={loop}
+            onClick={() => setLoop((v) => !v)}
+          >
+            <Icon name="repeat" />
+          </button>
+          <label className="speed">
+            <span>{t('play.speed', { n: fps })}</span>
+            <input
+              type="range"
+              min={0}
+              max={FPS_CHOICES.length - 1}
+              step={1}
+              value={fpsIndex}
+              disabled={!project || !onFps}
+              onChange={(e) => onFps?.(FPS_CHOICES[Number(e.target.value)])}
+            />
+          </label>
+          {exporter && (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={t('export.button')}
+              title={t('export.button')}
+              onClick={() => setExportOpen(true)}
+              disabled={!project || project.frames.length === 0}
+            >
+              <Icon name="save" />
+            </button>
+          )}
+        </div>
+        {toolsShown && <EditTools t={t} states={states} isOff={selectedOff} onTool={onTool} />}
+        {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
+        {status.downloading > 0 && <p className="note">{t('play.downloading', { n: status.downloading })}</p>}
       </div>
       {project && <FrameStrip t={t} project={project} selected={selected} onTap={onTile} urls={urls} />}
-      {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
-      {status.downloading > 0 && <p className="note">{t('play.downloading', { n: status.downloading })}</p>}
+      {edit && hiding && (
+        <UndoToast t={t} message={t('tools.frameDeleted')} deadline={hiding.hiddenUntil!} label="tools.frameUndo" onUndo={() => void edit.frameDeletion.undo(id, hiding.frameId)} />
+      )}
       {exporter && exportOpen && project && (
         <ExportDialog t={t} project={project} controller={exporter} link={link} onClose={() => setExportOpen(false)} />
       )}
