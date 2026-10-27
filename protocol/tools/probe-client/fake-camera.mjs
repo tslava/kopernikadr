@@ -27,6 +27,24 @@
 //                       the first `count` requests of each frame's `play` (and `full` with full=1)
 //                       fail with `status` (0 = drop the connection); `frame` limits it to one frame.
 //                       count=0 turns it off.
+//   /fake/restart[?cameraId=<id>]
+//                       the camera app restarts: every socket is dropped, the session is gone, a new
+//                       `bootId` is issued. Frames, operation records (a `pending` one stays `pending`,
+//                       like a crash, PROTOCOL.md §6) and the cameraId stay; `cameraId` changes the id
+//   /fake/camera-id?id=<id>
+//                       another phone behind the same address: restart (above) with a new cameraId
+//   /fake/storage-low   the next `capture` is rejected with STORAGE_LOW (retryable:false, no operation
+//                       record, like the real admission check); one shot
+//   /fake/missing-full?frame=<id>[&off=1]
+//                       `GET /frames/<id>/full.jpg` -> 404 (the file is gone); play/thumb still served
+//   /fake/corrupt-full?frame=<id>[&off=1]
+//                       `full.jpg` of that frame has the listed Content-Length / bytes count but other
+//                       content, so its sha256 differs from the one in listFrames/capture
+//   /fake/pending-forever
+//                       the next `capture` is admitted and recorded `pending`, but never commits and
+//                       never answers; `getOperation` keeps saying `pending`; one shot
+//   /fake/reclaim       the camera reclaims space: files of every acked frame are gone, so all its
+//                       variants -> 404 (PROTOCOL.md §9); returns the reclaimed frameIds
 //   /fake/state         JSON dump of frames / controls / session / frame requests
 
 import { createServer } from 'node:http';
@@ -167,7 +185,8 @@ export async function startFakeCamera(opts = {}) {
     session: null, frames: new Map(), captures: new Map(), seq: 0, previewSeq: 0,
     stallNexts: opts.stallNexts ?? 0, controls: [], continues: [], hellos: 0, probeArgs: null,
     runIndex: 0, downRequests: opts.downRequests ?? 0, step: 0, acked: new Set(),
-    dropCaptures: 0, failNextLock: false, requests: [],
+    dropCaptures: 0, failNextLock: false, storageLowNext: false, pendingForeverNext: false,
+    goneFull: new Set(), corruptFull: new Set(), reclaimed: new Set(), requests: [],
     slowPlayMs: 0, playCursor: 0, failPlay: null, variantFailures: new Map(), frameRequests: [],
     ctl: {
       generation: 1, settling: false,
@@ -178,8 +197,8 @@ export async function startFakeCamera(opts = {}) {
     },
   };
   const images = opts.images ?? null;
-  const bootId = randomUUID();
-  const cameraId = 'cam-1';
+  let bootId = randomUUID();
+  let cameraId = 'cam-1';
   const fullBytes = Buffer.concat([JPEG, Buffer.alloc(1000, 7)]);
   const runId = 'run-1';
   const steps = opts.probeSteps ?? [];
@@ -227,6 +246,9 @@ export async function startFakeCamera(opts = {}) {
       const variant = m[2];
       state.frameRequests.push(`${p}${url.search}`);
       if (!frame) return json(res, 404, { error: 'unknown frame' });
+      if (state.reclaimed.has(frame.frameId) || (variant === 'full' && state.goneFull.has(frame.frameId))) {
+        return json(res, 404, { error: 'unknown frame' });
+      }
       const fp = state.failPlay;
       if (fp && (fp.frame == null || fp.frame === frame.frameId) && (variant === 'play' || (fp.full && variant === 'full'))) {
         const key = `${frame.frameId}/${variant}`;
@@ -242,7 +264,11 @@ export async function startFakeCamera(opts = {}) {
         if (wait > 0) await new Promise((r) => setTimeout(r, wait));
         frame.playReadyAt = null; // generated: later requests are served at once
       }
-      const body = images ? images[m[2] === 'thumb' ? 'thumb' : 'play'][frame.step] : fullBytes;
+      let body = images ? images[m[2] === 'thumb' ? 'thumb' : 'play'][frame.step] : fullBytes;
+      if (variant === 'full' && state.corruptFull.has(frame.frameId)) {
+        body = Buffer.from(body);
+        body[body.length >> 1] ^= 0xff; // same length, other content
+      }
       if (variant === 'play') frame.playServed = true;
       res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': body.length, 'cache-control': 'max-age=31536000, immutable' });
       return res.end(body);
@@ -250,6 +276,28 @@ export async function startFakeCamera(opts = {}) {
     if (p === '/fake/kick') {
       for (const c of [...controlConns, ...previewConns]) c.socket.destroy();
       return json(res, 200, { kicked: true });
+    }
+    if (p === '/fake/restart' || p === '/fake/camera-id') {
+      const id = url.searchParams.get(p === '/fake/restart' ? 'cameraId' : 'id');
+      if (p === '/fake/camera-id' && !id) return json(res, 400, { error: 'id required' });
+      if (id) cameraId = id;
+      bootId = randomUUID();
+      state.session = null;
+      for (const c of [...controlConns, ...previewConns]) c.socket.destroy();
+      return json(res, 200, { cameraId, bootId });
+    }
+    if (p === '/fake/storage-low') { state.storageLowNext = true; return json(res, 200, { storageLowNext: true }); }
+    if (p === '/fake/pending-forever') { state.pendingForeverNext = true; return json(res, 200, { pendingForeverNext: true }); }
+    if (p === '/fake/missing-full' || p === '/fake/corrupt-full') {
+      const frame = url.searchParams.get('frame');
+      if (!frame) return json(res, 400, { error: 'frame required' });
+      const set = p === '/fake/missing-full' ? state.goneFull : state.corruptFull;
+      if (url.searchParams.get('off') === '1') set.delete(frame); else set.add(frame);
+      return json(res, 200, { frame, on: set.has(frame) });
+    }
+    if (p === '/fake/reclaim') {
+      for (const id of state.acked) state.reclaimed.add(id);
+      return json(res, 200, { reclaimed: [...state.reclaimed] });
     }
     if (p === '/fake/drop-capture') { state.dropCaptures++; return json(res, 200, { dropCaptures: state.dropCaptures }); }
     if (p === '/fake/slow-play') {
@@ -420,6 +468,10 @@ export async function startFakeCamera(opts = {}) {
         const known = state.captures.get(key);
         if (known) return known.done ? reply(frameInfo(known)) : fail({ code: 'CAPTURE_IN_PROGRESS', message: 'in flight', retryable: true });
         if (state.ctl.settling) return fail({ code: 'CAMERA_NOT_READY', message: 'controls settling', retryable: true });
+        if (state.storageLowNext) {
+          state.storageLowNext = false;
+          return fail({ code: 'STORAGE_LOW', message: 'less than 500 MB free' });
+        }
         if (a.rotation !== state.ctl.rotation) {
           return fail({ code: 'GEOMETRY_MISMATCH', message: `capture rotation ${a.rotation} does not match the camera rotation ${state.ctl.rotation}` });
         }
@@ -430,6 +482,7 @@ export async function startFakeCamera(opts = {}) {
           capturedAt: new Date().toISOString(), step, done: false,
           full: { w: 3264, h: 2448, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') } };
         state.captures.set(key, rec);
+        if (state.pendingForeverNext) { state.pendingForeverNext = false; return; } // admitted, never finished
         const drop = state.dropCaptures > 0 && state.dropCaptures--;
         const commit = () => {
           rec.done = true;
