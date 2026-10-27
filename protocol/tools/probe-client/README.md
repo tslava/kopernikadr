@@ -66,3 +66,11 @@ CORS: `/info` and `/frames/...` echo the request `Origin` in `Access-Control-All
 Android emulator's host), with or without a port. That covers a remote dev build on another port
 or in the emulator. Other origins get no CORS header. The failure knobs (`/fake/kick`,
 `/fake/slow-play`, `/fake/fail-play`, ...) are listed at the top of `fake-camera.mjs`.
+
+### Failure switches
+
+Plain GETs on the fake camera (full list and details in the header comment of `fake-camera.mjs`):
+`/fake/restart[?cameraId=]` (new `bootId`, sockets dropped), `/fake/camera-id?id=`,
+`/fake/storage-low` (next capture), `/fake/missing-full?frame=` (404), `/fake/corrupt-full?frame=`
+(sha mismatch), `/fake/pending-forever` (next capture), `/fake/reclaim` (acked frames' files → 404),
+plus `/fake/kick`, `/fake/drop-capture`, `/fake/fail-lock`, `/fake/slow-play`, `/fake/fail-play`.
