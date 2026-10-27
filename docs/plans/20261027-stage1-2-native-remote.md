@@ -606,22 +606,24 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/lib/export/projectExport.ts` + test, `remote/components/ExportDialog.tsx`
 - Modify: `remote/components/PlayView.tsx`
 
-- [ ] `projectExport`:
+- [x] `projectExport`:
   - waits while frames are still downloading. `unavailable` frames are skipped after a parent
     confirmation that names their count; they never deadlock the export;
   - pauses transfers and blocks shooting;
   - `frameSource` → `pickCodec` → `exportVideo` → the native writer → publish;
   - resumes transfers afterwards
-- [ ] the file name `kopernikadr-<name>-<date>.mp4`, sanitized (Polish/Cyrillic letters
+- [x] the file name `kopernikadr-<name>-<date>.mp4`, sanitized (Polish/Cyrillic letters
       transliterated or kept per the native normalizer, slashes and controls removed)
-- [ ] the dialog:
+- [x] the dialog:
   - progress;
   - Cancel only in `encoding`;
   - "Zapisano w galerii";
   - a plain error with a retry
-- [ ] write tests: the state machine (cancel only in encoding, publish/abort exclusive, cancel at
+- [x] write tests: the state machine (cancel only in encoding, publish/abort exclusive, cancel at
       each state), pause/resume of transfers, the `unavailable` confirmation, name sanitizing
-- [ ] run tests — must pass before Task 19
+- [x] run tests — must pass before Task 19
+
+- ➕ Emulator 2026-10-27: Film 1 (9 frames from the fake camera) → export → `kopernikadr-Film_1-2026-10-27.mp4` in the gallery; ffprobe h264 Main, 9 frames, 8 fps, decodes clean (640×480 because the fake camera's `play` is 640×480; the export takes the size of the first frame)
 
 ### Task 19: Lifecycle refinements
 
