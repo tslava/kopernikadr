@@ -22,7 +22,7 @@ export function parsePreviewFrame(buf) {
   try {
     header = JSON.parse(utf8.decode(bytes.subarray(4, 4 + headerLength)));
   } catch (e) {
-    throw new Error(`preview frame: header is not valid UTF-8 JSON (${e.message})`);
+    throw new Error(`preview frame: header is not valid UTF-8 JSON (${/** @type {Error} */ (e).message})`);
   }
   if (header === null || typeof header !== 'object' || Array.isArray(header)) {
     throw new Error('preview frame: header must be a JSON object');
@@ -35,6 +35,7 @@ export function parsePreviewFrame(buf) {
   return { header, jpeg };
 }
 
+/** @param {ArrayBuffer | Uint8Array} buf @returns {Uint8Array} */
 function toBytes(buf) {
   if (buf instanceof Uint8Array) return buf;
   if (buf instanceof ArrayBuffer) return new Uint8Array(buf);

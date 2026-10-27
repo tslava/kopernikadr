@@ -489,7 +489,14 @@ export async function startFakeCamera(opts = {}) {
     host: `127.0.0.1:${port}`,
     port,
     fullBytes,
-    close: () => new Promise((r) => { clearInterval(statusTimer); server.closeAllConnections(); server.close(r); }),
+    // Like a camera app stopping: upgraded WebSocket sockets are not covered by closeAllConnections
+    // and would keep server.close() waiting while a client keeps reconnecting.
+    close: () => new Promise((r) => {
+      clearInterval(statusTimer);
+      server.close(r);
+      server.closeAllConnections();
+      for (const c of [...controlConns, ...previewConns]) c.socket.destroy();
+    }),
   };
 }
 

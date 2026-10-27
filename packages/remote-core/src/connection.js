@@ -9,9 +9,18 @@ import { Backoff } from './backoff.js';
 export const CLOSE_REPLACED = 4001;
 
 /**
+ * @typedef {import('./protocol.js').CloseInfo} CloseInfo
+ * @typedef {'connecting'|'online'|'offline'|'busy'|'unsupported'|'replaced'} ConnectionState
+ * @typedef {{ url: string, clientId: string, appVersion?: string, platform?: string,
+ *   WebSocketImpl?: new (url: string) => WebSocket, pingIntervalMs?: number, offlineAfterMs?: number,
+ *   connectTimeoutMs?: number, backoff?: Backoff }} ConnectionOptions
+ */
+
+/**
  * What to do when the camera closes the control socket (PROTOCOL.md §4): 4001 replaced → stop
  * (reconnecting would steal the session back and the two tabs would fight forever); anything else
  * (4002 lease lost, network drop, ...) → reconnect with backoff.
+ * @param {number | undefined} code
  * @returns {'stop'|'reconnect'}
  */
 export function closeAction(code) {
@@ -25,32 +34,58 @@ export function closeAction(code) {
  * Events (on): state(state, detail), session(helloData), controls(c), status(s), event(name, data).
  */
 export class CameraConnection {
+  /** @type {WebSocket | null} */
   #ws = null;
+  /** @type {ControlClient | null} */
   #client = null;
-  #timer = null;
-  #pingTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #timer = undefined;
+  /** @type {ReturnType<typeof setInterval> | undefined} */
+  #pingTimer = undefined;
   #lastPong = 0;
   #token = 0;
+  /** @type {Map<string, Set<(...args: any[]) => void>>} */
   #listeners = new Map();
   #running = false;
 
+  /** @param {ConnectionOptions} opts */
   constructor({ url, clientId, appVersion = 'remote-lite', platform = 'web', WebSocketImpl = globalThis.WebSocket,
     pingIntervalMs = 2000, offlineAfterMs = 5000, connectTimeoutMs = 5000, backoff = new Backoff() }) {
-    Object.assign(this, { url, clientId, appVersion, platform, WebSocketImpl, pingIntervalMs, offlineAfterMs, connectTimeoutMs, backoff });
+    /** @type {string} */ this.url = url;
+    /** @type {string} */ this.clientId = clientId;
+    /** @type {string} */ this.appVersion = appVersion;
+    /** @type {string} */ this.platform = platform;
+    /** @type {new (url: string) => WebSocket} */ this.WebSocketImpl = WebSocketImpl;
+    /** @type {number} */ this.pingIntervalMs = pingIntervalMs;
+    /** @type {number} */ this.offlineAfterMs = offlineAfterMs;
+    /** @type {number} */ this.connectTimeoutMs = connectTimeoutMs;
+    /** @type {Backoff} */ this.backoff = backoff;
+    /** @type {ConnectionState} */
     this.state = 'connecting';
+    /** @type {any} the `hello` data of the current/last session */
     this.session = null;
+    /** @type {any} */
     this.capabilities = null;
+    /** @type {any} */
     this.controls = null;
+    /** @type {any} */
     this.status = null;
     this.everOnline = false;
   }
 
+  /**
+   * @param {'state'|'session'|'controls'|'status'|'event'} name
+   * @param {(...args: any[]) => void} fn
+   * @returns {() => boolean} unsubscribe
+   */
   on(name, fn) {
-    if (!this.#listeners.has(name)) this.#listeners.set(name, new Set());
-    this.#listeners.get(name).add(fn);
-    return () => this.#listeners.get(name).delete(fn);
+    let set = this.#listeners.get(name);
+    if (!set) this.#listeners.set(name, (set = new Set()));
+    set.add(fn);
+    return () => /** @type {Set<(...args: any[]) => void>} */ (set).delete(fn);
   }
 
+  /** @param {string} name @param {...unknown} args */
   #emit(name, ...args) {
     for (const fn of this.#listeners.get(name) ?? []) {
       try {
@@ -61,6 +96,7 @@ export class CameraConnection {
     }
   }
 
+  /** @param {ConnectionState} state @param {{ retryAfterMs?: number, closeCode?: number }} [detail] */
   #setState(state, detail = {}) {
     const changed = state !== this.state;
     this.state = state;
@@ -100,6 +136,7 @@ export class CameraConnection {
     this.#connect();
   }
 
+  /** @param {string} op @param {object} [args] @param {{ reqId?: string, timeoutMs?: number }} [opts] @returns {Promise<any>} */
   request(op, args = {}, opts = {}) {
     if (!this.#client || this.state !== 'online') {
       return Promise.reject(new ProtocolError(op, { code: 'CLOSED', message: 'not connected' }, { local: true }));
@@ -135,6 +172,7 @@ export class CameraConnection {
     ws.addEventListener('close', () => { clearTimeout(openTimer); if (token === this.#token && !this.#client) this.#fail(token); });
   }
 
+  /** @param {number} token @param {ControlClient} client */
   async #hello(token, client) {
     try {
       const data = await client.request('hello', {
@@ -156,8 +194,9 @@ export class CameraConnection {
       this.#emit('session', data);
       if (this.controls) this.#emit('controls', this.controls);
       if (this.status) this.#emit('status', this.status);
-    } catch (e) {
+    } catch (err) {
       if (token !== this.#token) return;
+      const e = /** @type {ProtocolError} */ (err);
       if (e.code === 'BUSY') {
         const wait = Math.max(500, Number(e.retryAfterMs) || 2000);
         this.#drop('busy');
@@ -173,6 +212,7 @@ export class CameraConnection {
     }
   }
 
+  /** @param {number} token @param {ControlClient} client */
   #startPing(token, client) {
     clearInterval(this.#pingTimer);
     this.#pingTimer = setInterval(() => {
@@ -188,6 +228,7 @@ export class CameraConnection {
     }, this.pingIntervalMs);
   }
 
+  /** @param {string} name @param {any} data */
   #onEvent(name, data) {
     if (name === 'controls') {
       this.controls = data;
@@ -199,6 +240,7 @@ export class CameraConnection {
     this.#emit('event', name, data);
   }
 
+  /** @param {number} token @param {CloseInfo} info */
   #closed(token, info) {
     if (!info?.byClient && closeAction(info?.code) === 'stop') {
       this.#drop('replaced');
@@ -210,6 +252,7 @@ export class CameraConnection {
   }
 
   /** The current socket failed: drop it, go offline, reconnect after a backoff delay. */
+  /** @param {number} token */
   #fail(token) {
     if (token !== this.#token) return;
     this.#drop('fail');
@@ -218,16 +261,18 @@ export class CameraConnection {
     this.#scheduleReconnect(this.#token);
   }
 
+  /** @param {number} token */
   #scheduleReconnect(token) {
     if (token !== this.#token || !this.#running) return;
     clearTimeout(this.#timer);
     this.#timer = setTimeout(() => this.#connect(), this.backoff.next());
   }
 
-  #drop() {
+  /** @param {string} [_why] */
+  #drop(_why) {
     this.#token++;
     clearInterval(this.#pingTimer);
-    this.#pingTimer = null;
+    this.#pingTimer = undefined;
     const client = this.#client;
     const ws = this.#ws;
     this.#client = null;
