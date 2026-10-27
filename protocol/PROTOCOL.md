@@ -1,11 +1,37 @@
 # Kopernikadr camera protocol
 
-Version: **v0 (provisional, rev 3.1)**. It is frozen as v1 after the stage 0 probes.
+Version: **v1 (frozen 2026-10-27)**.
 
 This document is the platform-neutral contract between a **camera** (today: Android phone;
-later maybe iOS) and a **remote** (the tablet app). MUST / SHOULD / MAY are used as in RFC 2119.
-TypeScript types live in `src/schema.ts`. Example messages in `fixtures/` are normative and are
-checked by both implementations.
+later maybe iOS) and a **remote** (the tablet app, and the browser remote-lite the phone serves).
+MUST / SHOULD / MAY are used as in RFC 2119.
+
+**What this document is.** It describes what the camera code does today. Where an earlier text
+and the code disagreed, the text was changed, not the code. Remarks marked **Today** state
+behaviour that is narrower than the idea behind it; a later version may widen it.
+
+**Sources of truth.** There is no TypeScript schema file. The contract is these three, kept in
+step by tests on both sides:
+1. the example messages in `fixtures/` (normative; every file is checked by Kotlin and by
+   remote-core, and a new fixture without a check fails the suite);
+2. the Kotlin models: `camera-android/core/src/main/kotlin/pl/slava/kopernikadr/camera/protocol/`
+   (messages, errors, close codes) and `.../camera/server/` (`WireArgs.kt`, `Ports.kt`: the args
+   and results of `listFrames`, `ack`, `setControl`);
+3. `packages/remote-core` (the JS client: `protocol.js`, `connection.js`, `preview.js`).
+
+**Changelog.**
+- **v1 (2026-10-27)**, from rev 3.1 (v0 provisional): frozen after the stage 0b probes. Only
+  documentation, fixtures and tests changed; no wire behaviour changed.
+  - Added: the focus `failed` decision (§6: there is no `failed` focus mode); flat `setControl`
+    args; the exact shapes of `listFrames`, `ack`, `getStatus`; `getOperation` behaviours; 503 +
+    `Retry-After` for derived files; `HEAD`; the 64 KiB incoming WebSocket limit (close `1009`);
+    the web remote at `/`; the exact CORS rules; the NSD TXT keys.
+  - Corrected to match the code: retention (§9: nothing is ever deleted; `ack` only hides a frame
+    from `listFrames`); `clearAcked` and `getDiagnostics` are not implemented; the `status` event
+    is periodic only; `capture` waits up to 1.5 s for settling locks; `STORAGE_LOW` is a plain
+    free-space floor; admission rejections leave no operation record; a crash leaves `pending`.
+  - New fixtures: `setControl.{req,res,err}`, `listFrames.{req,res}`, `ack.{req,res}`,
+    `getStatus.{req,res}`, `controls.focusFailed.evt`.
 
 ## 1. Model
 
@@ -34,32 +60,53 @@ checked by both implementations.
 
 ## 3. Discovery and endpoints
 
-- **DNS-SD** service type `_kopernikadr._tcp`. TXT records: `id`=`cameraId`; `pv`=`min-max`
-  protocol versions, e.g. `1-1`; `name`. The port comes from SRV. Remotes MUST normalize a
-  trailing dot.
+- **DNS-SD** service type `_kopernikadr._tcp`. The instance name is `<name> (xxxx)`, `xxxx` being
+  the last 4 characters of `cameraId` (display only). TXT keys:
+  - `id` = `cameraId`;
+  - `pv` = `min-max` of the protocol versions the camera speaks, e.g. `1-1`;
+  - `name` = the camera's display name (cut to fit one TXT entry, 255 bytes with the key).
+
+  The port comes from SRV. Remotes MUST normalize a trailing dot in the host name.
 - **Manual / QR**: the camera displays `host:port` and a QR code with
   `kopernikadr://connect?host=<ip>&port=<port>&id=<cameraId>`.
 - One HTTP/1.1 port (default 8765; another port MAY be used and advertised).
-- **CORS**: plain HTTP endpoints answer with `Access-Control-Allow-Origin` for the remote app's
-  origin (`http://localhost` for the Android remote). Debug and probe camera builds also allow
-  `http://localhost:<port>` and `http://127.0.0.1[:<port>]` (any port 1–65535), for a remote
-  web build in a desktop browser during development; release builds do not.
+- **CORS**: `GET /info` and `GET /frames/…` answer with `Access-Control-Allow-Origin` for an
+  allowed origin and allow only `GET`. The allowed origins are:
+  - always exactly `http://localhost` (no port; the Android remote's WebView origin);
+  - in **debug and probe builds only**: also `http://localhost:<port>`, `http://127.0.0.1` and
+    `http://127.0.0.1:<port>` (port 1–65535, no leading zero; no other scheme, host suffix,
+    userinfo, path or trailing slash), for a remote web build in a desktop browser during
+    development. Release builds do not allow them.
+
+  The web remote (`/`) and the WebSockets are not CORS routes: the page is same-origin, and a
+  WebSocket upgrade is not subject to CORS.
 - **Origin**: the camera MUST NOT reject a WebSocket upgrade that carries no `Origin` header
   (non-browser clients). v0 enforces no `Origin` at all; a later version MAY reject upgrades
   whose `Origin` is present and not the remote app's.
 
 | Endpoint | Purpose |
 |---|---|
+| `GET /` and `GET /<path>` | The web remote (remote-lite), static files from the app. Not part of the protocol; it is a convenience of the phone. Only known file types; unknown paths and paths with hidden or empty segments → 404. |
 | `GET /info` | `{cameraId, name, bootId, protocolVersions:{min,max}}`. No session needed. |
 | `GET /ws/control` | WebSocket, UTF-8 JSON (§5). |
 | `GET /ws/preview?session=<sessionId>` | WebSocket, pull-based preview (§7). Current session only; otherwise HTTP 409. |
-| `GET /frames/{frameId}/{variant}.jpg` | `variant` ∈ `full`, `play`, `thumb`. `Content-Length` is always set. `full`: 404 if unknown or reclaimed. `play`/`thumb` are generated on demand if missing (they may take ~1 s); 404 if `full` is gone. No session needed. |
+| `GET /frames/{frameId}/{variant}.jpg` | `variant` ∈ `full`, `play`, `thumb`. `Content-Length` is always set. `full`: 404 if the frame is unknown (or its file is gone). `play`/`thumb` are generated on demand if missing (they may take ~1 s); 404 if `full` is gone. A bad `frameId` (not a ULID) or variant → 404. No session needed. Acked frames are still served (**Today**, §9). |
+
+- **`503` + `Retry-After`.** If a `play`/`thumb` cannot be generated (the camera retries once, then
+  gives up), `GET /frames/…` answers `503 Service Unavailable` with `Retry-After: 1`. The remote
+  retries a few times, then falls back to `full`.
+- **`HEAD`.** Every `GET` route also answers `HEAD`, with the same status and headers
+  (`Content-Length` included) and no body.
+- **Incoming WebSocket messages are limited to 64 KiB** (`65536` bytes, control and preview
+  sockets, fragmented messages counted in total). A larger one closes the socket with WebSocket
+  code `1009` (message too big) before it is parsed. Outgoing preview frames are not limited.
 
 ## 4. Sessions
 
 1. The remote opens `/ws/control` and sends `hello`, and nothing else before it. A first message
    other than `hello` gets a `res` with `ok:false`, `INVALID_ARGS`, message `"hello expected"`,
-   and the socket is then closed with `4000 protocol error`.
+   and the socket is then closed with `4000 protocol error`. The camera does not check the request's
+   `v` field today; it answers every protocol-version-1 request alike.
 2. The camera holds at most one **current session** `{sessionId, clientId, lastSeen}`. Expiry
    uses a monotonic clock, TTL 10 s, renewed by any message on that session's socket.
    - No session, or the current one expired → a new session is granted.
@@ -72,17 +119,20 @@ checked by both implementations.
 4. Work accepted before a session ended (e.g. a running `capture`) completes and is committed
    under its `clientId`. Its result is then available through `getOperation` and `listFrames`.
 5. The remote sends `ping` every 2 s. The camera MUST answer pings even while a capture runs.
-6. A different `bootId` in `hello` means the camera restarted. The remote re-reads controls and
+6. A later `hello` on an established socket → `INVALID_ARGS` ("session already established").
+7. A different `bootId` in `hello` means the camera restarted. The remote re-reads controls and
    resolves outstanding captures (§8).
 
 WebSocket close codes sent by the camera:
 
 | Code | Reason | When |
 |---|---|---|
-| `4000` | protocol error | the first control message was not `hello` |
+| `4000` | protocol error | the first control message was not `hello`, or its args were invalid |
 | `4001` | replaced | the same client started a new session (control and preview sockets) |
 | `4002` | lease lost | the socket's session is no longer current (control and preview sockets) |
 | `4003` | busy | after the `BUSY` response to `hello` |
+| `1009` | (standard) | an incoming message over 64 KiB (§3) |
+| `1000` | unsupported version | after the `UNSUPPORTED_VERSION` response to `hello` |
 
 ## 5. Envelope (control WS)
 
@@ -94,7 +144,10 @@ WebSocket close codes sent by the camera:
 ```
 
 `v` is the protocol major version and appears in every message. Unknown fields and event names
-MUST be ignored. An unknown `op` → `UNKNOWN_OP`. A schema violation → `INVALID_ARGS`.
+MUST be ignored. An unknown `op` → `UNKNOWN_OP`. A schema violation → `INVALID_ARGS`. JSON
+types are strict: a quoted number (`"180"`) is `INVALID_ARGS`, not coerced. A message that is not
+a JSON object, or has no usable `reqId`, is answered with `INVALID_ARGS` (empty `reqId` if none
+could be read).
 
 The `error` object is `{code, message, retryable, retryAfterMs?, data?}`. `retryAfterMs` is an
 integer number of milliseconds, a top-level field of `error` (set with `BUSY`). `data` is an
@@ -132,7 +185,12 @@ Rules:
 - Before taking the photo, the camera MUST durably record the operation (`pending`) with
   `clientId`, `reqId`, an args hash and the reserved `frameId`/`seq`. This happens during
   admission, before the request is answered or queued, so `getOperation` sees every accepted
-  `capture`. Ordinary failures are recorded as `failed(code)` before the camera answers.
+  `capture`. Failures after that point (`CAPTURE_FAILED`, `CAMERA_NOT_READY` from the camera,
+  `INTERRUPTED`) are recorded as `failed(code)` before the camera answers.
+- **Admission rejections leave no record** (**Today**): `INVALID_ARGS` (rotation other than 0 or
+  180), `GEOMETRY_MISMATCH`, `CAMERA_NOT_READY` (camera not open, or settling locks), `STORAGE_LOW`
+  and `CAPTURE_IN_PROGRESS` are answered before any row exists, so `getOperation` says `unknown`
+  for them and the same `reqId` may be sent again.
 - It MUST respond only after the `full` file and the `committed` record are durable.
 - `(clientId, reqId)` already known:
   - `committed` → the original `FrameInfo` (a replay returns the stored result);
@@ -143,31 +201,46 @@ Rules:
   - different args → `REQ_ID_REUSED`.
 
   An interrupted operation is NEVER re-executed.
-- Another capture in flight → `CAPTURE_IN_PROGRESS`. Controls settling or the camera not open
-  → `CAMERA_NOT_READY`.
+- Another capture in flight → `CAPTURE_IN_PROGRESS`. The camera not open → `CAMERA_NOT_READY`.
+  Locks still settling: the camera waits up to 1.5 s for them to settle, then → `CAMERA_NOT_READY`.
+  Less than 500 MB free on the app's volume → `STORAGE_LOW`.
 - Images are upright pixels in the project orientation, 4:3 landscape, with EXIF orientation
   normal. `full`, `play` and `thumb` show the same crop.
 
 ### `getOperation`
-- **Args**: `{reqId}` (scoped to the caller's `clientId`).
-- **Data**, one of:
-  - `{state:"done", result: FrameInfo}`;
-  - `{state:"pending"}` — still running; poll again;
-  - `{state:"failed", error:{code, message}}` — `code` may be `INTERRUPTED` (camera stopped
-    mid-capture);
-  - `{state:"unknown"}` — never received.
-- `failed` and `unknown` mean no frame exists for that request. The remote MUST NOT
-  retry automatically.
+- **Args**: `{reqId}` (scoped to the caller's `clientId`; another client's `reqId` is `unknown`).
+- **Data**, one of (the `state` field is the discriminator; fixtures `getOperation.res.*`):
+  - `{state:"done", result: FrameInfo}` — committed. Stays `done` after the frame is acked;
+  - `{state:"pending"}` — admitted and not finished; poll again;
+  - `{state:"failed", error:{code, message}}` — no frame exists. No `retryable` field here. `code`
+    is the recorded code: `CAPTURE_FAILED`, `CAMERA_NOT_READY`, or `INTERRUPTED` (the capture was
+    cancelled because the camera stopped);
+  - `{state:"unknown"}` — no record: never received, or rejected at admission (see `capture`).
+- `failed` and `unknown` mean no frame exists for that request. The remote MUST NOT retry
+  automatically. A retry after `failed` MUST use a new `reqId`: sending the old one again replays
+  the recorded error.
+- **Today, a crash leaves `pending`**: a capture row whose process died (the camera app was
+  killed mid-capture) stays `pending`, because nothing sweeps it at start. It becomes
+  `failed(INTERRUPTED)` only when the same `(clientId, reqId)` is sent to `capture` again. A
+  remote that sees `pending` together with a changed `bootId` therefore cannot rely on it ending
+  and should apply its own limit.
 
 ### `listFrames`
-- **Args**: `{afterSeq?: int, limit?: int (default 100, max 500)}`.
+- **Args**: `{afterSeq?: int, limit?: int}`. `afterSeq` is exclusive (`seq > afterSeq`; absent =
+  from the start). `limit` is 1–500, default 100; outside that, or a non-integer → `INVALID_ARGS`.
 - **Data**: `{frames: FrameInfo[], hasMore: bool}`. It returns the caller's committed, unacked
-  frames, ordered by `seq`.
+  frames, ordered by `seq`, at most `limit`; `hasMore` is true if more follow. Page with
+  `afterSeq` = the last `seq`. Frames of other clients, failed or pending operations and acked
+  frames are never listed.
 
 ### `ack`
-- **Args**: `{frameIds: string[]}` (1–500).
-- **Data**: `{acked: int, unknown: string[]}`. It is idempotent. Ids that belong to another
-  client are reported as `unknown` and are not acked.
+- **Args**: `{frameIds: string[]}` (1–500 strings; otherwise `INVALID_ARGS`).
+- **Data**: `{acked: int, unknown: string[]}`. It is idempotent: a frame that is already acked
+  counts as acked again; repeated ids in one call count once. `unknown` lists the ids that are not
+  a committed frame of the caller (nonexistent, another client's, or not committed); they are not
+  acked.
+- `ack` only marks the frame as acknowledged (it then leaves `listFrames`). It deletes nothing
+  (§9).
 - The remote MUST ack only frames that are ack-eligible (§8).
 
 ### `getStatus`
@@ -177,7 +250,13 @@ Data: `Status`:
  "unackedCount":3, "orphanCount":0, "integrityErrors":0,
  "thermal":"none"|"light"|"moderate"|"severe"|"critical"|"emergency"|"shutdown"|"unknown"}
 ```
-A `status` event is pushed every 10 s and on change.
+Field notes (**Today**): `freeBytes` is the free space of the app's data volume; `spoolBytes` is
+the total size of the `full` files of all committed frames (acked included, every client);
+`unackedCount` counts unacked committed frames of **all** clients; `orphanCount` and
+`integrityErrors` are always `0` (not measured yet); `charging` is true when plugged in.
+
+A `status` event with the same `Status` data is pushed every 10 s to the current session's control
+socket. It is periodic only (not sent on change); `getStatus` reads it on demand.
 
 ### Capabilities (in `hello`)
 ```jsonc
@@ -206,19 +285,25 @@ added before v1 is frozen.
   "exposure":     {"mode":"auto"|"locked"|"failed"|"unsupported", "confirmed":true, "exact":true,
                    "compensationSteps":0, "compensationEnabled":true},
   "whiteBalance": {"mode":"auto"|"locked"|"failed"|"unsupported", "confirmed":true, "exact":false},
-  "focus":        {"mode":"auto"|"locked"|"fixed", "confirmed":true, "focusOk":true},
+  "focus":        {"mode":"auto"|"locked"|"fixed", "confirmed":true, "focusOk":true},   // no "failed", see below
   "rotation": 0, "previewQuality": "normal"
 }
 ```
-`setControl` args, one control per call:
+`setControl` args are **flat** (one `control` name plus the one field that control uses), one
+control per call:
 ```jsonc
 {"control":"exposure",             "mode":"auto"|"locked"}
-{"control":"exposureCompensation", "steps":-6}            // only when compensationEnabled
+{"control":"exposureCompensation", "steps":-2}            // minSteps..maxSteps; only when compensationEnabled
 {"control":"whiteBalance",         "mode":"auto"|"locked"}
 {"control":"focus",                "mode":"auto"|"locked"} // not when "fixed"
 {"control":"rotation",             "degrees":0|180}
 {"control":"previewQuality",       "value":"low"|"normal"|"high"}
 ```
+The shape check comes first: a field of the wrong JSON type, or a missing required one →
+`INVALID_ARGS`; an unknown `control` → `UNSUPPORTED_CONTROL`; a bad `mode`/`value`/`degrees` →
+`INVALID_VALUE`. Then the camera applies its own rules (a lock the camera cannot do, or `focus` when
+it is `fixed` → `UNSUPPORTED_CONTROL`; steps out of range, or compensation while exposure is
+frozen-locked → `INVALID_VALUE`). `mode:"failed"`/`"fixed"` are never valid input.
 - `setControl` returns the `Controls` after the change was *requested*, with a new `generation`.
   Confirmation arrives in a `controls` event.
 - `confirmed` becomes true only from capture results produced with the current `generation`:
@@ -226,25 +311,45 @@ added before v1 is frozen.
   - manual methods: by the reported modes and values matching the requested ones (manual white
     balance: `TRANSFORM_MATRIX` mode, gains **and** transform), within device rounding;
   - `fixed`: always confirmed.
-- If a lock is not confirmed within 3 s, its `mode` becomes `failed` and `settling` ends, so
-  capture is allowed again. The remote shows "Lock failed" to the parent.
+- **Lock timeout.** A lock that is not confirmed within 3 s (3 s to meter, then 3 s to confirm
+  after the settings were applied) has failed and `settling` ends, so capture is allowed again.
+  The remote shows "Lock failed" to the parent. How it is reported differs by control:
+  - `exposure` and `whiteBalance`: `mode` becomes `"failed"`;
+  - **`focus`: there is no `failed` focus mode (decision, v1).** The mode enum stays
+    `auto | locked | fixed`. A failed focus lock is `{"mode":"locked", "confirmed":false,
+    "focusOk":false}` with `settling` false (fixture `controls.focusFailed.evt.json`). Reason: this
+    is what the camera emits and what the phone's remote-lite already shows ("Lock failed"), so
+    freezing the existing behaviour needs no change to the camera. Remotes MUST treat
+    `locked` + `confirmed:false` + `focusOk:false` as "Lock failed" (remote-core:
+    `isLockFailed('focus', controls.focus)`).
+  - Caveat: `focusOk` is also false when autofocus ended "not focused" (it could not find focus),
+    and that is reported already during the confirmation (before the timeout, `settling` true).
+    A remote cannot tell that short moment from a failed lock by this object alone; remote-lite
+    shows "Lock failed" a little early in that case. `settling` (true while any lock is
+    unconfirmed and not yet failed) is the extra hint if another control is not settling.
+  - A lock that failed while confirming keeps its applied values, and a late result that matches it still confirms
+    it (the control then returns to `confirmed:true`).
 - `rotation` cannot change while a capture is in flight (`CAPTURE_IN_PROGRESS`). Each capture
   uses the transform it was admitted with.
 - Remotes MUST NOT show "Locked" while `confirmed` is false.
-- `settling` is true while any locked control is unconfirmed; `capture` meanwhile returns
-  `CAMERA_NOT_READY`.
+- `settling` is true while any locked control is unconfirmed and has not failed; `capture`
+  meanwhile waits up to 1.5 s, then returns `CAMERA_NOT_READY`.
 - `exact` after a restart: `true` = the locked values were restored exactly; `false` = they were
   re-metered and re-locked.
-- Errors: `UNSUPPORTED_CONTROL`, `INVALID_VALUE`.
+- Errors: `INVALID_ARGS`, `UNSUPPORTED_CONTROL`, `INVALID_VALUE`, `CAPTURE_IN_PROGRESS`
+  (`rotation` only).
+- `getControls` (no args) returns the current `Controls`. The `controls` event carries the same
+  object and is pushed on every change to the current session's control socket.
 
-### `clearAcked`
-Parent action. It deletes the files of all acked frames now. Data: `{deletedCount, freedBytes}`.
-
-### `getDiagnostics`
-Data: a free-form JSON object. It is not part of the compatibility promise.
+### `clearAcked`, `getDiagnostics` (reserved, not implemented)
+Not implemented in v1: the camera answers `UNKNOWN_OP`. They are reserved names: `clearAcked`
+(delete the files of acked frames) and `getDiagnostics` (a free-form object, outside the
+compatibility promise) may be added later without a version bump (§11).
 
 ## 7. Preview WS
 
+- `GET /ws/preview?session=<sessionId>` answers HTTP `409` (before the upgrade) unless the
+  session is the current one.
 - The client sends text `{"t":"next"}`. The camera sends **one** binary message per `next`: the
   newest frame produced **after** the `next` arrived. At most one `next` is pending per socket;
   duplicates are coalesced. Without a pending `next`, frames are dropped at the source. A pending
@@ -279,13 +384,21 @@ Data: a free-form JSON object. It is not part of the compatibility promise.
 
 ## 9. Retention (camera)
 
+**Today: the camera deletes nothing.** The frame and operation records and the `full` files are
+kept forever; the only files ever removed are those of a capture that failed before its commit
+(nothing was listed or acked for them). Consequences:
+- `ack` (own `clientId` only) is the only state change of a committed frame: it sets "acked", the
+  frame leaves `listFrames`, and its `full`/`play`/`thumb` stay on disk and stay servable.
+- There is no reclaim, no 7-day expiry, no free-space eviction, and no `clearAcked` (§6). The
+  only protection of the disk is the `STORAGE_LOW` floor (500 MB free) on `capture`.
+- Records stay valid for ever, so `getOperation`, dedup and `seq` never lose a frame.
+- `orphanCount` is always `0`; frames of a client that never returns are simply kept.
+
+Rules that hold for any later retention policy (they bind the camera, v1 or later):
 - Unacked frames MUST NOT be deleted for any reason.
-- Acked frames MAY be deleted after 7 days, on `clearAcked`, or (oldest first) when free space
-  is under the reserve. The record of the reclaim is committed before the files are deleted.
-- Operation/frame records are kept after file deletion, so `getOperation`, dedup and `seq` stay
-  valid.
-- Unacked frames of a client that never returns (orphans) are kept and reported in `orphanCount`.
-  The camera app never deletes them. Only an OS-level data wipe removes them.
+- A later camera that reclaims files MUST commit the record of the reclaim before deleting the
+  files, and keep the operation/frame records, so `getOperation`, dedup and `seq` stay valid; a
+  reclaimed `full` is then `404`.
 
 ## 10. Errors
 
@@ -295,14 +408,14 @@ Data: a free-form JSON object. It is not part of the compatibility promise.
 | `LEASE_LOST` | reconnect | this socket's session is no longer current |
 | `UNSUPPORTED_VERSION` | no | no common protocol version |
 | `UNKNOWN_OP`, `INVALID_ARGS` | no | |
-| `CAMERA_NOT_READY` | yes | camera opening, rebinding or controls settling |
+| `CAMERA_NOT_READY` | yes | camera opening or rebinding, or locks still settling after 1.5 s |
 | `CAPTURE_IN_PROGRESS` | yes | another capture is running |
 | `CAPTURE_FAILED` | no | the camera failed; nothing committed |
 | `INTERRUPTED` | no | (in `getOperation`) the camera stopped mid-capture; nothing committed |
 | `GEOMETRY_MISMATCH` | no | the capture rotation ≠ the camera's current rotation |
-| `STORAGE_LOW` | no | free space under reserve even after reclaiming acked frames |
+| `STORAGE_LOW` | no | less than 500 MB free on the app's volume (nothing is reclaimed, §9) |
 | `REQ_ID_REUSED` | no | same reqId, different args |
-| `UNSUPPORTED_CONTROL`, `INVALID_VALUE` | no | |
+| `UNSUPPORTED_CONTROL`, `INVALID_VALUE` | no | unknown or unsupported control; bad value or range |
 | `INTERNAL` | yes | unexpected; details in `message` |
 
 ## 11. Versioning

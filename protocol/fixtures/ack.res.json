@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "4f1c8b6e-2a9d-4573-b0e7-5d3a9c1f8e26",
+  "ok": true,
+  "data": {
+    "acked": 1,
+    "unknown": [
+      "01K8GZ4XC2Q6D8E1G3J5M7P9RS"
+    ]
+  }
+}

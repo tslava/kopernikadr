@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "6d2a9c4e-1b7f-4e83-a0c5-3f8e2b6d9a14",
+  "ok": false,
+  "error": {
+    "code": "UNSUPPORTED_CONTROL",
+    "message": "unsupported control: iso",
+    "retryable": false
+  }
+}

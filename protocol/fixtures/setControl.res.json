@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "6d2a9c4e-1b7f-4e83-a0c5-3f8e2b6d9a14",
+  "ok": true,
+  "data": {
+    "generation": 4,
+    "settling": true,
+    "exposure": {
+      "mode": "locked",
+      "confirmed": false,
+      "exact": true,
+      "compensationSteps": 0,
+      "compensationEnabled": false
+    },
+    "whiteBalance": {
+      "mode": "auto",
+      "confirmed": true,
+      "exact": true
+    },
+    "focus": {
+      "mode": "auto",
+      "confirmed": true,
+      "focusOk": true
+    },
+    "rotation": 0,
+    "previewQuality": "normal"
+  }
+}

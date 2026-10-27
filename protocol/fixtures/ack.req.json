@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "t": "req",
+  "reqId": "4f1c8b6e-2a9d-4573-b0e7-5d3a9c1f8e26",
+  "op": "ack",
+  "args": {
+    "frameIds": [
+      "01K8GZ4V7Q3M9X2B5N6R8T1WCD",
+      "01K8GZ4XC2Q6D8E1G3J5M7P9RS"
+    ]
+  }
+}
