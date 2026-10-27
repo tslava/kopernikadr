@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { pickSticker, type StickerController, type StickerGesture } from '@/lib/app/stickerController';
 import type { Translate } from '@/lib/i18n';
 import type { Project, Sticker } from '@/lib/projects/model';
@@ -13,7 +13,7 @@ import { handlePoint, stickerBox } from '@/lib/render/stickerGeometry';
  * capture and `touch-action: none` (a finger drag must not become a scroll). The live pose goes up
  * through `onLive` while the finger is down; the store is written once, on pointerup.
  */
-export default function StickerLayer({ t, project, entryId, stickers, selectedId, controller, onSelect, onLive }: {
+export default function StickerLayer({ t, project, entryId, stickers, selectedId, controller, cancelEpoch, onSelect, onLive }: {
   t: Translate;
   project: Project;
   /** The entry shown on the stage. */
@@ -22,11 +22,21 @@ export default function StickerLayer({ t, project, entryId, stickers, selectedId
   stickers: Sticker[];
   selectedId: string | null;
   controller: StickerController;
+  /** Bumped when an edit tool runs: a gesture still down is cancelled (its pointerup must not overwrite the edit). */
+  cancelEpoch: number;
   onSelect: (id: string | null) => void;
   onLive: (live: { id: string; pose: Pose } | null) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const gesture = useRef<{ g: StickerGesture; pointer: number } | null>(null);
+
+  useEffect(() => {
+    const cur = gesture.current;
+    if (!cur) return;
+    gesture.current = null;
+    cur.g.cancel();
+    onLive(null);
+  }, [cancelEpoch]);
 
   const local = (e: React.PointerEvent) => {
     const r = box.current!.getBoundingClientRect();

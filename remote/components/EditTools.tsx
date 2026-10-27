@@ -6,11 +6,13 @@ import { spriteUrl } from '@/lib/render/catalog';
 import Icon, { type IconName } from './Icon';
 
 /** One row of the kid's editing tools: icon over a short label, 72 px wide. */
-export default function EditTools({ t, states, isOff, onTool, onEmoji, sticker }: {
+export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk = true, sticker }: {
   t: Translate;
   states: ToolStates;
   /** "+ Emoji": opens the picker (enabled when an entry is selected). */
   onEmoji?: () => void;
+  /** The selected entry can show a sticker (a playable one); false greys "+ Emoji" out. */
+  emojiOk?: boolean;
   /** A selected sticker: its emoji and range/delete actions (they work on the selected entry). */
   sticker?: { emoji: string; onFrom: () => void; onTo: () => void; onDelete: () => void } | null;
   /** The selected entry is switched off: the toggle reads "turn on". */
@@ -39,7 +41,7 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, sticker }
         </button>
       ))}
       {onEmoji && (
-        <button type="button" className="tool-btn" data-tool="emoji" aria-label={t('tools.emoji')} disabled={!states.delete} onClick={onEmoji}>
+        <button type="button" className="tool-btn" data-tool="emoji" aria-label={t('tools.emoji')} disabled={!states.delete || !emojiOk} onClick={onEmoji}>
           <Icon name="smile" />
           <span>{t('tools.emoji')}</span>
         </button>

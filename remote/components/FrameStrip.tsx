@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FrameUrls } from '@/lib/app/frames';
 import { stripTiles, tileImage, visibleWindow } from '@/lib/app/stripModel';
 import type { Translate } from '@/lib/i18n';
@@ -24,9 +24,13 @@ export interface FrameStripProps {
   stickerId?: string | null;
 }
 
-/** Horizontal scroller of the timeline entries, virtualized by index window. */
-export default function FrameStrip({ t, project, selected, onTap, urls, stickerId }: FrameStripProps) {
-  const tiles = stripTiles(project, stickerId);
+/** A pointer that moved more than this (px) between down and click was a scroll, not a tap. */
+const TAP_SLOP = 10;
+
+/** Horizontal scroller of the timeline entries, virtualized by index window. Memoized: the player ticks must not re-render it. */
+function FrameStrip({ t, project, selected, onTap, urls, stickerId }: FrameStripProps) {
+  const tiles = useMemo(() => stripTiles(project, stickerId), [project, stickerId]);
+  const down = useRef<{ x: number; y: number; scroll: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ left: 0, width: 1280 });
   const [, setAbsentN] = useState(0);
@@ -52,6 +56,7 @@ export default function FrameStrip({ t, project, selected, onTap, urls, stickerI
     <div
       ref={box}
       className="strip"
+      onPointerDown={(e) => { down.current = { x: e.clientX, y: e.clientY, scroll: e.currentTarget.scrollLeft }; }}
       onScroll={(e) => setView({ left: e.currentTarget.scrollLeft, width: e.currentTarget.clientWidth })}
     >
       <ul className="strip-track" style={{ width: Math.max(0, tiles.length * PITCH - TILE_GAP) }}>
@@ -66,7 +71,14 @@ export default function FrameStrip({ t, project, selected, onTap, urls, stickerI
                 aria-label={t('strip.tile', { n: i + 1 })}
                 aria-pressed={tile.entryId === selected}
                 data-entry={tile.entryId}
-                onClick={() => onTap(tile.entryId)}
+                onClick={(e) => {
+                  // a fast swipe that started on a tile can still end as a click: that was a scroll
+                  const d = down.current;
+                  down.current = null;
+                  const box = e.currentTarget.closest('.strip');
+                  if (d && (Math.hypot(e.clientX - d.x, e.clientY - d.y) > TAP_SLOP || Math.abs((box?.scrollLeft ?? d.scroll) - d.scroll) > TAP_SLOP)) return;
+                  onTap(tile.entryId);
+                }}
               >
                 {img && (
                   <img
@@ -92,3 +104,5 @@ export default function FrameStrip({ t, project, selected, onTap, urls, stickerI
     </div>
   );
 }
+
+export default memo(FrameStrip);

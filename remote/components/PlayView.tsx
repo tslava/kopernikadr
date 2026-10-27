@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { toolStates, type EditController, type EditTool } from '@/lib/app/editController';
 import type { FrameUrls } from '@/lib/app/frames';
 import { reconcileSticker, stickersOn, withLivePose, type StickerController } from '@/lib/app/stickerController';
@@ -66,6 +66,9 @@ export interface PlayViewProps {
 
 const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), set() {}, update() {}, subscribe: () => () => {} };
 
+/** The largest sprite raster the stage asks for (the export rasterizes at its own size). */
+const STAGE_BUCKET_MAX = 512;
+
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
 export default function PlayView({ t, id, onBack, project = null, frameUrl, urls, exportEnv, link, onFps, edit, ref }: PlayViewProps) {
@@ -97,9 +100,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
     const list = stickersRef.current.filter((st) => entryId !== null && st.on.includes(entryId));
     // rasterize at the size the sticker is shown at (device pixels)
     const scale = (el.clientWidth * window.devicePixelRatio) / PLAY_WIDTH;
-    const bucket = bucketFor(Math.max(0, ...list.map((st) => st.size * PLAY_WIDTH * scale)));
+    // capped: at 1024 the 32 MB cache holds only 8 sprites, and an entry with a 9th would evict and reload forever
+    const bucket = bucketFor(Math.min(STAGE_BUCKET_MAX, Math.max(0, ...list.map((st) => st.size * PLAY_WIDTH * scale))));
     for (const st of list) {
-      if (cache.get(st.emoji, bucket)) continue;
+      if (cache.get(st.emoji, bucket) || cache.hasFailed(st.emoji, bucket)) continue;
       cache.load(st.emoji, bucket).then(
         () => {
           if (shownRef.current === entryId) paintStickers.current(entryId);
@@ -196,21 +200,34 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const stickerOnStage = stickerSel !== null && stickersOn({ stickers: stickerList }, status.shown).some((s) => s.id === stickerSel);
   // its actions stay while another entry is shown: that is how the range is extended to a frame without it
   const stickerShown = stickerSel !== null ? (project?.stickers?.find((s) => s.id === stickerSel) ?? null) : null;
-  const onTile = (entryId: string) => {
+  // stable, so the memoized strip does not re-render on every player tick
+  const onTile = useCallback((entryId: string) => {
     if (entryId === selected) {
       setBig(true);
       return;
     }
     setSelected(entryId);
     player.current?.seekTo(entryId);
+  }, [selected]);
+  // "Od początku": the stage goes to the first playable entry, and so does the selection
+  const onRestart = () => {
+    player.current?.seekToStart();
+    setSelected(tiles.find((x) => x.state === 'ready')?.entryId ?? null);
   };
+  // bumped by every tool tap: a sticker gesture still in flight is cancelled instead of overwriting the edit
+  const [gestureEpoch, setGestureEpoch] = useState(0);
   // The tools row: one controller call per tap; the project store update re-renders the strip.
-  const states = toolStates(project, selected, { exporting: exportBusy, canUndo: edit?.controller.canUndo(id) ?? false });
-  const selectedOff = tiles.find((x) => x.entryId === selected)?.state === 'off';
+  const canUndo = edit?.controller.canUndo(id) ?? false;
+  const states = useMemo(() => toolStates(project, selected, { exporting: exportBusy, canUndo }), [project, selected, exportBusy, canUndo]);
+  const selectedTileState = useMemo(() => tiles.find((x) => x.entryId === selected)?.state, [tiles, selected]);
+  const selectedOff = selectedTileState === 'off';
+  // a sticker added on an entry the stage cannot show (off, downloading, unavailable) would be invisible
+  const emojiOk = selectedTileState === 'ready';
   const onTool = (tool: EditTool) => {
     const c = edit?.controller;
     if (!c || (selected === null && tool !== 'undo')) return;
-    if (tool === 'undo') setLive(null);
+    setGestureEpoch((n) => n + 1);
+    setLive(null);
     const sel = selected ?? '';
     const run: Promise<unknown> =
       tool === 'delete' ? c.delete(id, sel).then((r) => { if (r === 'frame') setSelected(null); })
@@ -233,6 +250,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const onStickerTool = (what: 'from' | 'to' | 'delete') => {
     const c = edit?.stickers;
     if (!c || stickerSel === null) return;
+    setGestureEpoch((n) => n + 1);
     const run = what === 'delete' ? c.remove(id, stickerSel) : selected === null ? Promise.resolve(false) : what === 'from' ? c.rangeFrom(id, stickerSel, selected) : c.rangeTo(id, stickerSel, selected);
     run.catch((e) => console.error('sticker', e));
   };
@@ -242,7 +260,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   }, [pickerOpen, overlays]);
   const toolsShown = !!edit && (selected !== null || states.undo);
   // the latest frame in its Undo window (the Undo toast of a frame Delete)
-  const hiding = project?.frames.filter((f) => f.hiddenUntil !== null).sort((a, b) => Date.parse(a.hiddenUntil!) - Date.parse(b.hiddenUntil!)).pop();
+  const hiding = useMemo(
+    () => project?.frames.filter((f) => f.hiddenUntil !== null).sort((a, b) => Date.parse(a.hiddenUntil!) - Date.parse(b.hiddenUntil!)).pop(),
+    [project?.frames],
+  );
   // Android Back closes the big view first.
   useEffect(() => {
     if (!bigOpen || !overlays) return;
@@ -268,7 +289,8 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
             project={project}
             entryId={status.shown}
             stickers={stickersOn({ stickers: stickerList }, status.shown)}
-            selectedId={stickerOnStage ? stickerSel : null}
+            selectedId={stickerOnStage && !status.playing ? stickerSel : null}
+            cancelEpoch={gestureEpoch}
             controller={edit.stickers}
             onSelect={setStickerSel}
             onLive={setLive}
@@ -277,7 +299,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       </div>
       <div className="play-side">
         <div className="play-controls">
-          <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={() => player.current?.seekToStart()} disabled={status.playable === 0}>
+          <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={onRestart} disabled={status.playable === 0}>
             <Icon name="restart" />
           </button>
           <button
@@ -332,6 +354,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
             isOff={selectedOff}
             onTool={onTool}
             onEmoji={() => setPickerOpen(true)}
+            emojiOk={emojiOk}
             sticker={stickerShown ? { emoji: stickerShown.emoji, onFrom: () => onStickerTool('from'), onTo: () => onStickerTool('to'), onDelete: () => onStickerTool('delete') } : null}
           />
         )}

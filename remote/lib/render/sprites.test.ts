@@ -80,9 +80,31 @@ describe('SpriteCache', () => {
     const f = fakeRaster(['BAD']);
     const c = new SpriteCache(f.raster);
     await expect(c.load('BAD', 128)).rejects.toThrow('boom');
-    await expect(c.load('BAD', 128)).rejects.toThrow('boom');
-    expect(f.calls).toHaveLength(2);
+    expect(c.hasFailed('BAD', 128)).toBe(true);
+    await expect(c.load('BAD', 128)).rejects.toThrow('failed before'); // negative cache: no second fetch
+    expect(f.calls).toHaveLength(1);
     expect(c.size).toBe(0);
+    c.clear();
+    expect(c.hasFailed('BAD', 128)).toBe(false);
+  });
+
+  it('a load that lands after clear() is closed, not inserted', async () => {
+    const made: { closed: boolean; close(): void }[] = [];
+    let land!: () => void;
+    const gate = new Promise<void>((r) => (land = r));
+    const c = new SpriteCache(async () => {
+      await gate;
+      const b = { closed: false, close() { this.closed = true; } };
+      made.push(b);
+      return b as unknown as ImageBitmap;
+    });
+    const loading = c.load('A', 128);
+    c.clear();
+    land();
+    await expect(loading).rejects.toThrow('cleared');
+    expect(made[0]!.closed).toBe(true);
+    expect(c.size).toBe(0);
+    expect(c.bytes).toBe(0);
   });
 
   it('clear closes everything', async () => {

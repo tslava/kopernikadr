@@ -252,6 +252,19 @@ describe('player timeline', () => {
     expect(drawn.map((d) => d.entry)).toEqual(['d2', 'f3']);
   });
 
+  it('after release the next timeline shows a frame again (stage after an export)', async () => {
+    const { clock, drawn, player } = rig(20);
+    setFrames(player, three);
+    await clock.advance(100);
+    player.release();
+    expect(player.status().shown).toBeNull();
+    drawn.length = 0;
+    setFrames(player, three);
+    await clock.advance(100);
+    expect(drawn.length).toBeGreaterThan(0);
+    expect(player.status().shown).not.toBeNull();
+  });
+
   it('seekTo an unknown entry changes nothing', async () => {
     const { clock, drawn, player } = rig(20);
     setFrames(player, three);

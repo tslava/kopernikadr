@@ -144,8 +144,8 @@ export function createPlayer(o: PlayerOptions): Player {
       if (at >= 0) cursor = at + 1;
       cursor = Math.min(cursor, items.length);
       if (cursor >= items.length && loop) cursor = 0;
-      // the first frames arrived, or the one on screen is gone: show something
-      if (items.length > 0 && (!hadFrames || (shown !== null && at < 0))) wantShow = true;
+      // the first frames arrived, nothing is on screen (after a release), or the one on screen is gone: show something
+      if (items.length > 0 && (!hadFrames || shown === null || at < 0)) wantShow = true;
       refill();
       emit();
       schedule();

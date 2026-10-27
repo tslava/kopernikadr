@@ -46,7 +46,9 @@ const keyOf = (hexcode: string, bucket: number): string => `${hexcode}@${bucket}
 export class SpriteCache {
   private readonly entries = new Map<string, ImageBitmap>(); // insertion order = recency
   private readonly inflight = new Map<string, Promise<ImageBitmap>>();
+  private readonly failed = new Set<string>(); // negative cache: a broken sprite is not re-fetched on every paint
   private total = 0;
+  private generation = 0; // bumped by clear(): a load that began before it must not insert into the emptied cache
 
   constructor(
     private readonly raster: Rasterize = rasterizeSvg,
@@ -72,21 +74,35 @@ export class SpriteCache {
     return bmp;
   }
 
-  /** Loads (or returns the cached) sprite. Concurrent calls share one rasterization. */
+  /** True once a load of this sprite failed (until `clear`). */
+  hasFailed(hexcode: string, bucket: SpriteBucket): boolean {
+    return this.failed.has(keyOf(hexcode, bucket));
+  }
+
+  /** Loads (or returns the cached) sprite. Concurrent calls share one rasterization; a failed one is remembered. */
   load(hexcode: string, bucket: SpriteBucket): Promise<ImageBitmap> {
     const hit = this.get(hexcode, bucket);
     if (hit) return Promise.resolve(hit);
     const k = keyOf(hexcode, bucket);
+    if (this.failed.has(k)) return Promise.reject(new Error(`sprite failed before: ${k}`));
     let p = this.inflight.get(k);
     if (!p) {
+      const gen = this.generation;
       p = this.raster(spriteUrl(hexcode), bucket).then(
         (bmp) => {
+          if (gen !== this.generation) {
+            bmp.close(); // cleared (the view went away) while this was loading
+            throw new Error(`sprite cache cleared: ${k}`);
+          }
           this.inflight.delete(k);
           this.insert(k, bmp, bucket);
           return bmp;
         },
         (e: unknown) => {
-          this.inflight.delete(k);
+          if (gen === this.generation) {
+            this.inflight.delete(k);
+            this.failed.add(k);
+          }
           throw e;
         },
       );
@@ -121,8 +137,11 @@ export class SpriteCache {
     };
   }
 
-  /** Closes and forgets everything cached. */
+  /** Closes and forgets everything cached (and every failure); loads still in flight are discarded when they land. */
   clear(): void {
+    this.generation++;
+    this.inflight.clear();
+    this.failed.clear();
     for (const b of this.entries.values()) b.close();
     this.entries.clear();
     this.total = 0;
