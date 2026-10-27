@@ -673,13 +673,13 @@ Status: rev 2 (after the plan review; all critical and important findings applie
   - [ ] `scripts/test/run.sh`
 
 ### Task 17: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
-  - [ ] `:core`/`:app` + the `probe` build type;
-  - [ ] `ROTATION_90` + 0/180 geometry;
-  - [ ] the freeze mechanics (fence via the future, ISO tolerance);
-  - [ ] remote-lite as the interim remote + remote-core sharing;
-  - [ ] the in-app native plugin;
-  - [ ] the corrected §5.7 Mediabunny API (WritableStream `StreamTarget`, codec ladder);
+- [ ] `docs/ARCHITECTURE.md` (the sub-items below are done except the last):
+  - [x] `:core`/`:app` + the `probe` build type;
+  - [x] `ROTATION_90` + 0/180 geometry;
+  - [x] the freeze mechanics (fence via the future, ISO tolerance);
+  - [x] remote-lite as the interim remote + remote-core sharing;
+  - [x] the in-app native plugin;
+  - [x] the corrected §5.7 Mediabunny API (WritableStream `StreamTarget`, codec ladder);
     - ➕ (from Task 12, checked in mediabunny 1.61.4) `StreamTarget` has no `onData(chunk,
       position)`: it is `new StreamTarget(writable: WritableStream<{type: 'write', data,
       position}>, {chunked: true, chunkSize})` (chunk default 16 MiB, min 1024; we use 1 MiB);
@@ -697,7 +697,8 @@ Status: rev 2 (after the plan review; all critical and important findings applie
     - ➕ the writer side is `remote/lib/export/nativeWriter.ts`; each `videoWriteAt` carries
       ≤1 MiB as base64
   - [ ] measured 0a/0b facts replacing [S0]; §9 decisions
-- [ ] README final; `docs/ROADMAP.md`: 0b done, next = stage 1 or the effects layer per the
+    - ➕ 2026-10-27 (docs agent): the export speed, codec, NSD and the §9 decisions (2, 5, 13–16) are updated; the other [S0] items (JPEG size, sensor, grid test, Family Link) have no measurements yet, so the markers stay
+- [ ] README final (the Family Link section waits for Task 14); `docs/ROADMAP.md`: 0b done, next = stage 1 or the effects layer per the
       owner
 - [ ] move this plan to `docs/plans/completed/`
 

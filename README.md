@@ -4,9 +4,11 @@ A home stop-motion rig for a kid. A phone hangs lens-down over a table and works
 a tablet or laptop is the remote: live preview, onion skin, frame strip, playback and video
 export. No app store: everything is installed with `adb` or as an APK.
 
-Status (stage 0b, in progress): the phone camera app works, and it serves a browser remote,
-**remote-lite**, that the kid uses today. The native tablet app (`remote/`) is being built in
-plan 0b. Things marked *coming in 0b* don't exist yet.
+Status (2026-10-27): the phone camera app works, and the native tablet app (`remote/`) is built:
+projects, shooting with onion skin, playback and export to the gallery (stages 1+2). It is
+tested on an emulator against a fake camera; the session on the real tablet and phone is still
+to do. The browser remote on the phone, **remote-lite**, still works and is the fallback. Next:
+stage 3 (frame strip and editing), then effects ([roadmap](docs/ROADMAP.md)).
 
 Docs: [requirements](docs/PROMPT.md) · [architecture](docs/ARCHITECTURE.md) ·
 [protocol](protocol/PROTOCOL.md) · [roadmap](docs/ROADMAP.md) · [plans](docs/plans/) ·
@@ -18,9 +20,9 @@ Docs: [requirements](docs/PROMPT.md) · [architecture](docs/ARCHITECTURE.md) ·
 |---|---|
 | `camera-android/` | The phone app (Kotlin, CameraX, Ktor). `:core` is a plain JVM module with all pure logic, the server routes, the spool and the remote-lite web files; `:app` is the Android app (camera adapters, UI, probes) |
 | `camera-android/core/src/main/resources/remote-lite/` | remote-lite: the browser remote the phone serves on `/` |
-| `protocol/` | `PROTOCOL.md` (v0, frozen as v1 at the end of 0b), `fixtures/*.json`, and `tools/probe-client/` (a Mac CLI + a fake camera) |
-| `packages/remote-core/` | *Coming in 0b:* shared JS (protocol client, preview, backoff, i18n helpers) used by remote-lite and the native remote |
-| `remote/` | *Coming in 0b:* the native tablet remote (Next.js static export + Capacitor 8 Android) |
+| `protocol/` | `PROTOCOL.md` (v1, frozen 2026-10-27), `fixtures/*.json`, and `tools/probe-client/` (a Mac CLI + a fake camera) |
+| `packages/remote-core/` | Shared JS (protocol client, connection, preview, backoff, i18n helpers) used by remote-lite and the native remote |
+| `remote/` | The native tablet remote (Next.js static export + Capacitor 8 Android); `remote/e2e/` is the emulator test script |
 | `scripts/` | `build.sh`, `install.sh`, `collect-diagnostics.sh`, `meminfo-sampler.sh` (+ `lib.sh`, and `test/run.sh` with a fake `adb`) |
 | `docs/` | Requirements, architecture, roadmap, plans, diagnostics summaries, acceptance checklists |
 
@@ -41,7 +43,7 @@ cd camera-android
 ```
 
 Pinned versions and why some are held back: [camera-android/VERSIONS.md](camera-android/VERSIONS.md).
-*Coming in 0b:* npm workspaces at the root (`npm test --workspaces`).
+JS tests: `npm test --workspaces` at the root (run `npm ci` once first).
 
 ### Build the APKs (`scripts/build.sh`)
 
@@ -150,7 +152,53 @@ With more than one device connected, pick one with `ANDROID_SERIAL=<serial>` (Gr
 > deletes them. Always upgrade in place (`install -r`, or the Gradle install task). If an install
 > fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, stop and ask; don't uninstall to "fix" it.
 
-## Using it today (remote-lite)
+## Using it: the tablet app
+
+For the parent. The kid's remote is the **Kopernikadr** app on the tablet.
+
+1. Put the phone on the rig, on the same Wi-Fi as the tablet, and open **Kopernikadr Kamera**.
+   Keep it open with the screen on: the camera works only while the app is in the foreground.
+2. On the tablet, open **Kopernikadr**. It finds the phone by itself (or type the address shown
+   on the phone's screen on the connect screen). A badge shows whether the camera is online.
+3. What the kid does:
+   - **Projects:** the first screen is the list of her movies, big cards with a cover and the
+     frame count. The "new movie" card starts a movie. Tap a card to shoot or to watch.
+   - **Capture:** live preview, the faint previous frame over it (onion skin), the big shutter
+     button and the frame counter. "Play" opens playback, the back arrow returns to the movies.
+   - **Play:** the movie plays at its frame rate. The export button saves a video.
+   - **Export:** the video is encoded on the tablet and saved to the gallery, in
+     **`Movies/Kopernikadr`**, as `kopernikadr-<name>-<date>.mp4`. The dialog says "Zapisano w
+     galerii" when it is done. Cancel works only while it is encoding.
+   - **Deleting a movie** can be undone for 5 seconds.
+4. **Parent drawer:** **long-press the wrench** on the capture screen (about 1.5 seconds). It has
+   the exposure, white balance and focus locks (set the light first, then lock), exposure
+   compensation, the camera rotation (0/180, only for a movie with no frames yet), preview
+   quality, frames per second, the grid, and the transfer queue, storage and frames that could
+   not be downloaded. The Diagnostics screen (`#/diagnostics`) is for probes.
+5. Each frame goes to the tablet right after it is shot, and only then does the phone's copy
+   become removable. The phone deletes a frame it already handed over only when it runs low on
+   space.
+
+Things to know:
+- **Where the movies are:** the frames and projects are inside the tablet app; the finished
+  videos are in the gallery (`Movies/Kopernikadr`).
+- **Uninstalling the remote deletes its movies** (the frames and projects; the videos already in
+  the gallery stay). There is no backup in v1.
+- **remote-lite still works** as a fallback on the same phone (open `http://<phone-ip>:8765/` in
+  a browser, see below). Its movies are not imported into the app: they stay on the phone and in
+  that browser.
+- **"Frames of other remotes":** the camera counts unacknowledged frames that belong to another
+  remote, for example every movie shot with remote-lite, in its status (`orphanCount`). They are
+  never deleted by the camera app and never sent to the tablet app. (The phone's screen doesn't
+  show this count.)
+- **Before upgrading the camera app on the kid's phone, back up its frames.** The new camera build
+  runs a recovery at start (it moves a stray `full` file to a `quarantine/` folder rather than
+  deleting it), and the phone holds the only copy of the remote-lite movies. Upgrade only in
+  place (`install -r`, never uninstall), and first download every `full` of remote-lite's
+  `clientId` from the camera's HTTP API (read-only, **do not ack**) and check the sha256 values;
+  compare `getStatus` counts before and after. This step is not scripted yet.
+
+## Using remote-lite (the fallback)
 
 1. Put the phone on the rig, on the same Wi-Fi as the tablet/laptop, and open
    **Kopernikadr Kamera**. Keep the app open with the screen on: the camera works only while the
@@ -223,7 +271,8 @@ command needs the `/diag` routes, which the camera app doesn't have yet.
   `dumpsys meminfo` TOTAL PSS of the app and of its WebView sandboxed renderer about once a
   second → CSV `ts,app_pss_kb,renderer_pss_kb,total_kb`; on Ctrl-C or after N seconds it writes
   `<out>.summary.txt` with the peaks. Default output: `diagnostics/<date>/meminfo-<pkg>-<time>.csv`.
-- *Coming in 0b:* a diagnostics view in the native remote.
+- The native remote has a Diagnostics view (`#/diagnostics`) that runs the probes (environment,
+  NSD, camera, reconnect, download, video frame, export) and writes a report.
 
 ## Parent checklist (Family Link) — draft
 
@@ -261,9 +310,10 @@ devices. Never try to bypass supervision.
   and resumes when the app is back.
 
 **7. Don't uninstall**
-- **Uninstalling an app deletes its data.** The camera app holds all frames. The native remote
-  (coming in 0b) will hold all projects, with no backup in v1. Today remote-lite keeps projects
-  in the browser, so clearing that browser's site data deletes them too.
+- **Uninstalling an app deletes its data.** The camera app holds the frames that are not yet
+  removed, and the native remote holds all projects and frames, with no backup in v1 (finished
+  videos in the gallery stay). remote-lite keeps projects in the browser, so clearing that
+  browser's site data deletes them too.
 - Keep the release keystore backed up (see [Release keystore](#release-keystore-create-once-then-back-it-up)):
   without it an update can't be installed over the existing apps.
 
@@ -274,12 +324,17 @@ devices. Never try to bypass supervision.
 
 ## Known limitations (today)
 
-- Frames are never deleted from the phone yet (remote-lite doesn't ack them). The spool grows
-  until stage 2 adds ack and retention.
-- Projects live in the browser that created them (its local storage). Another browser or device
-  sees an empty list; clearing site data deletes them.
+- The phone reclaims frames the tablet app already acknowledged only when it runs low on space
+  (there is no 7-day timer yet, stage 3). Frames shot with remote-lite are never acknowledged
+  and never deleted: that spool grows.
+- remote-lite's projects live in the browser that created them (its local storage). Another
+  browser or device sees an empty list; clearing site data deletes them.
+- The tablet app has no frame strip or frame editing yet (stage 3).
+- The `quarantine/` folders (phone and tablet app) are never cleaned up automatically.
+- The phone does not dim its screen yet.
 - One controller at a time; a second remote takes over and pauses the first ("Przejmij").
-- No NSD discovery yet: use the QR or type the address (NSD comes in 0b).
+- remote-lite has no discovery: use the QR or type the address. The tablet app finds the phone
+  by NSD; there is no QR deep link.
 - The camera works only while its app is in the foreground with the screen on.
 - Both apps target SDK 36. Targeting SDK 37+ (Android 17) would need the local-network
   permission; we don't need 37 while sideloading.
