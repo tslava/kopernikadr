@@ -509,7 +509,7 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Modify: `camera-android/core/src/main/kotlin/.../server/CameraServer.kt` (CORS `localhost:*`
   in debug/probe builds only, via config) + test; `docs/ACCEPTANCE.md`
 
-- [ ] debug/probe-only CORS for `http://localhost:*` (a config flag from `:app` build type);
+- [x] debug/probe-only CORS for `http://localhost:*` (a config flag from `:app` build type);
       write a test
 - [ ] emulator (debug + release): all probes against the fake camera and the real phone; reports
       pulled with `collect-diagnostics.sh`

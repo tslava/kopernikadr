@@ -41,7 +41,9 @@ checked by both implementations.
   `kopernikadr://connect?host=<ip>&port=<port>&id=<cameraId>`.
 - One HTTP/1.1 port (default 8765; another port MAY be used and advertised).
 - **CORS**: plain HTTP endpoints answer with `Access-Control-Allow-Origin` for the remote app's
-  origin (`http://localhost` for the Android remote).
+  origin (`http://localhost` for the Android remote). Debug and probe camera builds also allow
+  `http://localhost:<port>` and `http://127.0.0.1[:<port>]` (any port 1–65535), for a remote
+  web build in a desktop browser during development; release builds do not.
 - **Origin**: the camera MUST NOT reject a WebSocket upgrade that carries no `Origin` header
   (non-browser clients). v0 enforces no `Origin` at all; a later version MAY reject upgrades
   whose `Origin` is present and not the remote app's.

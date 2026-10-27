@@ -47,11 +47,18 @@ class ServerConfig(
     val statusIntervalMs: Long = 10_000,
     /** Classpath directory of the web remote served at `/`. */
     val staticRoot: String = "remote-lite",
+    /**
+     * Development only (debug/probe builds): the CORS routes also allow `http://localhost:<port>`
+     * and `http://127.0.0.1[:<port>]`, for the remote's web build under `next dev` in desktop
+     * Chrome. Off, they allow exactly `http://localhost` (see [isLocalhostAnyPortOrigin]).
+     */
+    val allowLocalhostAnyPort: Boolean = false,
 )
 
 /**
  * Installs the whole camera server (PROTOCOL.md §3) into an [Application]:
- * `GET /info`, `GET /frames/{frameId}/{variant}.jpg` (both with CORS for `http://localhost`),
+ * `GET /info`, `GET /frames/{frameId}/{variant}.jpg` (both with CORS for `http://localhost`, and
+ * any localhost port with [ServerConfig.allowLocalhostAnyPort]),
  * `/ws/control`, `/ws/preview?session=`, and the web remote (`/`, `/{path...}`).
  * Captures run in the application scope, so they outlive their socket. Every `GET` route also
  * answers `HEAD`. A display cache that cannot be generated is `503` with `Retry-After: 1`.
@@ -68,7 +75,7 @@ fun Application.cameraModule(ports: CameraPorts, config: ServerConfig = ServerCo
     val hub = Hub(ports, config, scope = this)
     routing {
         route("/info") {
-            installCors()
+            installCors(config.allowLocalhostAnyPort)
             get {
                 val id = ports.identity
                 val info = Info(id.cameraId, id.name, id.bootId, SUPPORTED_VERSIONS)
@@ -76,7 +83,7 @@ fun Application.cameraModule(ports: CameraPorts, config: ServerConfig = ServerCo
             }
         }
         route("/frames/{frameId}/{file}") {
-            installCors()
+            installCors(config.allowLocalhostAnyPort)
             get {
                 val frameId = call.parameters["frameId"].orEmpty()
                 val file = call.parameters["file"].orEmpty()
@@ -139,11 +146,24 @@ private class HeadResponse(private val original: OutgoingContent) : OutgoingCont
     override val headers: Headers get() = original.headers
 }
 
-private fun Route.installCors() {
+private fun Route.installCors(allowLocalhostAnyPort: Boolean) {
     install(CORS) {
         allowHost("localhost", schemes = listOf("http"))
+        if (allowLocalhostAnyPort) allowOrigins(::isLocalhostAnyPortOrigin)
         allowMethod(HttpMethod.Get)
     }
+}
+
+private val LOCALHOST_ANY_PORT = Regex("""http://(localhost|127\.0\.0\.1)(?::([1-9][0-9]{0,4}))?""")
+
+/**
+ * `http://localhost` or `http://127.0.0.1` with an optional port 1–65535 (no leading zero) and
+ * nothing else: no other scheme, host suffix, userinfo, path or trailing slash.
+ */
+internal fun isLocalhostAnyPortOrigin(origin: String): Boolean {
+    val m = LOCALHOST_ANY_PORT.matchEntire(origin) ?: return false
+    val port = m.groupValues[2]
+    return port.isEmpty() || port.toInt() <= 65535
 }
 
 /**
