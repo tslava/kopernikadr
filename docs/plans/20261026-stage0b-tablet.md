@@ -450,36 +450,72 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 - Create: `remote/lib/probes/{runner.ts,env.ts,report.ts}` + tests
 - Modify: `remote/components/Diagnostics.tsx`
 
-- [ ] tests first, then `runner`: sequential with injected adapters; each result is
+- [x] tests first, then `runner`: sequential with injected adapters; each result is
       `{name, ok, ms, data, error?}`; one failure doesn't stop the others; keep-awake held for
       the whole run (adapter)
-- [ ] `env` probe
-- [ ] `report`: write via `writeTextAtomic` to `kopernikadr/probe/` and a copy via
+- [x] `env` probe
+- [x] `report`: write via `writeTextAtomic` to `kopernikadr/probe/` and a copy via
       `Filesystem.writeFile({directory: External})`; an on-screen pass/fail summary
-- [ ] write tests for the runner, env (fake globals) and report (path, content)
-- [ ] run tests — must pass before Task 11
+- [x] write tests for the runner, env (fake globals) and report (path, content)
+- [x] run tests — must pass before Task 11
+- [x] ➕ result extras: `skipped?: <reason>` (`native-only`, `cancelled`, `user`, `no-input`) is
+      neither a pass nor a failure; `ProbeFailure` keeps partial data; a Stop button aborts the
+      run (remaining probes → `cancelled`); interactive steps go through a `prompt` adapter
+- [x] ➕ `storage` probe (`freeBytes`) lives in `env.ts`; the report is
+      `probe/remote-diag-<YYYYMMDDTHHMMSSZ>.json` in both places (`collect-diagnostics.sh` pulls
+      the external copy); in a browser nothing is written and the JSON is shown on screen
+- [x] ➕ wiring in `remote/lib/probes/app.ts` (dynamic import on "run", nothing at prerender),
+      `shared.ts` (`PROBE_ORDER`, the state probes hand on, localStorage helpers); keep-awake via
+      the existing `@capacitor-community/keep-awake` dependency
+- [x] ➕ a browser smoke of the web build (`out/` in Chrome) against `fake-camera.mjs`: env ✓,
+      camera ✓, reconnect ✓ (sockets kicked + camera restarted), native probes `native-only`
+- ⚠️ i18n follows the existing tables, **pl + ru** (there is no English table)
 
 ### Task 11: Probes — NSD, camera, reconnect, download, VideoFrame
 
 **Files:**
 - Create: `remote/lib/probes/{nsd.ts,camera.ts,download.ts,videoFrame.ts}` + tests
 
-- [ ] `nsd`: via `discovery.ts` (Task 7)
-- [ ] `camera`:
-  - [ ] manual `/info`;
-  - [ ] remote-core `ControlClient`: hello → session, ping during a capture;
-  - [ ] preview 10 s at low/normal/high (fps, latency p50/p95);
-  - [ ] capture round-trip
-- [ ] `reconnect` (interactive): prompts "lock the phone screen, then unlock" and "close the
+- [x] `nsd`: via `discovery.ts` (Task 7)
+- [x] `camera`:
+  - [x] manual `/info`;
+  - [x] remote-core `ControlClient`: hello → session, ping during a capture;
+  - [x] preview 10 s at low/normal/high (fps, latency p50/p95);
+  - [x] capture round-trip
+- [x] `reconnect` (interactive): prompts "lock the phone screen, then unlock" and "close the
       camera app and start it again"; measures time-to-reconnect and checks a new `bootId`
-- [ ] `download`: `getUri` + `mkdir`, file-transfer of `full`, sha256 via
+- [x] `download`: `getUri` + `mkdir`, file-transfer of `full`, sha256 via
       `fetch(convertFileSrc)` + `crypto.subtle`, `installFile`, MB/s; **ack** the probe's frames
       after verification
-- [ ] `videoFrame`: `convertFileSrc` → `createImageBitmap` → `new VideoFrame` → close
-- [ ] write tests for each with fake adapters (success and failure paths)
+- [x] `videoFrame`: `convertFileSrc` → `createImageBitmap` → `new VideoFrame` → close
+- [x] write tests for each with fake adapters (success and failure paths)
 - [ ] emulator: run against the fake camera (`10.0.2.2`) and the real phone; screenshot + pulled
-      report
-- [ ] run tests — must pass before Task 12
+      report — pending for the orchestrator
+- [x] run tests — must pass before Task 12
+- [x] ➕ camera address: the first NSD camera, else the manual field on Diagnostics (persisted in
+      localStorage); no address → the camera probes fail with "no camera address"
+- [x] ➕ one persistent probe `clientId` + `projectId` (localStorage `kopernikadr.probe.*`), so
+      `listFrames`/`ack` only ever see the probe's own frames (the kid's are never listed or
+      acked; tested). `download` downloads every listed probe frame (≤25 per run, captures one if
+      none), acks only those verified by size + sha256 (+ `installFile` natively); a frame that
+      fails verification stays on the camera
+- [x] ➕ `download` in a browser: skipped as `native-only`, but it still fetches + verifies +
+      acks the probe frames so a Chrome run leaves nothing on the phone
+- [x] ➕ `camera` also times JPEG decode (`createImageBitmap`) per preview frame and restores the
+      original `previewQuality`; `videoFrame` also decodes at 1440×1080 (the export resize)
+- [x] ➕ `reconnect` uses remote-core `CameraConnection` (the real loop: 2 s ping, backoff);
+      the drop is looked for from the moment the first prompt is shown; it runs **last**
+      (interactive). Task 12 adds `export` to `PROBE_ORDER` and `buildProbes` before `reconnect`
+- [x] ➕ JSDoc types added to remote-core `protocol.js`, `preview-frame.js`, `connection.js`
+      (`Object.assign(this, …)` → explicit fields), `backoff.js`, so the remote's `checkJs`
+      accepts them; no behaviour change (remote-core tests green)
+- [x] ➕ `fake-camera.mjs` `close()` also destroys open WebSocket sockets (like a camera app
+      stopping); otherwise `server.close()` hangs while a client keeps reconnecting
+- ⚠️ the camera allows one session: remote-lite (another clientId) must be closed during the
+      run (the probes report `camera busy … close remote-lite`), and right after a run the kid's
+      remote gets `BUSY` until the probe session's 10 s TTL runs out
+- ⚠️ `nsd` fails with "no camera found" on the emulator (mDNS doesn't cross the NAT, Task 7);
+      the manual `10.0.2.2:<port>` is used there
 
 ### Task 12: Export probe — Mediabunny → KopernikadrNative → gallery
 
