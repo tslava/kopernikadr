@@ -174,3 +174,29 @@ test('probe: a refused start fails at once (not retried)', async () => {
   const ctx = makeCtx(`127.0.0.1:${await closedPort()}`);
   await assert.rejects(commands.probe(ctx, 'caps', { outRoot: tmpdir() }), (e) => /connection refused/.test(describeError(e)));
 });
+
+test('backup saves and verifies every unacked full of the client, never acks, skips saved ones', () => withCamera({}, async (cam) => {
+  const ctx = makeCtx(cam.host);
+  const mine = [];
+  for (let i = 0; i < 3; i++) mine.push((await commands.capture(ctx)).first);
+  const out = await mkdtemp(join(tmpdir(), 'probe-backup-'));
+
+  const m = await commands.backup(ctx, { out });
+  assert.equal(m.total, 3);
+  assert.equal(m.failed, 0);
+  assert.deepEqual(m.frames.map((f) => f.frameId), mine.map((f) => f.frameId));
+  for (const f of mine) assert.deepEqual(await readFile(join(out, `${f.frameId}.full.jpg`)), cam.fullBytes);
+  assert.equal(JSON.parse(await readFile(join(out, 'manifest.json'), 'utf8')).ok, 3);
+  // nothing was acked: the camera still lists all three
+  const again = await commands.backup(ctx, { out });
+  assert.equal(again.total, 3);
+  assert.ok(again.frames.every((f) => f.cached));
+
+  // a full whose bytes do not match is reported, not saved
+  await fetch(`http://${cam.host}/fake/corrupt-full?frame=${mine[0].frameId}`);
+  const out2 = await mkdtemp(join(tmpdir(), 'probe-backup-'));
+  const bad = await commands.backup(ctx, { out: out2 });
+  assert.equal(bad.failed, 1);
+  assert.equal(process.exitCode, 1);
+  assert.ok(!(await readdir(out2)).includes(`${mine[0].frameId}.full.jpg`));
+}));

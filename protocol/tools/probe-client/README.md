@@ -40,6 +40,12 @@ node client.mjs download 192.168.1.42 01JC... --variant thumb
 # the report and its files land in <repo>/diagnostics/<YYYY-MM-DD>/<runId>/
 node client.mjs probe 192.168.1.42 caps
 node client.mjs probe 192.168.1.42 locks --args '{"manualRestart":true}'
+
+# read-only backup of one client's unacked frames (remote-lite's clientId is in the tablet
+# browser's localStorage, key kopernikadr.remoteLite.clientId): every full is downloaded, checked
+# against its sha256 and saved next to a manifest.json. It never acks; a re-run skips saved frames.
+# The camera holds a session for 10 s after a client leaves: a BUSY answer means "wait and retry".
+node client.mjs backup 192.168.1.42 --clientId <uuid> --out ~/kopernikadr-backup/<date>
 ```
 
 During `probe`, the server may vanish while the phone screen is locked; the client keeps polling

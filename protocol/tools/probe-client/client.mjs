@@ -18,6 +18,7 @@ const USAGE = `usage: node client.mjs <command> <host[:port]> [options]    (defa
   preview  <host> [--seconds 10] [--quality low|normal|high]
   download <host> <frameId> [--variant full|play|thumb] [--sha256 <hex>] [--out <path>]
   probe    <host> <name> [--args <json>]            run a /diag probe, answer prompts, fetch the report
+  backup   <host> --out <dir>                       save + verify every unacked full of --clientId (never acks)
 
 common: --clientId <uuid>  (default: persistent id in ~/.config/kopernikadr/probe-client.json)
         --json             print the raw JSON result on stdout (progress goes to stderr)
@@ -121,7 +122,7 @@ export async function main(argv) {
     return;
   }
   const run = commands[command];
-  if (!['info', 'hello', 'capture', 'preview', 'download', 'probe'].includes(command) || !run) {
+  if (!['info', 'hello', 'capture', 'preview', 'download', 'probe', 'backup'].includes(command) || !run) {
     throw new UsageError(`unknown command "${command}"\n\n${USAGE}`);
   }
   const flags = validateFlags(rawFlags);

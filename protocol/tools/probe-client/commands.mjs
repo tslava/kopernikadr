@@ -4,7 +4,7 @@
 // ctx = {target: parseTarget(...), clientId, projectId, log(line), warn(line), waitForEnter(text, signal)}
 
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { getJson, request, HttpError, isUnreachable, describeError } from './http.mjs';
@@ -298,6 +298,63 @@ export async function download(ctx, frameId, { variant = 'full', sha256, out } =
   if (out) ctx.log(`saved to ${out}`);
   if (!result.contentLengthOk || result.sha256Ok === false) process.exitCode = 1;
   return result;
+}
+
+/**
+ * Read-only backup of one client's frames: pages through `listFrames` (that client's committed,
+ * unacked frames), downloads every `full`, checks its sha256 and size, and writes
+ * `<out>/<frameId>.full.jpg` plus `<out>/manifest.json`. It NEVER acks, so the camera keeps
+ * every frame. A frame already in `out` with the right sha256 is not fetched again.
+ */
+export async function backup(ctx, { out }) {
+  if (!out) throw new Error('backup needs --out <dir>');
+  await mkdir(out, { recursive: true });
+  const frames = [];
+  const ctl = await connectControl(ctx);
+  let status;
+  try {
+    status = ctl.session.status ?? null;
+    let afterSeq = 0;
+    for (;;) {
+      const page = await ctl.request('listFrames', { afterSeq, limit: 100 });
+      frames.push(...page.frames);
+      if (!page.hasMore || page.frames.length === 0) break;
+      afterSeq = page.frames[page.frames.length - 1].seq;
+    }
+  } finally {
+    ctl.close();
+  }
+  ctx.log(`client ${ctx.clientId}: ${frames.length} unacked frame(s)`);
+  const rows = [];
+  let failed = 0;
+  for (const f of frames) {
+    const file = join(out, `${f.frameId}.full.jpg`);
+    const row = { frameId: f.frameId, seq: f.seq, projectId: f.projectId, capturedAt: f.capturedAt, bytes: f.full.bytes, sha256: f.full.sha256, file: `${f.frameId}.full.jpg`, ok: false };
+    try {
+      const have = await readFile(file).catch(() => null);
+      if (have && have.length === f.full.bytes && createHash('sha256').update(have).digest('hex') === f.full.sha256) {
+        row.ok = true;
+        row.cached = true;
+      } else {
+        const res = await request(ctx.target.http, `/frames/${encodeURIComponent(f.frameId)}/full.jpg`, { timeoutMs: 60_000 });
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        const digest = createHash('sha256').update(bytes).digest('hex');
+        row.ok = bytes.length === f.full.bytes && digest === f.full.sha256;
+        if (row.ok) await writeFile(file, bytes);
+        else row.error = `got ${bytes.length} B sha256 ${digest}`;
+      }
+    } catch (e) {
+      row.error = describeError(e);
+    }
+    if (!row.ok) failed++;
+    ctx.log(`${row.ok ? 'OK  ' : 'FAIL'} seq ${f.seq} ${f.frameId}${row.cached ? ' (already saved)' : ''}${row.error ? ` — ${row.error}` : ''}`);
+    rows.push(row);
+  }
+  const manifest = { clientId: ctx.clientId, camera: ctx.target.http, at: new Date().toISOString(), status, total: rows.length, ok: rows.length - failed, failed, frames: rows };
+  await writeFile(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  ctx.log(`${manifest.ok}/${manifest.total} saved and verified in ${out}${failed ? ` — ${failed} FAILED` : ''}`);
+  if (failed) process.exitCode = 1;
+  return manifest;
 }
 
 /**
