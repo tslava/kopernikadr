@@ -386,24 +386,24 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/render/catalog.ts`
 - Modify: `remote/package.json` (devDependency `openmoji@17.0.0`, scripts `openmoji` and `test:scripts`)
 
-- [ ] curate about 200 hexcodes in 8 categories. All must be kid-appropriate: no weapons beyond toy-like ones, no alcohol. Add pl/ru category names.
-- [ ] write `openmoji-subset.mjs`:
+- [x] curate about 200 hexcodes in 8 categories (242 hexcodes). All must be kid-appropriate: no weapons beyond toy-like ones, no alcohol. Add pl/ru category names.
+- [x] write `openmoji-subset.mjs`:
   - copies the SVGs, writes `catalog.json`, copies the license;
   - fails loudly on a missing hexcode;
   - deterministic output.
-- [ ] write `catalog.ts`, a typed loader for `catalog.json`.
-- [ ] write `sprites.ts`:
+- [x] write `catalog.ts`, a typed loader for `catalog.json`.
+- [x] write `sprites.ts`:
   - SVG url → `<img>` → canvas at the bucket size (128/256/512/1024) → ImageBitmap;
   - an LRU capped at 32 MB, close on eviction;
   - `preload(hexcodes, bucket)` for the export;
   - the image-loading seam is injected.
-- [ ] tests:
+- [x] tests:
   - the script on a fixture dir (missing hexcode → error; output shape);
   - the sprite LRU and bucket choice with a fake loader;
   - catalog validation.
-- [ ] run `npm run openmoji`, commit the output, check its size (expect < 2 MB).
-- [ ] tablet WebView check (CDP): rasterize 3 SVGs at 1024 and check that the bitmap size and pixels are not blank.
-- [ ] run tests — must pass before Task 5.
+- [x] run `npm run openmoji`, commit the output, check its size (expect < 2 MB) (242 SVGs, 643 KiB).
+- [x] tablet WebView check (CDP): rasterize 3 SVGs at 1024 and check that the bitmap size and pixels are not blank (emulator-5584: 1024x1024, 16-40% opaque; direct createImageBitmap(img) throws InvalidStateError as predicted).
+- [x] run tests — must pass before Task 5.
 
 ### Task 5: Compositor + timeline playback
 

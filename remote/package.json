@@ -10,7 +10,9 @@
     "typecheck": "next typegen && tsc --noEmit",
     "cap:sync": "cap sync android",
     "android:debug": "npm run build && npm run cap:sync && cd android && ./gradlew-jbr :app:assembleDebug",
-    "test": "vitest run"
+    "test": "vitest run",
+    "openmoji": "node scripts/openmoji-subset.mjs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "engines": {
     "node": ">=22"
@@ -20,6 +22,7 @@
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "openmoji": "17.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "5.0.4"
