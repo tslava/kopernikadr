@@ -489,6 +489,15 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - plus the Task 3 switches: new `bootId`, `cameraId` change, 404 `full`, reclaim
 - [x] run tests — must pass before Task 12
 
+- ➕ Safety review on the Claude reviewer (2026-10-27, Codex out of credits): no path acks a frame that isn't durably `local`. Fixed:
+  - the sweep quarantines instead of deleting on a verify mismatch, and HTTP errors in verify keep the file;
+  - acks and downloads only for the connected camera's projects; `unknown` ack ids are not marked acked; `kick()` clears the acked set;
+  - reconcile binds an empty unbound project (rotation from the first FrameInfo); lenient fps/name parsing;
+  - `getOperation` protocol errors drop an outstanding entry after 3; a persisted `geometryFrozen` flag;
+  - `setLocal` clears `unavailable`; `client-id.txt` backup; the `pause()` promise fix;
+  - camera: a complete `full` tmp is finished instead of deleted, other `full` tmps are quarantined; the reclaimer counts only real deletes.
+- ➕ Backlog: `quarantine/` folders (tablet and phone) are never cleaned up; they need a parent "show/clear" action later
+
 ### Task 12: Boot wiring + connect view
 
 **Files:**
