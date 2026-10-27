@@ -171,11 +171,15 @@ button { min-height: 64px; }
 /* Capture view (kid UI) */
 .preview-stage { position: relative; aspect-ratio: 4 / 3; width: 100%; background: #000; overflow: hidden; border-radius: 16px; }
 /* Landscape tablet: the 4:3 preview takes the full height on the left, the kid's controls sit on the right. */
-.capture { display: grid; height: 100dvh; overflow: hidden; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 32px; }
+.capture { display: grid; height: 100dvh; overflow: hidden; min-height: 0; grid-template-columns: minmax(0, 1fr) 368px; grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 32px; }
 .capture > .bar { grid-column: 1 / -1; }
 .capture > .preview-stage { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; justify-self: center; align-self: start; }
 .capture > .cap-bar { grid-column: 2; grid-row: 2; }
 .capture > .cap-actions { grid-column: 2; grid-row: 3; flex-direction: column-reverse; justify-content: center; gap: 40px; }
+/* A fixed column and notes laid over the top of the cell: nothing that appears during a capture
+   (the "still arriving" note, the onion thumbnail) may move the shutter under the kid's finger. */
+.capture > .cap-actions { position: relative; }
+.capture > .cap-actions > .note { position: absolute; top: 0; left: 0; right: 0; margin: 0; justify-content: center; text-align: center; }
 .cap-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .capture > .cap-bar { flex-direction: column; align-items: stretch; }
 .counter { height: 64px; padding: 0 18px; display: inline-flex; align-items: center; gap: 10px; border-radius: 18px; background: var(--panel); font-size: 30px; color: var(--accent); }
