@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ackEligible } from './eligibility';
 import {
+  droppedEditFields,
   ModelError,
   parseIndex,
   parseProject,
@@ -294,6 +295,39 @@ describe('frame hide / unhide / expire (§5.8)', () => {
     expect(late.project.deletedFrameIds).toEqual(['F001']);
     expect(late.project.frames.map((f) => f.frameId)).toEqual(['F002']);
   });
+  it('expiry removes the cut entries of the expired frames (duplicates too)', () => {
+    const base = merged(boundProject(), 1, 2, 3);
+    const p = hideFrame(
+      {
+        ...base,
+        cut: [
+          { id: 'F001', frameId: 'F001', hold: 2 },
+          { id: 'D1', frameId: 'F002', hold: 1 },
+          { id: 'F002', frameId: 'F002', hold: 1 },
+          { id: 'F003', frameId: 'F003', hold: 1 },
+        ],
+      },
+      'F002',
+      T0,
+    );
+    const r = expireFrames(p, T0 + 5000).project;
+    expect(r.cut!.map((e) => e.id)).toEqual(['F001', 'F003']);
+    expect(r.cut![0]!.hold).toBe(2);
+  });
+  it('expiry prunes the stickers on, and drops a sticker left with nothing', () => {
+    const st = (id: string, on: string[]) => ({ id, emoji: '1F436', x: 0.5, y: 0.5, size: 0.2, rot: 0, on });
+    const base = merged(boundProject(), 1, 2);
+    const p = hideFrame({ ...base, stickers: [st('S1', ['F002']), st('S2', ['F001', 'F002']), st('S3', ['F001'])] }, 'F002', T0);
+    const r = expireFrames(p, T0 + 5000).project;
+    expect(r.stickers!.map((s) => [s.id, s.on])).toEqual([['S2', ['F001']], ['S3', ['F001']]]);
+    expect(r.stickers![1]).toBe(p.stickers![2]); // untouched stickers keep their reference
+    expect(r.deletedFrameIds).toEqual(['F002']); // the tombstone is unchanged
+  });
+  it('a project without edits expires exactly as before (no cut/stickers appear)', () => {
+    const r = expireFrames(hideFrame(merged(boundProject(), 1, 2), 'F001', T0), T0 + 5000).project;
+    expect('cut' in r).toBe(false);
+    expect('stickers' in r).toBe(false);
+  });
 });
 
 describe('project hide / unhide / expire', () => {
@@ -482,6 +516,15 @@ describe('validation: index.json / project.json v1', () => {
       expect(p.cut?.map((c) => c.hold)).toEqual([8, 1, 3]);
       expect(p.stickers?.[0]).toMatchObject({ x: 1.25, y: -0.25, size: 1, on: ['F1'] });
       expect(p.stickers?.[1].size).toBe(0.05);
+    });
+    it('droppedEditFields reports what the lenient parse lost, not clamps or absence', () => {
+      const lossy = (raw: Record<string, unknown>) => droppedEditFields(raw, parseProject(raw));
+      expect(lossy(goodProject())).toEqual([]);
+      expect(lossy({ ...goodProject(), cut: 'nope' })).toEqual(['cut']);
+      expect(lossy({ ...goodProject(), cut: null, stickers: { a: 1 } })).toEqual(['cut', 'stickers']);
+      expect(lossy({ ...goodProject(), cut: [{ id: 'F1', frameId: 'F1', hold: 1 }, 7] })).toEqual(['cut']);
+      expect(lossy({ ...goodProject(), stickers: [sticker, { ...sticker, id: 's2', emoji: 5 }] })).toEqual(['stickers']);
+      expect(lossy({ ...goodProject(), cut: [{ id: 'a', frameId: 'F1', hold: 99 }], stickers: [{ ...sticker, size: 9 }] })).toEqual([]);
     });
     it('a later duplicate id is dropped', () => {
       const p = parseProject({

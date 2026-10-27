@@ -27,6 +27,7 @@
  */
 import { CLIENT_ID_PATH, INDEX_PATH, projectDir, projectJsonPath, type FileAdapter } from './files';
 import {
+  droppedEditFields,
   ModelError,
   parseIndex,
   parseProject,
@@ -41,6 +42,7 @@ export type StoreWarningKind =
   | 'index_corrupt'
   | 'index_unknown_version'
   | 'project_corrupt'
+  | 'project_edits_dropped'
   | 'project_unknown_version'
   | 'project_missing'
   | 'rollback_failed';
@@ -107,6 +109,11 @@ export class ProjectStore {
   private tail: Promise<unknown> = Promise.resolve();
   /** Serialized content of every file this store knows to be on disk. */
   private disk = new Map<string, string>();
+  /**
+   * project.json text whose `cut`/`stickers` the lenient parse dropped, by path. A copy is kept as
+   * `<path>.corrupt-<ts>` right before the next write of that file, so an edit is never lost silently.
+   */
+  private lossy = new Map<string, string>();
   private readonly now: () => number;
   private readonly newId: () => string;
 
@@ -209,6 +216,7 @@ export class ProjectStore {
           mkdirDone = true;
         }
         const text = serialize(w.value);
+        await this.keepLossyOriginal(w.path);
         await this.fs.writeTextAtomic(w.path, text);
         written.push({ path: w.path, prev: this.disk.get(w.path) });
         this.disk.set(w.path, text);
@@ -312,8 +320,17 @@ export class ProjectStore {
           continue;
         }
         try {
-          projects[entry.id] = parseProject(JSON.parse(text));
+          const json: unknown = JSON.parse(text);
+          const parsed = parseProject(json);
+          projects[entry.id] = parsed;
           this.disk.set(path, text);
+          const dropped = droppedEditFields(json, parsed);
+          if (dropped.length > 0) {
+            this.lossy.set(path, text);
+            const detail = `unreadable ${dropped.join(', ')} ignored; the original is kept as ${path}.corrupt-<ts> before the next write`;
+            console.warn(`project ${entry.id}: ${detail}`);
+            warnings.push({ kind: 'project_edits_dropped', id: entry.id, path, detail });
+          }
         } catch (e) {
           if (e instanceof ModelError && e.code === 'unknown_version') {
             readOnly = true;
@@ -337,6 +354,14 @@ export class ProjectStore {
     const text = serialize(value);
     await this.fs.writeTextAtomic(path, text);
     this.disk.set(path, text);
+  }
+
+  /** Before the first write over a project.json whose edit fields were dropped at load: keep the original. */
+  private async keepLossyOriginal(path: string): Promise<void> {
+    const text = this.lossy.get(path);
+    if (text === undefined) return;
+    await this.fs.writeTextAtomic(`${path}.corrupt-${this.now()}`, text);
+    this.lossy.delete(path);
   }
 
   /** Keep the unreadable file as `<path>.corrupt-<ts>` (copy, then remove the original). */

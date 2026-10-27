@@ -5,6 +5,7 @@
 //   4. client.start()  (connect)
 // Everything is injected, so tests run the real order with fakes. The result is the AppContext the
 // UI reads (see ./app.ts for the real wiring and the React hook).
+import type { FrameDeletion } from '../projects/frameDeletion';
 import { CameraClient, type CameraClientDeps, type SessionContext } from '../camera/client';
 import type { NsdAdapter } from '../discovery';
 import { createCapture, type Capture, type CaptureEnv } from '../capture/capture';
@@ -32,6 +33,8 @@ export interface AppContext {
   lifecycle: Lifecycle;
   /** Open drawers/dialogs: Android Back closes the topmost one first. */
   overlays: OverlayStack;
+  /** Runtime frame expiry (Undo window -> tombstone -> unlink -> ack). Set by the real wiring in `app.ts`. */
+  frameDeletion?: FrameDeletion;
 }
 
 export interface TransferEnv {

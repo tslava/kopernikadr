@@ -321,7 +321,7 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/projects/reducers.ts` (`expireFrames` pruning)
 - Modify: `remote/lib/app/app.ts` (wire `FrameDeletion`)
 
-- [ ] write tests first:
+- [x] write tests first:
   - the first edit materializes `cut` from `timeline()`;
   - duplicate inserts a new entry right after the source and copies its sticker membership;
   - hold ± is clamped to 1..8;
@@ -332,24 +332,25 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
   - "start here" turns off everything before the entry, "end here" everything after;
   - every reducer returns the SAME reference when nothing changes;
   - a new capture after edits appears at the end.
-- [ ] write `expireFrames` tests:
+- [x] write `expireFrames` tests:
   - removes the cut entries of expired frames;
   - prunes stickers' `on`;
   - drops empty stickers;
   - the tombstone behavior is unchanged.
-- [ ] write history tests:
+- [x] write history tests:
   - push/undo, no redo, a cap of 30, per project;
   - no-op edits don't push;
   - restoring re-prunes against the current frames (a frame expired after the snapshot does not come back; an emptied sticker stays gone).
-- [ ] write `FrameDeletion` tests (fake timers, fake store/fs/transfer):
+- [x] write `FrameDeletion` tests (fake timers, fake store/fs/transfer):
   - fires at the earliest `hiddenUntil`;
   - commits, THEN unlinks the three files, THEN calls `ackNow` with the projectOf map;
   - Undo before the deadline cancels;
   - a pending deadline from a previous run fires after construction;
   - it waits while an export is busy;
   - an unlink failure doesn't block the ack (the sweep retries the unlink at next start).
-- [ ] implement `edit.ts` (pure, ids injected), `history.ts`, the pruning in `expireFrames`, and `lib/projects/frameDeletion.ts` (wired in `lib/app/app.ts` next to `ProjectDeletion`).
-- [ ] run tests — must pass before Task 3.
+- [x] implement `edit.ts` (pure, ids injected), `history.ts`, the pruning in `expireFrames`, and `lib/projects/frameDeletion.ts` (wired in `lib/app/app.ts` next to `ProjectDeletion`). `FrameDeletion` also has `hide`/`undo` and is exposed as `AppContext.frameDeletion` (set in `app.ts`; optional so boot tests are unchanged). `pruneEdits` (in `edit.ts`) is shared by delete, expiry and history restore.
+- [x] ➕ store safeguard for dropped edit fields (orchestrator note, Technical Details > Parsing): `droppedEditFields(raw, parsed)` in `model.ts` detects a malformed `cut`/`stickers` field or dropped entries; `ProjectStore.load` logs it (`console.warn` + `project_edits_dropped` warning) and keeps the original text, and the first write of that `project.json` first writes `project.json.corrupt-<ts>` (once). Tests in `store.test.ts` and `projects.test.ts`.
+- [x] run tests — must pass before Task 3. (remote vitest 645 passed, typecheck clean)
 
 ### Task 3: Sticker reducers + geometry (TDD)
 

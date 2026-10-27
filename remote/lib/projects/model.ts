@@ -318,3 +318,21 @@ export function parseProject(raw: unknown): Project {
     ...(stickers ? { stickers } : {}),
   };
 }
+
+/**
+ * Which of `cut` / `stickers` the lenient parse changed on the way in: a malformed field that became
+ * `undefined`, or entries that were dropped (a clamp is not a loss). The store keeps a copy of the
+ * original file before its next write when this is not empty.
+ */
+export function droppedEditFields(raw: unknown, parsed: Project): ('cut' | 'stickers')[] {
+  if (typeof raw !== 'object' || raw === null) return [];
+  const o = raw as Obj;
+  const out: ('cut' | 'stickers')[] = [];
+  for (const key of ['cut', 'stickers'] as const) {
+    const r = o[key];
+    if (r === undefined) continue;
+    const p = parsed[key];
+    if (!Array.isArray(r) || p === undefined || p.length !== r.length) out.push(key);
+  }
+  return out;
+}

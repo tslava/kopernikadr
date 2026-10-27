@@ -13,6 +13,7 @@ import {
   type ProjectIndex,
   type Rotation,
 } from './model';
+import { pruneEdits } from './edit';
 
 const iso = (ms: number): string => new Date(ms).toISOString();
 
@@ -204,7 +205,8 @@ export function unhideFrame(project: Project, frameId: string): Project {
 
 /**
  * Expiry: hidden frames whose deadline passed move to `deletedFrameIds` (tombstone) and leave
- * `frames`. The caller commits, THEN unlinks `expired` files (idempotent).
+ * `frames`, together with their cut entries and sticker ids (see `pruneEdits`). The caller
+ * commits, THEN unlinks `expired` files (idempotent).
  */
 export function expireFrames(project: Project, nowMs: number): { project: Project; expired: string[] } {
   const expired = project.frames
@@ -212,11 +214,12 @@ export function expireFrames(project: Project, nowMs: number): { project: Projec
     .map((f) => f.frameId);
   if (expired.length === 0) return { project, expired };
   return {
-    project: {
+    // the frames' cut entries go with them, and so do their ids in the stickers' `on`
+    project: pruneEdits({
       ...project,
       frames: project.frames.filter((f) => !expired.includes(f.frameId)),
       deletedFrameIds: [...project.deletedFrameIds, ...expired.filter((id) => !project.deletedFrameIds.includes(id))],
-    },
+    }),
     expired,
   };
 }

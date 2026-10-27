@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { KeepAwake } from '@capacitor-community/keep-awake';
 import { nativeNsdAdapter } from '../discovery';
 import { createAppFileAdapter } from '../projects/files';
+import { FrameDeletion } from '../projects/frameDeletion';
 import { createFetchBytes, createWebVerify } from '../projects/sweep';
 import { createStore } from '../state/store';
 import { createAppTransferIO } from '../transfer/appIO';
@@ -22,7 +23,7 @@ export const bootState = createStore<BootState>({ phase: 'booting' });
 async function bootReal(): Promise<AppContext> {
   const fs = createAppFileAdapter();
   let hook: Reconcile | undefined;
-  return boot({
+  const app = await boot({
     fs,
     verify: createWebVerify(fs, createFetchBytes((u) => fetch(u), (u) => Capacitor.convertFileSrc(u))),
     nsd: nativeNsdAdapter(),
@@ -35,6 +36,15 @@ async function bootReal(): Promise<AppContext> {
     // runs after resolveOutstanding on every session; calls transfer.kick() itself (also when the listing fails)
     reconcile: (ctx) => hook!(ctx),
   });
+  // frames hidden by a Delete expire at their deadline (also one left pending by the previous run)
+  const frameDeletion = new FrameDeletion({
+    store: app.store,
+    fs,
+    transfer: app.transfer,
+    exporting: app.exporting,
+    onError: (e) => console.error('frame delete', e),
+  });
+  return { ...app, frameDeletion };
 }
 
 const runner = createBootRunner<AppContext>(bootState, bootReal);
