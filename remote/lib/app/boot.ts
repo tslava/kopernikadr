@@ -11,7 +11,8 @@ import { createCapture, type Capture, type CaptureEnv } from '../capture/capture
 import type { FileAdapter } from '../projects/files';
 import { runStartupSweep, type SweepReport, type VerifyFn } from '../projects/sweep';
 import { ProjectStore } from '../projects/store';
-import type { Transfer } from '../transfer/types';
+import { createStore, type Store } from '../state/store';
+import type { Transfer, TransferPause } from '../transfer/types';
 
 /** The per-session reconcile hook (plan Task 11). Runs after `resolveOutstanding`. */
 export type Reconcile = (ctx: SessionContext) => void | Promise<void>;
@@ -20,7 +21,9 @@ export interface AppContext {
   store: ProjectStore;
   client: CameraClient;
   capture: Capture;
-  transfer: Transfer;
+  transfer: Transfer & Partial<TransferPause>;
+  /** App-wide: an export is running (shooting is blocked, transfers are paused). Owned by the export controller. */
+  exporting: Store<boolean>;
   sweep: SweepReport;
 }
 
@@ -37,7 +40,7 @@ export interface BootDeps {
   verify: VerifyFn;
   nsd: NsdAdapter;
   /** Builds the transfer layer; `request`/`target` read the client lazily (it is created after capture). */
-  createTransfer: (env: TransferEnv) => Transfer;
+  createTransfer: (env: TransferEnv) => Transfer & Partial<TransferPause>;
   /** The per-session hook (after `resolveOutstanding`). It is responsible for `transfer.kick()`. */
   reconcile: Reconcile;
   /** Test seams: connection factory, search window, fetch, ... */
@@ -86,5 +89,5 @@ export async function boot(deps: BootDeps): Promise<AppContext> {
     reconcile: deps.reconcile,
   });
   client.start();
-  return { store, client, capture, transfer, sweep };
+  return { store, client, capture, transfer, exporting: createStore(false), sweep };
 }
