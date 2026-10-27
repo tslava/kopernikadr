@@ -3,6 +3,7 @@ import type { SessionContext } from '../camera/client';
 import { STRINGS } from '../i18n';
 import { FakeFs } from '../projects/fakeFs.testutil';
 import type { FrameInfo } from '../projects/model';
+import { isGeometryFrozen, setRotation } from '../projects/reducers';
 import { ProjectStore } from '../projects/store';
 import type { Transfer } from '../transfer/types';
 import { createCapture, type CameraLike } from './capture';
@@ -378,5 +379,66 @@ describe('resolveOutstanding (per-session hook)', () => {
     };
     await r.cap.resolveOutstanding(r.ctx());
     expect(r.proj().outstanding).toHaveLength(1);
+  });
+});
+
+describe('getOperation failures and geometry', () => {
+  const seed = async (r: Awaited<ReturnType<typeof rig>>, reqId: string) =>
+    r.store.updateProject(r.project.id, (p) => ({
+      ...p,
+      cameraId: p.cameraId ?? 'cam-A',
+      outstanding: [...p.outstanding, { reqId, cameraId: 'cam-A', sentAt: '2026-10-27T10:00:00.000Z' }],
+    }));
+
+  it('a protocol error / unexpected state is counted per entry; dropped after 3, with the generic message', async () => {
+    const r = await rig();
+    await seed(r, 'req-A');
+    r.camera.handler = () => {
+      throw protoErr('INTERNAL');
+    };
+    for (let i = 0; i < 2; i++) {
+      await r.cap.resolveOutstanding(r.ctx());
+      expect(r.proj().outstanding).toHaveLength(1);
+    }
+    await r.cap.resolveOutstanding(r.ctx());
+    expect(r.proj().outstanding).toEqual([]);
+    expect(r.notices.at(-1)).toMatchObject({ ok: false, reason: 'generic', messageKey: 'capture.err.generic' });
+  });
+
+  it('an unexpected getOperation state counts too', async () => {
+    const r = await rig();
+    await seed(r, 'req-A');
+    r.camera.handler = () => ({ state: 'weird' });
+    for (let i = 0; i < 3; i++) await r.cap.resolveOutstanding(r.ctx());
+    expect(r.proj().outstanding).toEqual([]);
+  });
+
+  it('transport errors (closed socket, timeout) never count: the entry is kept forever', async () => {
+    const r = await rig();
+    await seed(r, 'req-A');
+    for (const mk of [closedErr, timeoutErr, () => Object.assign(new Error('not connected'), { code: 'CLOSED' })]) {
+      r.camera.handler = () => {
+        throw mk();
+      };
+      for (let i = 0; i < 5; i++) await r.cap.resolveOutstanding(r.ctx());
+    }
+    expect(r.proj().outstanding).toHaveLength(1);
+  });
+
+  it('dropping an entry after the 30 s give-up does not unfreeze the geometry', async () => {
+    const r = await rig();
+    r.camera.handler = (op) => {
+      if (op === 'capture') return CameraSilent();
+      return { state: 'pending' };
+    };
+    const CameraSilent = () => FakeCamera.silent({ timeoutMs: 10_000 });
+    const p = r.cap.press(r.project.id);
+    await vi.advanceTimersByTimeAsync(50_000);
+    await p;
+    expect(r.proj().outstanding).toEqual([]);
+    expect(r.proj().frames).toEqual([]);
+    expect(isGeometryFrozen(r.proj())).toBe(true);
+    await r.store.updateProject(r.project.id, (x) => setRotation(x, 180));
+    expect(r.proj().geometry.rotation).toBe(0);
   });
 });

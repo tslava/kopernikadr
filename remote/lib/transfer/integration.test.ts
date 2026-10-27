@@ -45,6 +45,8 @@ function fastClock(): Clock {
 
 interface Hooks {
   hold: Promise<void> | null;
+  /** the `ack` request never reaches the camera (the process dies between the local commit and the ack) */
+  dropAck?: boolean;
   afterInstall?: () => void;
 }
 
@@ -125,7 +127,7 @@ async function rig(): Promise<Rig> {
         verify,
         nsd,
         createTransfer: ({ store, request, target, cameraId }) => {
-          service = createTransfer({ store, io: makeIO(fs, hooks), request, target, cameraId, clock });
+          service = createTransfer({ store, io: makeIO(fs, hooks), request: (op, a, o) => (op === 'ack' && hooks.dropAck ? Promise.reject(Object.assign(new Error('killed'), { code: 'CLOSED', local: true })) : request(op, a, o)), target, cameraId, clock });
           hook = createReconcile({ store, transfer: service });
           return service;
         },
@@ -199,6 +201,27 @@ describe('transfer + reconcile against the fake camera', () => {
     const second = await connect(r);
     await until(() => cam!.state.acked.size === 1, 'acked after restart');
     expect(second.app.sweep.promoted.length + frames(second.app).filter((f) => f.state === 'local').length).toBeGreaterThan(0);
+    expect(frames(second.app).map((f) => f.state)).toEqual(['local']);
+    expectAckedSafe(second.app);
+  });
+
+  it('killed after the local commit, before the ack: after restart reconcile lists the local frame and acks it', async () => {
+    const r = await rig();
+    r.hooks.dropAck = true;
+    const first = await connect(r);
+    const p = await first.app.store.createProject('Film');
+    await first.app.capture.press(p.id);
+    await until(() => frames(first.app).some((f) => f.state === 'local'), 'local committed');
+    await new Promise((res) => setTimeout(res, 100));
+    expect(cam!.state.acked.size).toBe(0);
+    first.app.client.stop();
+    first.service.stop();
+
+    r.fs.restart();
+    r.hooks.dropAck = false;
+    const second = await connect(r);
+    await until(() => cam!.state.acked.size === 1, 'acked after restart');
+    expect(second.app.sweep.promoted).toEqual([]); // nothing for the sweep to do: the diff the acker missed is reconcile's
     expect(frames(second.app).map((f) => f.state)).toEqual(['local']);
     expectAckedSafe(second.app);
   });
