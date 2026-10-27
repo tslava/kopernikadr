@@ -360,19 +360,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/render/stickerGeometry.ts`
 - Create: `remote/lib/render/stickerGeometry.test.ts`
 
-- [ ] write tests first for the reducers:
+- [x] write tests first for the reducers:
   - `addSticker` on the entry and every later entry;
   - `updateSticker` (x/y/size/rot clamped);
   - `removeSticker`;
   - `setRange(stickerId, fromEntryId, toEntryId)` in timeline order, either direction;
   - adding a sticker materializes `cut` (ids stay stable).
-- [ ] write geometry tests:
+- [x] write geometry tests:
   - normalized → px for 1440×1080 and for an arbitrary canvas;
   - a hit-test with rotation;
   - the corner-handle drag → size + rotation;
   - `rot` normalized to −180..180.
-- [ ] implement both modules.
-- [ ] run tests — must pass before Task 4.
+- [x] implement both modules.
+- [x] run tests — must pass before Task 4. (remote vitest 668 passed, typecheck clean)
 
 ### Task 4: OpenMoji subset + sprite loader
 
