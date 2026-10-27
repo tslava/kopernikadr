@@ -18,10 +18,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // UI strings (remote/lib/i18n/pl.ts)
 const T = {
   newMovie: 'Nowy film', shutter: 'Zrób zdjęcie', play: 'Oglądaj film', backToMovies: 'Wróć do filmów',
-  del: 'Usuń film (przytrzymaj)', exportBtn: 'Zapisz film w galerii', exportDone: 'Zapisano w galerii',
+  del: 'Usuń film', delConfirm: 'Usuń', exportBtn: 'Zapisz film w galerii', exportDone: 'Zapisano w galerii',
   exportGo: ['Zapisz', 'Zapisz bez nich'], undoPrefix: 'Cofnij', playEmpty: 'Nie ma jeszcze klatek do obejrzenia.',
 };
-const LONG_PRESS_MS = 1500; // remote/lib/longPress.ts
 const UNDO_WINDOW_MS = 5000; // remote/lib/projects/model.ts
 
 const args = (() => {
@@ -98,12 +97,6 @@ async function fake(path) {
   const res = await fetch(`${args.camera}${path}`);
   if (!res.ok) throw new Error(`fake camera ${path}: HTTP ${res.status}`);
   return res.json();
-}
-
-async function longPress(selectorExpr) {
-  await ev(`(() => { const b = ${selectorExpr}; if (!b) throw new Error('long-press target not found'); b.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 })); return true; })()`);
-  await sleep(LONG_PRESS_MS + 300);
-  await ev(`(() => { const b = ${selectorExpr}; b?.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 })); return true; })()`);
 }
 
 // ---- steps -------------------------------------------------------------------------------------
@@ -221,12 +214,15 @@ steps.push(['7 export to the gallery', async () => {
 
 const card = () => `document.querySelector(${J(`[data-testid=movie-card][data-project-id="${ctx.projectId}"]`)})`;
 const deleteBtn = () => `${card()}?.querySelector(${J(`button[aria-label="${T.del}"]`)})`;
+const confirmBtn = `[...document.querySelectorAll('[role=dialog] button')].find((b) => b.textContent === ${J(T.delConfirm)})`;
 const undoBtn = `[...document.querySelectorAll('.undo-toast button')].find((b) => b.textContent.startsWith(${J(T.undoPrefix)}))`;
 
 steps.push(['8 delete + Undo keeps the movie', async () => {
   await goto('#/projects');
   await waitFor('movie card', `!!${card()}`, 15_000);
-  await longPress(deleteBtn());
+  await ev(`${deleteBtn()}.click(); true`);
+  await waitFor('delete confirmation', `!!${confirmBtn}`, 3_000);
+  await ev(`${confirmBtn}.click(); true`);
   await waitFor('Undo toast', `!!${undoBtn}`, 5_000);
   await waitFor('card hidden during the Undo window', `!${card()}`, 3_000);
   await ev(`${undoBtn}.click(); true`);
@@ -237,7 +233,9 @@ steps.push(['8 delete + Undo keeps the movie', async () => {
 }]);
 
 steps.push(['9 delete past the Undo window: gone + all frames acked', async () => {
-  await longPress(deleteBtn());
+  await ev(`${deleteBtn()}.click(); true`);
+  await waitFor('delete confirmation', `!!${confirmBtn}`, 3_000);
+  await ev(`${confirmBtn}.click(); true`);
   await waitFor('Undo toast', `!!${undoBtn}`, 5_000);
   await sleep(UNDO_WINDOW_MS + 1500);
   await waitFor('card gone', `!${card()}`, 10_000);

@@ -28,6 +28,7 @@ button {
   border-radius: 12px; padding: 16px 28px; min-height: 56px; cursor: pointer;
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+button.danger { background: #d9453b; border-color: #d9453b; color: #fff; font-weight: 600; }
 button:disabled { opacity: 0.45; cursor: default; }
 .note { color: var(--muted); }
 .diagnostics header { display: flex; align-items: center; gap: 24px; }

@@ -61,9 +61,11 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
   const state = useStore(app.store.state);
   const snap = useStore(app.client.store);
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [failed, setFailed] = useState(false);
   const deletion = useMemo(() => deletionFor(app, createAppFileAdapter()), [app]);
   useEffect(() => (renaming ? app.overlays.push(() => setRenaming(null)) : undefined), [renaming, app]);
+  useEffect(() => (confirmDelete ? app.overlays.push(() => setConfirmDelete(null)) : undefined), [confirmDelete, app]);
 
   const cards = useMemo(() => projectCards(state.index, state.projects), [state.index, state.projects]);
   const currentCamera = snap.hello?.cameraId ?? state.index.rememberedCamera?.cameraId ?? null;
@@ -112,12 +114,12 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
                 </span>
               </button>
               <span className="tools">
-                <LongPressButton className="icon-btn" label={t('projects.rename')} onLongPress={() => setRenaming({ id: c.id, name: c.name })}>
+                <button type="button" className="icon-btn" aria-label={t('projects.rename')} title={t('projects.rename')} onClick={() => setRenaming({ id: c.id, name: c.name })}>
                   <Icon name="pencil" />
-                </LongPressButton>
-                <LongPressButton className="icon-btn" label={t('projects.delete')} onLongPress={() => run(deletion.requestDelete(c.id))}>
+                </button>
+                <button type="button" className="icon-btn" aria-label={t('projects.delete')} title={t('projects.delete')} onClick={() => setConfirmDelete({ id: c.id, name: c.name })}>
                   <Icon name="trash" />
-                </LongPressButton>
+                </button>
               </span>
             </div>
           );
@@ -131,6 +133,14 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
           initial={renaming.name}
           onCancel={() => setRenaming(null)}
           onSave={(name) => { void saveName(renaming.id, name); setRenaming(null); }}
+        />
+      )}
+      {confirmDelete && (
+        <DeleteDialog
+          t={t}
+          name={confirmDelete.name}
+          onCancel={() => setConfirmDelete(null)}
+          onDelete={() => { run(deletion.requestDelete(confirmDelete.id)); setConfirmDelete(null); }}
         />
       )}
       <UndoToast t={t} app={app} deletion={deletion} />
@@ -150,6 +160,21 @@ function RenameDialog({ t, initial, onSave, onCancel }: { t: Translate; initial:
           <button type="submit" className="primary" disabled={name.trim() === ''}>{t('projects.save')}</button>
         </div>
       </form>
+    </div>
+  );
+}
+
+/** A plain tap on the trash icon asks first; the Undo toast still follows the deletion. */
+function DeleteDialog({ t, name, onDelete, onCancel }: { t: Translate; name: string; onDelete: () => void; onCancel: () => void }) {
+  return (
+    <div className="dialog-backdrop" role="presentation">
+      <div className="dialog" role="dialog" aria-label={t('projects.deleteTitle', { name })}>
+        <p>{t('projects.deleteTitle', { name })}</p>
+        <div className="row">
+          <button type="button" onClick={onCancel}>{t('projects.cancel')}</button>
+          <button type="button" className="danger" onClick={onDelete}>{t('projects.deleteConfirm')}</button>
+        </div>
+      </div>
     </div>
   );
 }
