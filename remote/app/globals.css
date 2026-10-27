@@ -5,6 +5,8 @@
   --muted: #9aa3ad;
   --accent: #f0a030;
   --line: #2e333b;
+  --pass: #5cc47a;
+  --fail: #f06a5c;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -35,4 +37,24 @@ button:disabled { opacity: 0.45; cursor: default; }
 .probes li { display: flex; justify-content: space-between; gap: 16px; padding: 14px 20px; border-top: 1px solid var(--line); }
 .probes li:first-child { border-top: 0; }
 .status { color: var(--muted); }
-.diagnostics > button.primary { align-self: flex-start; }
+.probes li { flex-direction: column; justify-content: flex-start; }
+.probes .row { display: flex; justify-content: space-between; gap: 16px; }
+.probes .status { text-align: right; overflow-wrap: anywhere; }
+.probes li.running .status { color: var(--accent); }
+.probes li.pass .status { color: var(--pass); }
+.probes li.fail .status, p.fail { color: var(--fail); }
+.diagnostics details summary { color: var(--muted); cursor: pointer; }
+.diagnostics pre {
+  font-size: 13px; line-height: 1.35; margin: 8px 0 0; padding: 12px; max-height: 360px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; user-select: text;
+}
+.address { display: flex; flex-direction: column; gap: 8px; max-width: 560px; }
+.address small { color: var(--muted); }
+input {
+  font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 18px; min-height: 56px; user-select: text;
+}
+.prompt { border: 2px solid var(--accent); border-radius: 12px; padding: 20px 24px; background: var(--panel); }
+.prompt p { margin: 0; font-size: 22px; }
+.prompt .actions, .diagnostics > .actions { margin-top: 16px; justify-content: flex-start; }
+.result .summary { font-size: 22px; margin: 0; }
