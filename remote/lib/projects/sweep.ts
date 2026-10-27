@@ -17,7 +17,7 @@
  *     index entry (empty frames). Index name wins over project.json name (window 3).
  *  5. Per project: hidden frames past their Undo deadline expire (tombstone commit, files go in 6);
  *     `pending` frames whose `frames/{id}.full.jpg` verifies (size + sha256) -> `local`; a file that
- *     really does not verify is MOVED to `quarantine/{project}-{file}` (never deleted: it may be the
+ *     really does not verify is MOVED to `quarantine/{project}-{frameId}-{time}.full.jpg` (never deleted: it may be the
  *     only copy) and the frame stays `pending`; a `verify` that throws (I/O, HTTP error) keeps the file.
  *  6. Files under `frames/` with no live frame entry are deleted if the frame is tombstoned
  *     (`deletedFrameIds`) or the file is a `play`/`thumb` cache. A `full` that is neither live nor
@@ -177,7 +177,8 @@ export async function runStartupSweep(store: ProjectStore, fs: FileAdapter, opts
       if (good) ok.push(f);
       else {
         // a real size/sha mismatch: quarantine, never delete (it may be the only copy of the frame)
-        const q = `quarantine/${id}-${f.frameId}.full.jpg`;
+        // The time suffix keeps an earlier quarantined copy of the same frame from being overwritten.
+        const q = `quarantine/${id}-${f.frameId}-${now()}.full.jpg`;
         try {
           await fs.mkdir('quarantine');
           await fs.move(path, q);

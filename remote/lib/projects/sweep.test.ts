@@ -75,7 +75,9 @@ describe('interrupted install (pending -> local)', () => {
     const r = await sweep(store, fs);
     expect(r.mismatched).toEqual([{ projectId: pid, frameId: 'F1' }]);
     expect(fs.files.has(fp(pid, 'F1'))).toBe(false);
-    expect(fs.files.get(`quarantine/${pid}-F1.full.jpg`)).toBe(content('b'));
+    const q = [...fs.files.keys()].filter((k) => k.startsWith(`quarantine/${pid}-F1-`) && k.endsWith('.full.jpg'));
+    expect(q).toHaveLength(1);
+    expect(fs.files.get(q[0])).toBe(content('b'));
     expect(r.warnings.map((w) => w.kind)).toContain('quarantined');
     expect(store.state.get().projects[pid]!.frames[0]!.state).toBe('pending');
   });
