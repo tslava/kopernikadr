@@ -8,6 +8,7 @@ export interface Transfer {
   /**
    * Ack these frames now. Used for frames that will never be merged (their project is deleted, or
    * the frame is tombstoned). Transfer decides eligibility itself (`ackEligible`).
+   * `projectOf` maps frameId -> projectId for frames the store cannot resolve (a deleted project).
    */
-  ackNow(frameIds: string[]): void | Promise<void>;
+  ackNow(frameIds: string[], projectOf?: Readonly<Record<string, string>>): void | Promise<void>;
 }
