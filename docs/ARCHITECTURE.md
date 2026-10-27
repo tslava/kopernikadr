@@ -129,7 +129,7 @@ Consequences:
 
 | Component | Responsibility |
 |---|---|
-| `MainActivity` (Compose) | Status UI, IP:port + QR, permission screen, parent diagnostics screen (long-press). Owns lifecycle. |
+| `MainActivity` (Compose) | Status UI, IP:port + QR, permission screen, parent screen (3 s hold on the title: quarantine show/clear, diagnostics in debug/probe). Owns lifecycle. |
 | `CameraController` | Binds CameraX use cases in one `UseCaseGroup` with a `ViewPort`; applies controls via Camera2Interop; confirms control states from `CaptureResult` (§4.4). |
 | `FrameTransform` | Pure function: (`cropRect`, `rotationDegrees` of the buffer, project rotation) → matrix + output size. Unit-tested for all rotations. |
 | `CaptureService` | Single-threaded capture executor (§4.5). |
@@ -137,7 +137,7 @@ Consequences:
 | `Server` | Ktor CIO: `/info`, `/ws/control`, `/ws/preview`, `/frames/...`. Heartbeats are handled on the socket coroutine; captures run on `CaptureService`, so a long capture never delays a ping. |
 | `SessionManager` | Single controller: one live session (`sessionId`, `clientId`, last-seen on the monotonic clock); replacement, expiry, per-request validation (PROTOCOL §4). |
 | `Advertiser` | NsdManager registration of `_kopernikadr._tcp` with TXT `id`, `pv`, `name`. |
-| `ScreenPolicy` | `FLAG_KEEP_SCREEN_ON` while started. After 2 min without remote commands or touches it sets window brightness to ~5%; any activity restores it. |
+| `ScreenPolicy` | `FLAG_KEEP_SCREEN_ON` while started. After 2 min without remote commands (capture, controls, session open; the preview stream does not count) or touches it sets window brightness to ~5%; any activity restores it, and an Activity pause/resume resets it. It never dims while the waiting card with the QR (or diagnostics) is shown. The keep-screen-on flag stays, so the server and NSD keep running. |
 
 ### 4.2 Lifecycle
 
@@ -300,16 +300,38 @@ are touched; `spool.db*` and unknown names never are:
 | `committed`, missing `play`/`thumb` | Regenerated lazily. |
 
 A recovered frame's `capturedAt` is the file's mtime. Quarantined files count in
-`integrityErrors` until someone removes them by hand; **nothing cleans `quarantine/` yet** (a
-stage 3 UI, same on the tablet).
+`integrityErrors` until the parent clears them. **Nothing cleans `quarantine/` automatically.**
+The parent screen on the phone (3 s hold on the status title; in the MAIN source set, so it is in
+release too) shows the count, the total size and up to 12 newest thumbnails, and clears the folder.
+`QuarantineStore` (`:core`) lists only regular files in `spool/quarantine/` whose names match
+`SpoolFiles.NAME` (plus `.dupN`, `.tmp`, `.<uuid>.tmp`), never follows symlinks and ignores
+subdirectories, so the cleared count matches `integrityErrors`. Clearing re-lists and deletes only
+names that were both shown and still match. A quarantined file may be the only copy of a photo, so
+"Wyczyść" opens a dialog that says the photos were never delivered and asks for the answer to a
+two-factor product (12..29), not a typed count. The same screen has a "Diagnostyka" button in
+debug/probe builds. The parent screen never dims.
 
 **Retention.**
 - Unacked frames are never deleted.
-- Acked frames are reclaimed **under low space only**, oldest `ackedAt` first. **As built:**
-  capture admission step 2 asks `SpoolReclaimer` to free space when `free − 500 MB` is below
-  2 × the expected `full` size (the maximum of the last 8 `full` sizes, 5 MB with no history);
-  with nothing acked left it answers `STORAGE_LOW`. There is no timer: the 7-day expiry is
-  **deferred to stage 3** and `clearAcked` is not built.
+- Acked frames are reclaimed oldest `ackedAt` first, on two triggers; `clearAcked` is not built.
+  - **Low space.** Capture admission step 2 asks `SpoolReclaimer` to free space when
+    `free − 500 MB` is below 2 × the expected `full` size (the maximum of the last 8 `full`
+    sizes, 5 MB with no history); with nothing acked left it answers `STORAGE_LOW`.
+  - **Age (7 days).** `ServerHost` starts a pass once `recover()` has run (on every server
+    start), then hourly, and cancels it in `stop()`. It reclaims every acked frame, of any
+    `clientId`, whose `ackedAt` is at or before now − 7 days, and logs the count
+    (`age reclaim: N frame(s)`). A clock earlier than `ackedAt` reclaims nothing.
+    A pass reclaims at most 200 frames (it holds the reclaimer lock, so capture admission never
+    waits behind a huge backlog); a capped pass is followed by another 10 s later. **Clock trust:**
+    the pass reads the wall clock and cannot tell a real week from a clock jump. A frame acked in
+    the future (the clock went back) is skipped, but a forward jump (or a first sync after a boot
+    at 1970) makes every acked frame look old; the damage is bounded because only already-acked
+    frames are candidates, and the 200 cap spreads it over time. A running pass is not
+    interruptible (`stop()` cancels the job between passes).
+  - Both go through one reclaimer-level lock, because `Spool.failedDeletes` is shared state.
+  - **First launch after the upgrade:** the first age pass reclaims every frame acked more than
+    7 days ago in one go, including frames acked by an earlier install. Back up the spool
+    first (README, Known limitations).
 - Reclaim writes `reclaimedAt` **first**, then deletes files under the frame's exclusive lock
   (`DerivedFiles`, striped per frame), so it never races a `play`/`thumb` generation of the same
   frame. A crash in between is finished by `recover()`. A reclaimed frame's files answer 404.
@@ -446,7 +468,9 @@ is kept renamed to `*.corrupt-<ts>`, and the project is rebuilt from the directo
   "frames": [{"frameId":"…", "seq":42, "bytes":3456789, "sha256":"…",
               "state":"pending"|"local", "hiddenUntil": null | "<deadline>"}],
   "deletedFrameIds": ["…"],                            // permanent tombstones
-  "outstanding": [{"reqId":"…", "cameraId":"…", "sentAt":"…"}]
+  "outstanding": [{"reqId":"…", "cameraId":"…", "sentAt":"…"}],
+  "cut": [{"id":"…", "frameId":"…", "hold":1, "off":true}],   // optional: the edit list
+  "stickers": [{"id":"…", "emoji":"1F436", "x":0.5, "y":0.5, "size":0.25, "rot":0, "on":["<entryId>"]}]
 }
 ```
 
@@ -460,6 +484,11 @@ is kept renamed to `*.corrupt-<ts>`, and the project is rebuilt from the directo
   bridge. They are **downloaded** by `@capacitor/file-transfer` into `tmp/` and moved by
   `KopernikadrNative.move`. They are **read** by `convertFileSrc` → `fetch` → `createImageBitmap`:
   same origin, no bridge, safe for `VideoFrame`.
+- **Downgrade caveat (documented, not fixed).** The edit list (`cut`) and the stickers
+  (`stickers`) are extra tablet-only fields; `version` stays 1. An older app opens a project file
+  that has them, ignores them, and its first write drops them (the frames and files are not
+  touched, so the movie is back to shoot order with no stickers). Install the newer app again to
+  keep editing a movie, but the edits made before the downgrade are gone after that first write.
 
 ### 5.5 ProjectStore: serialized mutations
 
@@ -549,6 +578,47 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
     keeps the frames.
   - ENOSPC during a write is handled the same way, and the tmp file is deleted.
 
+**Edit model (stage 3a).** Originals are never changed. `cut` is the edit list and `stickers` are
+the overlays; both are optional and tablet-only.
+- `timeline(project)` (pure, `lib/projects/timeline.ts`) gives what plays: the `cut` entries whose
+  frame still exists, in `cut` order, then every frame no entry mentions, in `seq` order, with
+  hold 1. So a new shot lands at the end with no merge code. `playableItems` keeps entries that
+  are on, local, visible and available.
+- A `CutEntry` is `{id, frameId, hold 1..8, off?}`. A tick is 1/fps. The first entry of a frame
+  has `id == frameId`, so an implicit entry and the same entry after the first edit share one id,
+  and stickers survive that first edit. A duplicate gets a new ULID. The first edit writes
+  `cut = timeline(project)` and then applies the change.
+- **Trim is non-destructive.** "Od tego" / "Do tego" set `off` on the entries before/after; the
+  frames, their files and their ack state stay. Turn an entry on again to bring it back.
+  Off frames neither play, export nor block the export gate.
+- **Invariant:** every non-hidden frame has at least one entry, or `cut` is absent. Otherwise
+  `timeline()` would re-append a frame the kid removed. Each reducer keeps it, and tests check it.
+- **Delete is per entry.** A duplicate entry is removed from `cut` only (no tombstone; Cofnij
+  restores it). The last entry of a frame runs the frame delete (`hiddenUntil`, 5 s Undo, §5.8).
+  Move steps over entries of frames that are in their Undo window.
+- **Stickers.** `x`,`y` are the centre in 0..1 of the 4:3 frame (clamped to -0.25..1.25), `size` is
+  the width as a fraction of the frame width (0.05..1), `rot` is in degrees. `on` is a set of
+  entry ids, not a seq range: a sticker follows its frames on reorder, a duplicate inherits the
+  stickers of its source, and a delete drops the id. A sticker whose last entry is pruned is
+  removed. Array order is draw order. **"Until the end" means the end at placement time:** frames
+  shot later are not in `on` (an open owner question). Unknown emoji hexcodes stay in the file and
+  are skipped by the renderer.
+- **Parse is lenient** (`parseProject`): a malformed entry is dropped, so is a later duplicate id,
+  and a malformed whole field becomes `undefined`; the project stays readable. Unknown keys on
+  kept entries are preserved. If anything was dropped, the store keeps a copy as
+  `project.json.corrupt-<ts>` before the next write of that project (warning
+  `project_edits_dropped`).
+- **Edit history.** `EditHistory` is in memory: the last 30 `{cut, stickers}` snapshots per
+  project, behind the "Cofnij" button. A frame Delete has its own Undo. A snapshot is recorded
+  (and popped) only after the write commits, and a restore runs inside `updateProject` against
+  the current project, re-pruned, so a frame that expired meanwhile never comes back.
+- **Frame expiry at runtime.** `FrameDeletion` (`lib/projects/frameDeletion.ts`, like
+  `ProjectDeletion`) fires at the earliest `hiddenUntil`: `expireFrames` commits (and drops the
+  frame's entries and sticker references), then the files are unlinked, then the ack is sent. It
+  re-schedules on start, retries a rejected commit with backoff, ignores a corrupt deadline, waits
+  while an export runs (the check is repeated inside the commit), and never tombstones, unlinks
+  or acks a frame that is only `off`. The startup sweep stays as the crash backstop.
+
 ### 5.7 Playback and export
 
 - **Playback.** A canvas plus a ring buffer of 8 `ImageBitmap`s, decoded from the local `play` at
@@ -559,6 +629,37 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
   export shares it. Frames that are not `local`, and `unavailable` ones, are skipped with a
   "N frames are still downloading" note. Memory does not depend on project length. Bitmaps are
   closed on eviction; the ring is released before an export starts and when the view is left.
+  **Stage 3a:** the player plays `timeline()`: `setTimeline(items, downloading)` with
+  `{entryId, frameId, hold}`, each entry for `hold` ticks, and `seekTo(entryId)` (pause and show)
+  for the strip. Ring keys stay frame ids, so duplicates share one bitmap, and `shown` is the
+  entry id. Off entries do not play and are not counted as "still downloading".
+- **One renderer** (`lib/render/compose.ts`): `drawFrame` (letterbox) and `drawStickers` (entries
+  filter, array order, a missing sprite is skipped) over a minimal 2D-context interface. **On the
+  stage** two stacked canvases: the player draws the frame (the ring closes the bitmap right
+  after), and a separate sticker canvas is redrawn on every sticker, selection or entry change, so
+  a drag while paused never needs the frame bitmap. A drag draws the live pose and commits once on
+  pointer up (one `updateProject`, one history entry). **In export** both passes run on one
+  `OffscreenCanvas` in `source.load` (one ahead) and a `VideoFrame` snapshot goes to the encoder.
+  The sticker maths (normalized to px, hit test, corner handle to size and rotation) is pure in
+  `stickerGeometry.ts`.
+- **Sprites** (`lib/render/sprites.ts`): an OpenMoji SVG is rasterized to an `ImageBitmap` per
+  (hexcode, bucket 128/256/512/1024). SVGs have only a `viewBox`, so `createImageBitmap(img)`
+  throws in Chrome; the `<img>` is drawn onto a canvas at the bucket size first. The LRU is capped
+  by bytes (32 MB) and closes bitmaps on eviction. The stage bucket is capped at 512. A failed
+  load is cached negatively. The export uses 1024 and **preloads every sprite it needs into a
+  pinned set** before encoding; a failure fails the export with its own reason (`sprite`) instead
+  of dropping a sticker silently.
+- **OpenMoji subset.** `remote/scripts/openmoji-subset.mjs` reads the curated list
+  `openmoji-list.json` (242 hexcodes in 8 categories: animals, faces, food, nature, transport,
+  toys, magic, symbols) and writes `public/openmoji/<hex>.svg`, `catalog.json` (pl/ru category
+  names) and `LICENSE.txt` from the pinned `openmoji@17.0.0` devDependency (about 643 KiB). The
+  output is committed, so the app build does not need the package. The attribution (CC BY-SA 4.0)
+  is on "O aplikacji" in the parent screen.
+- **Strip** (`FrameStrip`): a horizontal scroller of 112 px tiles, virtualized by index window
+  (500-frame projects). It falls back from `thumb` to `play` to a placeholder, never to `full`. A
+  `×N` badge shows hold, off is grey, a hidden frame shows "deleting", a not-local one
+  "downloading", and a bar marks the frames that carry the selected sticker. Tap selects, tap
+  again opens the big view; a pointer that moved over 10 px is a scroll, not a tap.
 - **Export state machine** (one export at a time; transfers paused):
   `encoding → finalizing → publishing → done`, or `→ cancelled/failed`.
   1. `videoOpen()` creates `exports/export-<id>.mp4` (seekable, app-private).
@@ -580,9 +681,12 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
      `codec: 'avc' | 'vp9'`. The bitrate is `quality: new Quality({bitrate})` (`bitrate` is
      deprecated) and the frame rate comes from `addVideoTrack(source, {frameRate})`.
      **[S0] result:** the T610 encodes AVC High in hardware.
-  3. **encoding**: frames are processed sequentially from **`play`** (with the `full` fallback,
-     via `frameSource`) → `VideoSample` with timestamp `i/fps` and duration `1/fps` →
-     `await add()` → `close()` both. The video takes the size of the first frame (1440×1080 from
+  3. **encoding**: the on-entries of `playableItems` are processed sequentially from **`play`**
+     (with the `full` fallback, via `frameSource`), composed with their stickers →
+     `VideoSample` with a cumulative timestamp and duration `hold/fps` (one sample per entry,
+     variable durations; checked on the emulator by `ffprobe`, so there is no repeated-sample
+     fallback) → `await add()` → `close()` both. A copy next to its source reuses the decoded
+     frame. The export gate counts the frames of on-entries (a duplicate counts each time). The video takes the size of the first frame (1440×1080 from
      a real camera). **[S0] measured:** from 8 MP `full`, 118 ms per frame (100 frames in 11.8 s),
      the JPEG decode (≈220 ms for 8 MP) being the bottleneck and the encode ≈ 1 ms; from
      1440×1080 pictures 45 ms per frame, about 3× faster. `unavailable` frames are skipped after
@@ -627,8 +731,12 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
   - expired hidden frames and `pendingProjectDeletes` past their deadline are expired.
 - **Boot order** (`lib/app/boot.ts`): the native export sweep (at plugin load) → ProjectStore
   load + sweep → UI → CameraClient → on every session `resolveOutstanding`, then `reconcile`.
-- **`quarantine/`** folders (tablet and phone) are never cleaned up; a parent "show/clear" action
-  comes in stage 3.
+- **`quarantine/`** folders (tablet and phone) are never cleaned up automatically. The tablet's
+  parent section (the Diagnostics screen, behind the long-press wrench on the projects screen)
+  shows the count, the size and up to 12 thumbnails of `kopernikadr/quarantine/` (decoded one at a
+  time, downsampled) and clears it. Clearing removes only the names the parent saw, after the same
+  arithmetic confirmation as on the phone. The phone side is in §4.6.
+- **Frame Delete** is per entry and expires at runtime: see the edit model in §5.4.
 - Uninstalling the remote deletes all projects. README says so plainly; there is no backup in v1.
 
 ## 6. Build, signing, install
@@ -677,7 +785,8 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
 | **0 / 0b** (0: 2026-10-26; 0b: 2026-10-27, probes and PROTOCOL v1 done, the Family Link run still open) | Repo skeleton, pinned versions, build/install/diagnostics scripts, PROTOCOL.md v0, `KopernikadrNative` with atomic write + free space + MP4 writer.<br>**Camera probes**: capabilities dump; three use cases bound at real sizes (fps, capture-to-commit time, peak heap); YUV-vs-RGBA analysis cost; 20 AE/AWB-locked captures with per-frame brightness/colour stats and compensation moved mid-series; focus at mount distance; grid test at 0 and 180; **freeze** vs AE/AWB-lock comparison: lock, lock the phone screen, unlock, check that brightness/colour match frame-to-frame.<br>**Minimal real server**: `/info` (CORS), `/ws/control` with `hello`/session/`ping`/`capture`, `/ws/preview`, `/frames`.<br>**Remote probes**: WebView version, `isSecureContext`, manual address via `/info`, NSD discovery, session + heartbeat during a capture, preview pull loop, native download + sha256, `convertFileSrc`→`VideoFrame`, reconnect after phone lock and after camera restart, export of the probe frames at the chosen profile → temp → MediaStore → plays and seeks in the gallery.<br>**Supervision**: install/upgrade under the child account, camera permission, behaviour under daily limit / app limit / downtime / manual lock. | Run everything under the child account and send the reports. Then we confirm the control mechanism, check the full-res size and the export speed, choose the export path and the NSD plugin, and **freeze PROTOCOL.md v1**. |
 | **1** (done 2026-10-27) | Protocol v1 on both sides + fake camera. Connection screen, sessions/BUSY, preview with watchdog, capture with the durable spool (operation rows, recovery, idempotency, `getOperation`), outstanding captures on the tablet, onion skin, parent drawer (controls with `confirmed`/`settling`, rotation for empty projects). Phone status UI, keep-on/dim, permission-denied screen. | Shooting works; locks hold across phone lock/unlock; preview and onion skin line up in the grid test. |
 | **2** (done 2026-10-27) | Transfer with verification and ack eligibility, reconcile (incl. recovered projects), serialized ProjectStore, projects screen (create/rename/delete + Undo), phone retention + orphans, storage reserves on both sides. | The failure list: Wi-Fi off mid-transfer, phone locked, either app killed around capture/install/ack, lost capture response, low storage on each side. |
-| **3** | Frame strip, view/delete + Undo, playback, export with progress/cancel/cleanup. **Minimal playback and export were pulled forward into stages 1+2** (owner decision, 2026-10-27). What remains for stage 3: the frame strip and editing, the 7-day reclaim, the phone dim (`ScreenPolicy`) and a cleanup UI for `quarantine/`. | 500-frame project → playback → export; memory stays flat; cancel and app kill during export leave no junk. |
+| **3a + emoji** (done 2026-10-27, emulator only) | Frame strip; edit tools (delete with Undo, duplicate, hold, move, off, trim "Od tego"/"Do tego", Cofnij); the `cut` and `stickers` model; one canvas renderer for stage and export; 242 curated OpenMoji as stickers (place, drag, scale, rotate, range); export of the timeline with holds and stickers. Phone: 7-day reclaim, `ScreenPolicy` dim, parent screen with quarantine show/clear (the tablet has the same). Acceptance run: `docs/diagnostics/20261027-stage3a-emulator.md`. | On the real tablet and phone: shoot, edit, add emoji, export, watch in the gallery; a 500-frame project stays flat in memory. |
+| **3b** | Insert a frame in the middle, reshoot frame N, copy/paste frames, reverse a range. Then the rest of the effects layer (ROADMAP). | With the kid. |
 | **4** | UX polish from your notes. | With the kid. |
 
 ## 9. Decisions (approved by the owner on 2026-10-26)
@@ -705,6 +814,15 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
 13. **No zustand**: a small own store with `useSyncExternalStore` (§5.1).
 14. **Quarantine instead of delete** for any `full` file that can't be accounted for, on the phone
     and on the tablet (§4.6, §5.6, §5.8). Nothing cleans it automatically.
-15. The phone reclaims acked frames **under low space only**; the 7-day timer is deferred to
-    stage 3 (§4.6).
+15. The phone reclaims acked frames under low space and 7 days after the ack, hourly (§4.6).
+    Unacked frames are never reclaimed.
 16. Minimal playback and export are built in stages 1+2, not stage 3 (§8).
+17. Stage 3 is split: 3a + emoji is built, 3b (insert/reshoot, copy/paste, reverse) is next (§8).
+18. **Trim is non-destructive:** it sets `off` on entries and never deletes frames, files or acks.
+    Only a Delete of a frame's last entry removes a frame (§5.4).
+19. **A curated OpenMoji set** (242 emoji, committed output, about 643 KiB), not the full library;
+    attribution on "O aplikacji" (§5.7).
+20. **"Shoot on twos" is dropped.** Per-entry hold covers it.
+21. Quarantine is cleared only by a parent, with an arithmetic confirmation, on the phone (3 s
+    hold) and on the tablet (§4.6, §5.8). The phone's 7-day reclaim is capped at 200 frames per
+    pass.

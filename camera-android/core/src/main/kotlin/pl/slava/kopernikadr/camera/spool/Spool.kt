@@ -252,12 +252,19 @@ class Spool private constructor(
         }
     }
 
-    /** The acked, not yet reclaimed frame with the oldest `ackedAt` (any client), or null. */
-    fun nextReclaimable(): Reclaimable? = synchronized(lock) {
+    /**
+     * The acked, not yet reclaimed frame with the oldest `ackedAt` (any client), or null. With
+     * [ackedAtMax] only a frame acked at or before that instant qualifies (the age pass).
+     */
+    fun nextReclaimable(ackedAtMax: Long? = null): Reclaimable? = synchronized(lock) {
+        val age = if (ackedAtMax != null) "AND ackedAt <= ? " else ""
         conn.prepare(
             "SELECT frameId, COALESCE(bytes, 0) FROM frames WHERE state = '$STATE_COMMITTED' AND ackedAt IS NOT NULL " +
-                "AND reclaimedAt IS NULL ORDER BY ackedAt, seq LIMIT 1",
-        ).use { st -> if (st.step()) Reclaimable(st.getText(0), st.getLong(1)) else null }
+                "AND reclaimedAt IS NULL ${age}ORDER BY ackedAt, seq LIMIT 1",
+        ).use { st ->
+            if (ackedAtMax != null) st.bindLong(1, ackedAtMax)
+            if (st.step()) Reclaimable(st.getText(0), st.getLong(1)) else null
+        }
     }
 
     /**

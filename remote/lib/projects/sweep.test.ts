@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CrashError, FakeFs } from './fakeFs.testutil';
 import { INDEX_PATH, projectJsonPath } from './files';
 import type { FrameInfo, Project } from './model';
+import { setOff } from './edit';
 import { hideFrame, hideProject, mergeFrame, renameProject, setLocal } from './reducers';
 import { ProjectStore } from './store';
 import { createFetchBytes, createWebVerify, runStartupSweep, type VerifyFn } from './sweep';
@@ -166,6 +167,19 @@ describe('tmp/ and frames/ garbage', () => {
     expect(r.framesExpired).toEqual([{ projectId: pid, frameId: 'DEAD' }]);
     expect(r.warnings.filter((w) => w.kind === 'full_kept_unreferenced').map((w) => w.path)).toEqual([fp(pid, 'GONE')]);
     expect(store.state.get().projects[pid]!.deletedFrameIds).toContain('DEAD');
+  });
+
+  it('frames that are off (trimmed) are live: the startup sweep keeps all their files and writes no tombstone', async () => {
+    const fs = new FakeFs();
+    const { store: s0, pid } = await seed(fs, [['A'], ['B']]);
+    await s0.updateProject(pid, (p) => setOff(p, 'B', true));
+    for (const id of ['A', 'B']) for (const k of ['full', 'play', 'thumb'] as const) fs.files.set(fp(pid, id, k), content());
+    const store = await restart(fs);
+    const r = await sweep(store, fs);
+    expect((await fs.list(`projects/${pid}/frames`)).length).toBe(6);
+    expect(r.framesExpired).toEqual([]);
+    expect(store.state.get().projects[pid]!.deletedFrameIds).toEqual([]);
+    expect(store.state.get().projects[pid]!.cut!.find((e) => e.id === 'B')!.off).toBe(true);
   });
 
   it('unknown file names in frames/ are kept with a warning', async () => {

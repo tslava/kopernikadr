@@ -9,6 +9,7 @@ import { useStore } from '@/lib/state/useStore';
 
 const ERROR_KEY: Record<ExportFailure, Key> = {
   frame: 'export.errFrame',
+  sprite: 'export.errSprite',
   codec: 'export.errCodec',
   space: 'export.errSpace',
   unknown: 'export.errUnknown',

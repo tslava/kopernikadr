@@ -255,4 +255,142 @@ class SpoolReclaimTest {
         derived.prefetch(a, FrameVariant.THUMB)
         assertFalse(exists(a, FrameVariant.PLAY))
     }
+
+    // --- 7-day age pass (plan Task 11) ---
+
+    private val day = 24L * 60 * 60 * 1000
+    private val week = SpoolReclaimer.AGE_MS
+
+    private fun aged(at: Long, logs: MutableList<String> = mutableListOf(), beforeDelete: (String) -> Unit = {}) =
+        SpoolReclaimer(spool, derived, freeBytes = { Long.MAX_VALUE }, log = { logs += it }, beforeDelete = beforeDelete, now = { at })
+
+    @Test
+    fun `the age is seven days`() = assertEquals(7 * day, week)
+
+    @Test
+    fun `age pass reclaims only frames acked at least 7 days ago`() {
+        val old = frame("native", "r1", ackedAt = 1_000)
+        val exact = frame("remote-lite", "r2", ackedAt = 2_000) // any clientId
+        val recent = frame("native", "r3", ackedAt = 2_001)
+        val now = 2_000 + week
+        val logs = mutableListOf<String>()
+        assertEquals(2, aged(now, logs).reclaimAged())
+        for (v in FrameVariant.entries) {
+            assertFalse(exists(old, v))
+            assertFalse(exists(exact, v))
+            assertTrue(exists(recent, v))
+        }
+        assertTrue(spool.isReclaimed(old))
+        assertTrue(spool.isReclaimed(exact))
+        assertFalse(spool.isReclaimed(recent))
+        assertTrue(logs.any { it.contains("age reclaim: 2 ") })
+    }
+
+    @Test
+    fun `age pass never touches unacked or already reclaimed frames`() {
+        val unacked = frame("native", "r1")
+        val unackedLite = frame("remote-lite", "r2")
+        val done = frame("native", "r3", ackedAt = 10)
+        assertTrue(spool.markReclaimed(done))
+        assertEquals(0, aged(10 + 100 * day).reclaimAged())
+        for (v in FrameVariant.entries) {
+            assertTrue(exists(unacked, v))
+            assertTrue(exists(unackedLite, v))
+        }
+        assertFalse(spool.isReclaimed(unacked))
+        assertFalse(spool.isReclaimed(unackedLite))
+        assertTrue(spool.isReclaimed(done))
+        assertEquals(1, spool.listUnacked("native", null, 10).frames.size)
+    }
+
+    @Test
+    fun `a clock earlier than ackedAt reclaims nothing`() {
+        val a = frame("native", "r1", ackedAt = 50 * day)
+        assertEquals(0, aged(10 * day).reclaimAged())
+        assertEquals(0, aged(0).reclaimAged())
+        assertEquals(0, aged(Long.MIN_VALUE / 2).reclaimAged())
+        assertTrue(exists(a))
+        assertFalse(spool.isReclaimed(a))
+    }
+
+    @Test
+    fun `an age pass reclaims at most the cap, the next one continues`() {
+        val ids = (1..SpoolReclaimer.AGE_PASS_CAP + 5).map { frame("native", "c$it", ackedAt = it.toLong()) }
+        val r = aged(1_000 + week)
+        assertEquals(SpoolReclaimer.AGE_PASS_CAP, r.reclaimAged())
+        assertEquals(5, ids.count { !spool.isReclaimed(it) })
+        assertEquals(5, r.reclaimAged())
+        assertEquals(0, r.reclaimAged())
+        assertTrue(ids.all { spool.isReclaimed(it) })
+    }
+
+    @Test
+    fun `age pass commits reclaimedAt before the delete and finishes oldest first`() {
+        val newer = frame("native", "r1", ackedAt = 300)
+        val older = frame("native", "r2", ackedAt = 100)
+        val order = mutableListOf<String>()
+        aged(300 + week) { id ->
+            val other = Spool.open(dir, BundledSQLiteDriver())
+            try {
+                assertTrue(other.isReclaimed(id))
+            } finally {
+                other.close()
+            }
+            assertTrue(FrameVariant.entries.all { exists(id, it) })
+            order += id
+        }.reclaimAged()
+        assertEquals(listOf(older, newer), order)
+        assertFalse(exists(older))
+        assertFalse(exists(newer))
+    }
+
+    @Test
+    fun `age pass stops at a failed delete and keeps the mark`() {
+        val a = frame("native", "r1", ackedAt = 10)
+        val b = frame("native", "r2", ackedAt = 20)
+        val thumb = spool.file(a, FrameVariant.THUMB)
+        thumb.delete()
+        thumb.mkdir()
+        File(thumb, "x").writeText("x")
+        val logs = mutableListOf<String>()
+        assertEquals(0, aged(20 + week, logs).reclaimAged())
+        assertTrue(logs.any { it.contains("failed") })
+        assertTrue(spool.isReclaimed(a)) // recover retries
+        assertTrue(exists(b))
+        assertFalse(spool.isReclaimed(b))
+    }
+
+    @Test
+    fun `an age pass and a low-space pass at the same time are serialized`() {
+        val a = frame("native", "r1", ackedAt = 10)
+        val b = frame("native", "r2", ackedAt = 20)
+        val entered = CountDownLatch(1)
+        val gate = CountDownLatch(1)
+        val logs = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val r = SpoolReclaimer(
+            spool, derived, freeBytes = { 0L }, log = { logs += it }, now = { 20 + week },
+            beforeDelete = { id ->
+                if (id == a) {
+                    entered.countDown()
+                    gate.await(10, TimeUnit.SECONDS)
+                }
+            },
+        )
+        val pool = Executors.newCachedThreadPool()
+        try {
+            val age = pool.submit<Int> { r.reclaimAged() }
+            assertTrue(entered.await(10, TimeUnit.SECONDS))
+            val low = pool.submit<Int> { r.reclaimUntil(Long.MAX_VALUE) }
+            Thread.sleep(300)
+            assertFalse("the low-space pass must wait for the age pass", low.isDone)
+            gate.countDown()
+            assertEquals(2, age.get(10, TimeUnit.SECONDS))
+            assertEquals(0, low.get(10, TimeUnit.SECONDS))
+            assertFalse(logs.any { it.contains("failed") })
+            for (id in listOf(a, b)) for (v in FrameVariant.entries) assertFalse(exists(id, v))
+        } finally {
+            gate.countDown()
+            pool.shutdownNow()
+        }
+    }
 }

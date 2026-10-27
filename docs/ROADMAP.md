@@ -3,18 +3,38 @@
 Status: 2026-10-27. **Done:** plan 0b (probes, PROTOCOL v1, shared remote-core; the Family Link
 run on the real devices is still open) and stages 1+2 (the native tablet app: projects, shooting
 with onion skin, verified transfer, minimal playback and export to the gallery; tested on an
-emulator against a fake camera, the tablet + phone session is still to do). The browser remote
-`remote-lite` keeps working as a fallback. Order of work from here: **stage 3 (frame strip and
-editing, the 7-day reclaim, the phone dim policy, a cleanup UI for `quarantine/`) → effects layer
-→ cloud AI → the rest by priority.**
+emulator against a fake camera, the tablet + phone session is still to do) and **stage 3a +
+emoji** (2026-10-27, also emulator only; see `docs/diagnostics/20261027-stage3a-emulator.md`).
+The browser remote `remote-lite` keeps working as a fallback. Order of work from here: **real-device
+run of 3a → stage 3b (insert/reshoot, copy/paste, reverse) → the rest of the effects layer → cloud
+AI → the rest by priority.**
 
-## Next: stage 3
-- The frame strip, view and delete frames with Undo, and the editing features in "Next by
-  priority" §3.
-- The 7-day reclaim timer on the phone (today it reclaims acked frames under low space only).
-- `ScreenPolicy`: dim the phone's screen after 2 minutes (keep-screen-on is already built).
-- A parent action to show and clear the `quarantine/` folders (phone and tablet).
-- Playback and export already exist in a minimal form (stages 1+2).
+## Done: stage 3a + emoji
+- Frame strip (112 px tiles, 500 frames stay flat in memory); edit tools: delete with Undo,
+  duplicate, hold 1..8 ticks, move, off, trim ("Od tego" / "Do tego"), Cofnij (last 30 edits).
+  Edits are non-destructive: an edit list (`cut`) over untouched frames.
+- Emoji stickers: 242 curated OpenMoji, place, drag, scale, rotate, shown on a range of frames.
+  One canvas renderer draws them on the stage and in the export. Export of the timeline with holds.
+- Phone: the 7-day reclaim of acked frames (hourly, 200 frames per pass), the dim after 2 minutes
+  idle, a parent screen (3 s hold on the title) with quarantine show/clear. Tablet: the same
+  quarantine section on the Diagnostics screen, and "O aplikacji" with the OpenMoji attribution.
+
+## Next: stage 3b
+- Insert a frame in the middle and reshoot frame N.
+- Copy and paste frames; reverse a range.
+- Then the rest of the effects layer below (motion for stickers, comics, particles, filters).
+
+## Open owner questions (from 3a)
+- Real use: shoot, edit, add emoji, export, watch in the gallery. Do the "sticker until the end"
+  default and the strip size suit a 9-year-old?
+- Should a sticker placed "until the end" also cover frames shot after it was placed? Today it
+  does not.
+- Is the 3 s hold plus the typed answer enough to keep the kid away from the phone's quarantine
+  clear, or is a parent PIN needed?
+- The g05 camera upgrade waits for stages 1+2 Task 21 and goes first: back up the spool
+  read-only, `install -r`, smoke test. The 7-day reclaim starts deleting acked frames on the g05
+  only after that install, so the backup comes before it.
+- Family Link "Always allowed" for both apps; the release keystore (owner).
 
 ## Owner decisions (2026-10-26)
 - **Effects and AI go into the native tablet app (Capacitor), not into `remote-lite`.** They come
@@ -39,7 +59,7 @@ view.
 
 | Feature | Notes |
 |---|---|
-| **Emoji and stickers (OpenMoji)** | Place, resize, rotate, hold over a frame range. Simple motion: bounce, spin, blink, follow a drawn path |
+| **Emoji and stickers (OpenMoji)** | ~~Place, resize, rotate, hold over a frame range~~ (done in 3a). Still to do: simple motion: bounce, spin, blink, follow a drawn path |
 | **Comics** | Speech/thought bubbles, "BAM!", "PUF!", "ZZZ" captions over a frame range, comic font |
 | Particles | Smoke puff (the "vanish" trick), sparks, stars, confetti, rain, snow, explosion flash |
 | Whole-movie filters | B&W, sepia, "old film" (scratches + jitter), comic (posterize + outlines), night, VHS |
@@ -71,12 +91,12 @@ view.
    - histogram / clipping indicator in parent mode;
    - test shot that does not enter the movie.
 3. **Editing:**
-   - duplicate / hold a frame;
-   - insert a frame in the middle; reshoot frame N;
-   - reorder, copy and paste frames; reverse a range;
-   - trim the start/end;
-   - per-frame duration;
-   - "shoot on twos" export.
+   - ~~duplicate / hold a frame~~ (done in 3a);
+   - insert a frame in the middle; reshoot frame N (3b);
+   - ~~reorder~~ (done in 3a), copy and paste frames; reverse a range (3b);
+   - ~~trim the start/end~~ (done in 3a);
+   - ~~per-frame duration~~ (done in 3a, as hold);
+   - ~~"shoot on twos" export~~ (dropped: per-frame hold covers it).
 4. **Projects:**
    - projects stored on the phone (shared across devices);
    - ~~save to the tablet gallery~~ (done in stages 1+2);

@@ -36,12 +36,15 @@ import pl.slava.kopernikadr.camera.net.NsdAdvertiser
 import pl.slava.kopernikadr.camera.net.ServiceAdvertiser
 import pl.slava.kopernikadr.camera.protocol.Capabilities
 import pl.slava.kopernikadr.camera.protocol.CaptureArgs
+import pl.slava.kopernikadr.camera.protocol.Controls
 import pl.slava.kopernikadr.camera.protocol.FrameInfo
 import pl.slava.kopernikadr.camera.protocol.OperationState
 import pl.slava.kopernikadr.camera.protocol.Status
 import pl.slava.kopernikadr.camera.server.CameraPorts
 import pl.slava.kopernikadr.camera.server.CameraServer
 import pl.slava.kopernikadr.camera.server.CaptureService
+import pl.slava.kopernikadr.camera.server.ControlChange
+import pl.slava.kopernikadr.camera.server.ControlsPort
 import pl.slava.kopernikadr.camera.server.IdentityPort
 import pl.slava.kopernikadr.camera.server.PortResult
 import pl.slava.kopernikadr.camera.server.ServerConfig
@@ -84,6 +87,14 @@ class ServerHost(
     private val serial = executor.asCoroutineDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Called on every remote command (capture, a controls change, a session opening); feeds the
+     * ScreenPolicy. The preview stream, `getStatus` polls and frame downloads are not activity.
+     * Any thread.
+     */
+    @Volatile
+    var onActivity: (() -> Unit)? = null
+
     private val _state = MutableStateFlow(ServerState())
     val state: StateFlow<ServerState> = _state.asStateFlow()
 
@@ -93,8 +104,9 @@ class ServerHost(
     @Volatile
     private var sessions: SessionManager? = null
     private var poll: Job? = null
+    private var ageReclaim: Job? = null
 
-    private class Stack(val cameraId: String, val spool: Spool, val ports: (bootId: String) -> CameraPorts)
+    private class Stack(val cameraId: String, val spool: Spool, val reclaimer: SpoolReclaimer, val ports: (bootId: String) -> CameraPorts)
 
     fun start() {
         scope.launch(serial) { startNow() }
@@ -125,10 +137,27 @@ class ServerHost(
             server = srv
             sessions = sm
             _state.value = ServerState(port = port)
+            // 7-day reclaim of acked frames: only now, after build() ran spool.recover(); the first pass is
+            // immediate (the upgrade reclaims what is already old), then hourly.
+            ageReclaim = scope.launch {
+                while (isActive) {
+                    var more = false
+                    try {
+                        more = s.reclaimer.reclaimAged() >= SpoolReclaimer.AGE_PASS_CAP
+                    } catch (e: Exception) {
+                        Log.w(CAP_TAG, "age reclaim failed", e)
+                    }
+                    delay(if (more) AGE_RECLAIM_MORE_MS else AGE_RECLAIM_MS) // a capped pass continues soon
+                }
+            }
             poll = scope.launch {
                 var last = false
+                var lastSession: String? = null
                 while (isActive) {
-                    val connected = sm.current() != null
+                    val session = sm.current()?.sessionId
+                    if (session != null && session != lastSession) onActivity?.invoke()
+                    lastSession = session
+                    val connected = session != null
                     if (connected != last) {
                         Log.i(TAG, if (connected) "tablet connected" else "tablet disconnected")
                         last = connected
@@ -148,6 +177,8 @@ class ServerHost(
         val srv = server ?: return
         poll?.cancel()
         poll = null
+        ageReclaim?.cancel()
+        ageReclaim = null
         server = null
         sessions = null
         val t0 = SystemClock.elapsedRealtime()
@@ -197,13 +228,13 @@ class ServerHost(
             admissionCheck = { _, args -> admission.check(args) },
             log = { Log.i(CAP_TAG, it) },
         )
-        val guarded = GuardedControls(controls, capture.admission) { capture.isCapturing }
+        val guarded = ActivityControls(GuardedControls(controls, capture.admission) { capture.isCapturing }) { onActivity?.invoke() }
         val frames = SpoolFrameStore(spool, derived)
         val preview = CameraPreviewSource(camera, PreviewEncoder(codec), { controls.controls.value }, log = { Log.w(TAG, it) })
         val status = StatusPort { status(spool) }
-        val loggedCapture = LoggingCapture(capture)
+        val loggedCapture = ActivityCapture(LoggingCapture(capture)) { onActivity?.invoke() }
         Log.i(TAG, "stack ready: spool ${spool.dir}, ${spool.stats()}")
-        return Stack(cameraId, spool) { bootId ->
+        return Stack(cameraId, spool, reclaimer) { bootId ->
             val identity = object : IdentityPort {
                 override val cameraId: String = cameraId
                 override val bootId: String = bootId
@@ -236,6 +267,22 @@ class ServerHost(
         )
     }
 
+    /** A controls change is activity (reading the controls is not). */
+    private class ActivityControls(private val delegate: ControlsPort, private val activity: () -> Unit) : ControlsPort by delegate {
+        override suspend fun set(change: ControlChange): PortResult<Controls> {
+            activity()
+            return delegate.set(change)
+        }
+    }
+
+    /** A capture request is activity. */
+    private class ActivityCapture(private val delegate: CaptureService, private val activity: () -> Unit) : CaptureService by delegate {
+        override suspend fun capture(clientId: String, reqId: String, args: CaptureArgs): PortResult<FrameInfo> {
+            activity()
+            return delegate.capture(clientId, reqId, args).also { activity() }
+        }
+    }
+
     /** Logs every capture request and its outcome under [CAP_TAG]. */
     private class LoggingCapture(private val delegate: CaptureService) : CaptureService {
         override suspend fun capture(clientId: String, reqId: String, args: CaptureArgs): PortResult<FrameInfo> {
@@ -258,5 +305,7 @@ class ServerHost(
         const val CAP_TAG = "KopernikadrCap"
         const val NAME = "Kopernikadr Kamera"
         private const val POLL_MS = 500L
+        private const val AGE_RECLAIM_MS = 60L * 60 * 1000
+        private const val AGE_RECLAIM_MORE_MS = 10_000L // after a pass that hit the cap
     }
 }

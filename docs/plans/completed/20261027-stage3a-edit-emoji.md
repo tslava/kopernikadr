@@ -293,21 +293,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/projects/timeline.test.ts`
 - Modify: `remote/lib/projects/projects.test.ts`
 
-- [ ] write tests first:
+- [x] write tests first:
   - `timeline()` with no `cut` = frames in seq order, `id == frameId`, hold 1;
   - with `cut`: cut order, then unreferenced frames appended in seq order;
   - entries of frames gone from `frames` are skipped;
   - `playableItems()` filters off, hidden, pending and unavailable.
-- [ ] write parse tests:
+- [x] write parse tests:
   - `cut`/`stickers` absent → undefined;
   - a valid round-trip;
   - a malformed entry is dropped;
   - a malformed field → undefined, project still readable;
   - clamps;
   - a later duplicate entry id is dropped.
-- [ ] add the `CutEntry` and `Sticker` types and the optional `Project.cut?`/`stickers?`; extend `parseProject` (lenient).
-- [ ] implement `timeline(project)` and `playableItems(project)` in `timeline.ts`.
-- [ ] run tests — must pass before Task 2.
+- [x] add the `CutEntry` and `Sticker` types and the optional `Project.cut?`/`stickers?`; extend `parseProject` (lenient).
+- [x] implement `timeline(project)` and `playableItems(project)` in `timeline.ts`.
+- [x] run tests — must pass before Task 2.
 
 ### Task 2: Edit reducers + history (TDD)
 
@@ -321,7 +321,7 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/projects/reducers.ts` (`expireFrames` pruning)
 - Modify: `remote/lib/app/app.ts` (wire `FrameDeletion`)
 
-- [ ] write tests first:
+- [x] write tests first:
   - the first edit materializes `cut` from `timeline()`;
   - duplicate inserts a new entry right after the source and copies its sticker membership;
   - hold ± is clamped to 1..8;
@@ -332,24 +332,25 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
   - "start here" turns off everything before the entry, "end here" everything after;
   - every reducer returns the SAME reference when nothing changes;
   - a new capture after edits appears at the end.
-- [ ] write `expireFrames` tests:
+- [x] write `expireFrames` tests:
   - removes the cut entries of expired frames;
   - prunes stickers' `on`;
   - drops empty stickers;
   - the tombstone behavior is unchanged.
-- [ ] write history tests:
+- [x] write history tests:
   - push/undo, no redo, a cap of 30, per project;
   - no-op edits don't push;
   - restoring re-prunes against the current frames (a frame expired after the snapshot does not come back; an emptied sticker stays gone).
-- [ ] write `FrameDeletion` tests (fake timers, fake store/fs/transfer):
+- [x] write `FrameDeletion` tests (fake timers, fake store/fs/transfer):
   - fires at the earliest `hiddenUntil`;
   - commits, THEN unlinks the three files, THEN calls `ackNow` with the projectOf map;
   - Undo before the deadline cancels;
   - a pending deadline from a previous run fires after construction;
   - it waits while an export is busy;
   - an unlink failure doesn't block the ack (the sweep retries the unlink at next start).
-- [ ] implement `edit.ts` (pure, ids injected), `history.ts`, the pruning in `expireFrames`, and `lib/projects/frameDeletion.ts` (wired in `lib/app/app.ts` next to `ProjectDeletion`).
-- [ ] run tests — must pass before Task 3.
+- [x] implement `edit.ts` (pure, ids injected), `history.ts`, the pruning in `expireFrames`, and `lib/projects/frameDeletion.ts` (wired in `lib/app/app.ts` next to `ProjectDeletion`). `FrameDeletion` also has `hide`/`undo` and is exposed as `AppContext.frameDeletion` (set in `app.ts`; optional so boot tests are unchanged). `pruneEdits` (in `edit.ts`) is shared by delete, expiry and history restore.
+- [x] ➕ store safeguard for dropped edit fields (orchestrator note, Technical Details > Parsing): `droppedEditFields(raw, parsed)` in `model.ts` detects a malformed `cut`/`stickers` field or dropped entries; `ProjectStore.load` logs it (`console.warn` + `project_edits_dropped` warning) and keeps the original text, and the first write of that `project.json` first writes `project.json.corrupt-<ts>` (once). Tests in `store.test.ts` and `projects.test.ts`.
+- [x] run tests — must pass before Task 3. (remote vitest 645 passed, typecheck clean)
 
 ### Task 3: Sticker reducers + geometry (TDD)
 
@@ -359,19 +360,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/render/stickerGeometry.ts`
 - Create: `remote/lib/render/stickerGeometry.test.ts`
 
-- [ ] write tests first for the reducers:
+- [x] write tests first for the reducers:
   - `addSticker` on the entry and every later entry;
   - `updateSticker` (x/y/size/rot clamped);
   - `removeSticker`;
   - `setRange(stickerId, fromEntryId, toEntryId)` in timeline order, either direction;
   - adding a sticker materializes `cut` (ids stay stable).
-- [ ] write geometry tests:
+- [x] write geometry tests:
   - normalized → px for 1440×1080 and for an arbitrary canvas;
   - a hit-test with rotation;
   - the corner-handle drag → size + rotation;
   - `rot` normalized to −180..180.
-- [ ] implement both modules.
-- [ ] run tests — must pass before Task 4.
+- [x] implement both modules.
+- [x] run tests — must pass before Task 4. (remote vitest 668 passed, typecheck clean)
 
 ### Task 4: OpenMoji subset + sprite loader
 
@@ -385,24 +386,24 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Create: `remote/lib/render/catalog.ts`
 - Modify: `remote/package.json` (devDependency `openmoji@17.0.0`, scripts `openmoji` and `test:scripts`)
 
-- [ ] curate about 200 hexcodes in 8 categories. All must be kid-appropriate: no weapons beyond toy-like ones, no alcohol. Add pl/ru category names.
-- [ ] write `openmoji-subset.mjs`:
+- [x] curate about 200 hexcodes in 8 categories (242 hexcodes). All must be kid-appropriate: no weapons beyond toy-like ones, no alcohol. Add pl/ru category names.
+- [x] write `openmoji-subset.mjs`:
   - copies the SVGs, writes `catalog.json`, copies the license;
   - fails loudly on a missing hexcode;
   - deterministic output.
-- [ ] write `catalog.ts`, a typed loader for `catalog.json`.
-- [ ] write `sprites.ts`:
+- [x] write `catalog.ts`, a typed loader for `catalog.json`.
+- [x] write `sprites.ts`:
   - SVG url → `<img>` → canvas at the bucket size (128/256/512/1024) → ImageBitmap;
   - an LRU capped at 32 MB, close on eviction;
   - `preload(hexcodes, bucket)` for the export;
   - the image-loading seam is injected.
-- [ ] tests:
+- [x] tests:
   - the script on a fixture dir (missing hexcode → error; output shape);
   - the sprite LRU and bucket choice with a fake loader;
   - catalog validation.
-- [ ] run `npm run openmoji`, commit the output, check its size (expect < 2 MB).
-- [ ] tablet WebView check (CDP): rasterize 3 SVGs at 1024 and check that the bitmap size and pixels are not blank.
-- [ ] run tests — must pass before Task 5.
+- [x] run `npm run openmoji`, commit the output, check its size (expect < 2 MB) (242 SVGs, 643 KiB).
+- [x] tablet WebView check (CDP): rasterize 3 SVGs at 1024 and check that the bitmap size and pixels are not blank (emulator-5584: 1024x1024, 16-40% opaque; direct createImageBitmap(img) throws InvalidStateError as predicted).
+- [x] run tests — must pass before Task 5.
 
 ### Task 5: Compositor + timeline playback
 
@@ -413,20 +414,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/play/player.test.ts`
 - Modify: `remote/components/PlayView.tsx`
 
-- [ ] write tests first for `compose()` with a recording fake context:
+- [x] write tests first for `compose()` with a recording fake context:
   - the frame is drawn letterboxed into the canvas;
   - only the stickers whose `on` contains the entry id are drawn, in array order;
   - the transform matches the geometry;
   - a missing sprite is skipped.
-- [ ] write the player tests:
+- [x] write the player tests:
   - `setTimeline` with holds: an entry stays `hold` ticks;
   - duplicates share one ring bitmap;
   - `shown` is the entryId;
   - loop/no-loop/seek still pass (the existing tests are ported);
   - `seekTo(entryId)` pauses and shows that entry, including a duplicate entry (the right id is shown);
   - a frame that becomes local mid-play is picked up.
-- [ ] implement `compose.ts` (two passes), the player timeline API + `seekTo`, and the two stacked stage canvases in PlayView (frame by the player, stickers by `drawStickers`).
-- [ ] run tests — must pass before Task 6.
+- [x] implement `compose.ts` (two passes), the player timeline API + `seekTo`, and the two stacked stage canvases in PlayView (frame by the player, stickers by `drawStickers`).
+- [x] run tests — must pass before Task 6.
+- [x] device check on emulator-5584 (Film 1, 9 frames): the stage shows the frame, play runs once, loop toggle, speed slider and Back work by touch, `scrollHeight == innerHeight` (728). Stickers cannot be placed yet (UI is Task 9), so the sticker canvas was exercised by unit tests only.
 
 ### Task 6: Export on the timeline with stickers
 
@@ -436,7 +438,7 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/export/mediabunnyExport.ts` (only if a compose hook is needed)
 - Modify: `remote/lib/export/mediabunnyExport.test.ts`
 
-- [ ] write tests first:
+- [x] write tests first:
   - `exportGate` ignores off frames and counts only frames used by on-entries;
   - export order = timeline order;
   - durations = hold/fps with cumulative timestamps;
@@ -444,9 +446,9 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
   - stickers are composed (fake context records it), inside `source.load`, as snapshots: two prefetched frames don't share a canvas;
   - sprites are preloaded before the first frame: a sticker whose sprite was not loaded yet is still in exported frame 1; a failed sprite fails the export with a clear message;
   - an empty timeline → the existing "no frames" gate.
-- [ ] implement it: the timeline drives the export loop; frame bitmap → `compose` on an OffscreenCanvas → sample.
-- [ ] export on the tablet a project with holds of 1 and 4 at 8 fps (seed the holds through CDP + a store mutation; the UI comes in Task 8). Check `ffprobe` duration and frame timing. Check that it plays at the right speed in the system player. If variable durations misbehave, switch to repeated samples (decide here, record ➕).
-- [ ] run tests — must pass before Task 7.
+- [x] implement it: the timeline drives the export loop; frame bitmap → `compose` on an OffscreenCanvas → sample. (Also: new `sprite` failure reason + `export.errSprite` in pl/ru; `playableFrames` removed from player.ts, nothing else used it.)
+- [x] export on the tablet a project with holds of 1 and 4 at 8 fps (seed the holds through CDP + a store mutation; the UI comes in Task 8). Check `ffprobe` duration and frame timing. Check that it plays at the right speed in the system player. If variable durations misbehave, switch to repeated samples (decide here, record ➕). (Done on emulator-5584 with holds 1,4,1,4,1 at 8 fps plus a sticker on entries 2 and 4, seeded by writing project.json via run-as: ffprobe shows 5 packets, pts 0/0.125/0.625/0.75/1.25, durations 0.125/0.5/0.125/0.5/0.125, stream 1.375 s; MediaStore duration 1375; the sticker is in frames 2 and 4 only. Variable sample durations work, no repeated-sample fallback needed. 'Obejrzyj film' opened Google Photos' viewer.)
+- [x] run tests — must pass before Task 7.
 
 ### Task 7: Frame strip + movie screen layout
 
@@ -459,20 +461,20 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/app/globals.css`
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the `stripModel.ts` tests first:
+- [x] write the `stripModel.ts` tests first:
   - tile state (on/off/hidden/downloading/unavailable/hold badge/sticker bar);
   - the visible index window for virtualization;
   - selection survives timeline changes (by entry id) and clears when the entry is gone;
   - tile image choice: thumb → play → placeholder, never full.
-- [ ] implement the strip:
+- [x] implement the strip:
   - tap selects and pauses playback, and shows that frame on the stage;
   - a second tap opens the big view (full frame + stickers, Back closes; it joins the overlay stack).
-- [ ] layout: stage left, controls right, strip bottom, 100dvh, no page scroll at 1280×754.
-- [ ] tablet run:
+- [x] layout: stage left, controls right, strip bottom, 100dvh, no page scroll at 1280×754. (verified at 1280x728 on the emulator; CSS is height-agnostic)
+- [x] tablet run (Film 1, 9 frames; tiles, big view, system Back x2, scrollHeight 728 == innerHeight 728, screencap checked):
   - open a 5-frame movie, tap tiles, open and close the big view, Back;
   - check `scrollHeight == innerHeight`;
   - screencap.
-- [ ] run tests — must pass before Task 8.
+- [x] run tests — must pass before Task 8.
 
 ### Task 8: Edit tools (delete/Undo, duplicate, hold, move, off, trim, Cofnij)
 
@@ -484,20 +486,20 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/ProjectsView.tsx` (share the Undo toast component)
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the `editController` tests first:
+- [x] write the `editController` tests first (9 tests incl. `toolStates`):
   - every tool calls the right reducer through `store.updateProject`;
   - pushes history;
   - Cofnij restores the previous `{cut, stickers}`;
   - Delete of a duplicate entry removes the entry (in history); Delete of the last entry uses `hideFrame` + the Undo toast and expires through `FrameDeletion` (Task 2);
   - the tools are disabled while an export runs;
   - tools are disabled when they make no sense (move at the edge, hold at 8).
-- [ ] implement the tools row. Kid-sized buttons with icons + short labels. Delete is NOT long-press (it has Undo), the rest are plain taps.
-- [ ] tablet run, 5 frames:
+- [x] implement the tools row. Kid-sized buttons with icons + short labels. Delete is NOT long-press (it has Undo), the rest are plain taps. (72x80 icon-over-label buttons in the right column, 4 per row; the shared `UndoToast` serves projects and frames)
+- [x] tablet run (emulator-5584, 7 frames in a new Film 3 shot on the fake camera: the real camera 192.168.1.34:8765 refused connections today; real touches via adb; scrollHeight 728 == innerHeight 728, screencaps checked; Film 2 untouched). Done: duplicate, hold x4, move to first, off, start here, Cofnij x2, delete duplicate (original stays), delete + Undo, delete + expiry (files gone, tombstone, frame acked on the fake camera; all of its frames were already acked on download, so the check is idempotent). Playback order/timing not re-run (covered by Task 5/6 device runs); original steps:
   - duplicate frame 2, hold frame 3 ×4, move frame 5 to first;
   - off frame 4; start here at 2; Cofnij ×2;
   - delete the duplicate of frame 2 (the original stays); delete frame 1 and Undo; delete frame 1 and let it expire (files gone, tombstone, ack sent to the camera — check the Pixel's `getStatus` counts);
   - check `project.json` via CDP and the playback order/timing.
-- [ ] run tests — must pass before Task 9.
+- [x] run tests — must pass before Task 9. (vitest 732 passed, typecheck clean)
 
 ### Task 9: Sticker UI
 
@@ -510,21 +512,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/Icon.tsx`
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the controller tests first:
+- [x] write the controller tests first (12 tests; a cancelled gesture writes nothing, so there is nothing to restore):
   - pointer drag → move;
   - handle drag → scale + rotate;
   - one commit + one history entry per gesture;
   - selection; range from/to; delete;
   - a pointercancel restores the pre-gesture state.
-- [ ] picker: category tabs, a grid of SVG `<img>`s (lazy), a tap adds to the selected frame through the end.
-- [ ] sticker layer over the stage: handles shown only for the selected sticker; the strip shows that sticker's frames.
-- [ ] tablet run:
+- [x] picker: category tabs, a grid of SVG `<img>`s (lazy), a tap adds to the selected frame through the end.
+- [x] sticker layer over the stage: handles shown only for the selected sticker; the strip shows that sticker's frames.
+- [x] tablet run (emulator-5584, Film 3, real adb swipes; project.json, playback sampling and screencaps checked):
   - add 🐶 on frame 2, drag it, scale and rotate it with the handle, set the range 2–4;
   - play: it shows only on 2–4;
   - move frame 3 to the end: the sticker follows it;
   - delete the sticker; Cofnij;
   - screencap.
-- [ ] run tests — must pass before Task 10.
+- [x] run tests (vitest 744, typecheck clean) — must pass before Task 10.
 
 ### Task 10: Tablet parent: quarantine show/clear + "O aplikacji" attribution
 
@@ -534,15 +536,15 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/ParentDrawer.tsx` (or `Diagnostics.tsx`, wherever the parent sections live)
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write tests first (fake fs):
+- [x] write tests first (fake fs): (6 tests; QuarantineFs seam, flat dir)
   - list `kopernikadr/quarantine/` files with sizes, newest first;
   - clear removes only files inside the quarantine dirs (path guard);
   - a missing dir = empty;
   - a partial failure is reported.
-- [ ] UI: count, size, downsampled thumbnails for the newest ≤ 12 `.jpg` files; "Wyczyść" with a confirm dialog that names the count and size.
-- [ ] "O aplikacji": app version, the OpenMoji attribution text (exact string from ROADMAP), the license link as text.
-- [ ] tablet run: seed a fake file into quarantine via the debug build, show it, clear it, check that it's gone.
-- [ ] run tests — must pass before Task 11.
+- [x] UI: count, size, downsampled thumbnails for the newest ≤ 12 `.jpg` files; "Wyczyść" with a confirm dialog that names the count and size. (on the Diagnostics screen behind the long-press wrench, parent-only; thumbnails via createImageBitmap resizeWidth 160 into a canvas)
+- [x] "O aplikacji": app version, the OpenMoji attribution text (exact string from ROADMAP), the license link as text. (version from package.json via NEXT_PUBLIC_APP_VERSION in next.config.mjs)
+- [x] tablet run: seed a fake file into quarantine via the debug build, show it, clear it, check that it's gone. (emulator-5584: real long-press, 2 seeded fulls listed with thumbs, confirm, cleared, dir empty)
+- [x] run tests — must pass before Task 11. (750 passed)
 
 ### Task 11: Phone — 7-day reclaim
 
@@ -553,18 +555,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/core/src/test/kotlin/pl/slava/kopernikadr/camera/spool/SpoolReclaimTest.kt`
 - Modify: `README.md`, `docs/ARCHITECTURE.md` §4.6 (the first-launch warning)
 
-- [ ] write tests first:
+- [x] write tests first:
   - only frames acked ≥ 7 days ago (injected clock) are reclaimed;
   - unacked frames, frames acked < 7 days ago, and already reclaimed frames are never touched;
   - `reclaimedAt` is committed before the delete;
   - the low-space path is unchanged;
   - a clock earlier than `ackedAt` reclaims nothing;
   - an age pass and a low-space pass running at the same time are serialized (no lost or false `failedDeletes`).
-- [ ] implement the age pass, the reclaimer-level mutex, and the schedule in `ServerHost`. Log a summary line with the count.
-- [ ] Pixel run (probe build, never the g05):
+- [x] implement the age pass, the reclaimer-level mutex, and the schedule in `ServerHost`. Log a summary line with the count. (`reclaimAged()`, `Spool.nextReclaimable(ackedAtMax)`, lock in `SpoolReclaimer`; first pass right after start, then hourly)
+- [x] Pixel run (done on emulator-5584 with the camera debug app; no Pixel today, never the g05):
   - backdate `ackedAt` of 2 acked test frames via `run-as` + sqlite;
   - restart the app and check the log count, that the files are gone, and that unacked frames are untouched.
-- [ ] run the camera tests — must pass before Task 12.
+  - Result: 3 frames shot with probe-client, 2 acked via the protocol; frame 1 backdated 8 days (`sqlite3` via `run-as` while force-stopped). After restart the log shows `reclaimed <id> (71880 B)` and `age reclaim: 1 frame(s)`; frame 1 has `reclaimedAt` set, its 3 files are gone and `GET full.jpg` is 404. Frame 2 (acked, recent) and frame 3 (unacked) keep rows and files and answer 200 with their original sizes. The earlier start of the same build logged `age reclaim: 0 frame(s)`.
+- [x] run the camera tests — must pass before Task 12. (core 428 tests, SpoolReclaimTest 20 of them; app 15; all pass)
 
 ### Task 12: Phone — ScreenPolicy dim
 
@@ -574,18 +577,18 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/MainActivity.kt`
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/host/ServerHost.kt` (an activity callback fed by the server/session events: capture, controls, session open)
 
-- [ ] write tests first (fake clock):
+- [x] write tests first (fake clock):
   - bright → dim after 2 min idle;
   - any activity → bright and the timer restarts;
   - the preview stream alone does not count;
   - an Activity pause/resume resets to bright;
   - no dim while the waiting card (QR) is shown.
-- [ ] wire it: `window.attributes.screenBrightness` 0.05 / `BRIGHTNESS_OVERRIDE_NONE`, touches through `dispatchTouchEvent`, commands from the server. `FLAG_KEEP_SCREEN_ON` stays.
-- [ ] Pixel run:
+- [x] wire it: `window.attributes.screenBrightness` 0.05 / `BRIGHTNESS_OVERRIDE_NONE`, touches through `dispatchTouchEvent`, commands from the server. `FLAG_KEEP_SCREEN_ON` stays.
+- [x] Pixel run (emulator-5584, debug-only `--ei idle_ms 15000` instead of waiting 2 min; logcat `KopernikadrScreen` dim/bright, no `dumpsys` brightness value read):
   - idle 2 min → dim (`dumpsys window` brightness / screencap);
   - a capture from the tablet → bright;
   - NSD still visible from the tablet while dim.
-- [ ] run tests — must pass before Task 13.
+- [x] run tests — must pass before Task 13.
 
 ### Task 13: Phone — quarantine show/clear (parent)
 
@@ -596,18 +599,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/ui/StatusScreen.kt` (the header hold becomes 3 s and is always on → the parent screen)
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/MainActivity.kt` (`onTitleHeld` → the parent screen; Diagnostics is reached from there)
 
-- [ ] write tests first:
+- [x] write tests first:
   - list (the `SpoolFiles` name rule incl. `.dupN`, `.tmp`, `.<uuid>.tmp`; sizes; newest first);
   - clear deletes only files directly in `spool/quarantine/` that match the name rule, and nothing else (a stray file and a subdirectory survive);
   - the cleared count equals what the list showed.
-- [ ] (no lock: `recover()` runs once per process before the server starts; record this in the KDoc.)
-- [ ] UI: count, size, ≤ 12 newest downsampled thumbnails; "Wyczyść" → a confirmation where the parent types the file count.
-- [ ] Pixel run:
+- [x] (no lock: `recover()` runs once per process before the server starts; record this in the KDoc.)
+- [x] UI: count, size, ≤ 12 newest downsampled thumbnails; "Wyczyść" → a confirmation where the parent types the file count.
+- [x] Pixel run (emulator-5584, debug build; never the g05):
   - put a test file into the probe build's quarantine via `run-as`;
   - open the screen with a 3 s hold (a 1.5 s hold opens nothing); "Diagnostyka" opens diagnostics;
   - clear it with the typed count and check that it's gone.
   - **Never on the g05.**
-- [ ] run tests — must pass before Task 14.
+  - Result: seeded `quarantine/` with 2 matching files (`<ULID>.full.jpg`, `<ULID>.full.jpg.dup1`), a `stray.txt` and a `subdir/` with a matching name inside. A 1.5 s hold on the header opened nothing; a 3.3 s hold opened "Dla rodzica" listing "Pliki: 2, 76 kB" with 2 thumbnails (stray and subdir not counted). "Diagnostyka" opened diagnostics (debug). Typing 3 left "Usuń" disabled; typing 2 cleared: "Usunięto: 2", and `run-as ls` shows only `stray.txt` and `subdir/` (with its file) left.
+- [x] run tests — must pass before Task 14. (core 446 tests incl. QuarantineStoreTest 8, app unit tests pass, `:app:assembleDebug` and `:app:compileReleaseKotlin` build)
 
 ### Task 14: E2E on the emulator — edit + sticker + export
 
@@ -617,37 +621,37 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/e2e/lib.test.mjs`
 - Modify: `remote/e2e/README.md`
 
-- [ ] add a step after capture:
+- [x] add a step after capture:
   - duplicate, hold ×3, off one frame, add a sticker with a range;
   - export;
   - check the gallery file exists and that its duration = Σ hold / fps ± 1 tick (via `ffprobe` on the pulled file);
   - check that `project.json` matches.
-- [ ] add the pure helper `expectedDurationS(items, fps)` + a unit test.
-- [ ] run the full E2E flow on the emulator (all steps PASS).
+- [x] add the pure helper `expectedDurationS(items, fps)` + a unit test.
+- [x] run the full E2E flow on the emulator (all steps PASS; emulator-5584, 10/10 PASS: edit step 1.750 s = 14 ticks / 8 fps, project.json 12 entries; old steps 8-9 are now 9-10).
 
 ### Task 15: Verify acceptance criteria
-- [ ] Every item in the Overview works on the real tablet + Pixel (agent-run touch scripts, screencaps in `docs/diagnostics/<date>-stage3a-tablet.md`).
-- [ ] A 500-frame project (ARCHITECTURE §8 acceptance): the strip scrolls smoothly; playback memory stays flat (8-bitmap ring + 32 MB sprite LRU, measured with `scripts/meminfo-sampler.sh`); export with stickers finishes.
-- [ ] A project without `cut`/`stickers` behaves exactly as before.
-- [ ] Downgrade caveat (documented, not fixed): an older app opens a new project file but its first write drops `cut`/`stickers`.
-- [ ] Ack eligibility is unchanged: off never writes tombstones or unlinks files; a deleted frame → tombstone → ack only after expiry (runtime `FrameDeletion` and the startup sweep).
-- [ ] Full suites:
+- [x] Every item in the Overview works on the real tablet + Pixel (agent-run touch scripts, screencaps in `docs/diagnostics/<date>-stage3a-tablet.md`). Run on emulator-5584 with real `adb input` touches (neither real device was connected): all items PASS, see `docs/diagnostics/20261027-stage3a-emulator.md`. The real tablet + phone run is still to do tomorrow (marked there).
+- [x] A 500-frame project (ARCHITECTURE §8 acceptance): the strip scrolls smoothly; playback memory stays flat (8-bitmap ring + 32 MB sprite LRU, measured with `scripts/meminfo-sampler.sh`); export with stickers finishes. Emulator, seeded 500-frame project: strip end to end peak 298 MB total, 120 s looped playback flat at 436-441 MB (app 170 + renderer 270), export of 500 frames with 2 stickers in about 28 s, overall peak 463 MB (app 188 + renderer 302). Real-tablet figure still to measure.
+- [x] A project without `cut`/`stickers` behaves exactly as before. (Film 1 on the emulator: opens, plays 9 frames, no keys written; unit tests for `timeline()`.)
+- [x] Downgrade caveat (documented, not fixed): an older app opens a new project file but its first write drops `cut`/`stickers`. (Documented in ARCHITECTURE §5.4; not run on a device.)
+- [x] Ack eligibility is unchanged: off never writes tombstones or unlinks files; a deleted frame → tombstone → ack only after expiry (runtime `FrameDeletion` and the startup sweep).
+- [x] Full suites (remote vitest 61 files / 752 tests, typecheck clean, test:scripts 5, camera-android core 446 + app 15, remote android build OK, remote-core 42, probe-client 45, remote-lite 28, scripts/test/run.sh 36):
   - `cd remote && npm test && npm run typecheck`;
   - `cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest`;
   - remote android build;
   - `cd remote && npm run test:scripts`;
   - `remote-core`, `probe-client`, `remote-lite`, `scripts` tests.
-- [ ] A review by a Claude `code-reviewer` agent on the stage diff; fix the findings.
+- [x] A review by a Claude `code-reviewer` agent on the stage diff; fix the findings. (16 findings + 3 acceptance observations fixed in 3 commits; checked on emulator-5584: phone and tablet arithmetic confirms, sticker drag, Od początku selection, no sticker chrome while playing.)
 
 ### Task 16: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
+- [x] `docs/ARCHITECTURE.md`:
   - §5.4: `cut`, `stickers`, `timeline()`;
   - §4.6: the 7-day reclaim and ScreenPolicy as built;
   - §8: stage 3 split into 3a+emoji / 3b;
   - decisions: trim is non-destructive, a curated OpenMoji set, "shoot on twos" dropped.
-- [ ] `docs/ROADMAP.md`: mark 3a + emoji done; the next steps are 3b and the rest of the effects layer.
-- [ ] `README.md`: how to edit a movie and add emoji; where quarantine is cleared.
-- [ ] Move this plan to `docs/plans/completed/`.
+- [x] `docs/ROADMAP.md`: mark 3a + emoji done; the next steps are 3b and the rest of the effects layer.
+- [x] `README.md`: how to edit a movie and add emoji; where quarantine is cleared.
+- [ ] Move this plan to `docs/plans/completed/`. (orchestrator moves it after merge)
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — informational only*

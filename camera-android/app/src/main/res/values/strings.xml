@@ -23,4 +23,20 @@
     <string name="status_error_title">Błąd</string>
     <string name="status_frames">Kadry: %1$d</string>
     <string name="status_battery">Bateria: %1$d%%</string>
+    <string name="parent_title">Dla rodzica</string>
+    <string name="parent_close">Zamknij</string>
+    <string name="parent_diagnostics">Diagnostyka</string>
+    <string name="quarantine_title">Kwarantanna</string>
+    <string name="quarantine_empty">Pusto. Nic tu nie ma.</string>
+    <string name="quarantine_summary">Pliki: %1$d, %2$s</string>
+    <string name="quarantine_hint">Zdjęcia, których aplikacja nie mogła bezpiecznie przypisać do filmu. Nie są usuwane same.</string>
+    <string name="quarantine_clear">Wyczyść</string>
+    <string name="quarantine_confirm_title">Usunąć na stałe?</string>
+    <string name="quarantine_confirm_text">To zdjęcia (%1$d), które nigdy nie zostały dostarczone na tablet i mogą być jedyną kopią. Tego nie można cofnąć.</string>
+    <string name="quarantine_confirm_question">Ile to %1$d × %2$d?</string>
+    <string name="quarantine_confirm_label">Odpowiedź</string>
+    <string name="quarantine_confirm_ok">Usuń</string>
+    <string name="quarantine_cancel">Anuluj</string>
+    <string name="quarantine_cleared">Usunięto: %1$d</string>
+    <string name="quarantine_cleared_failed">Usunięto: %1$d, nie udało się: %2$d</string>
 </resources>

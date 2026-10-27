@@ -1,15 +1,18 @@
 package pl.slava.kopernikadr.camera.spool
 
 /**
- * Frees disk by reclaiming **acked** frames, oldest `ackedAt` first, and only when asked to
- * (capture admission lacks space; no timer). Unacked frames and other clients' frames are never
- * candidates: [Spool.nextReclaimable] only returns acked ones, and a frame is acked by its own
- * client only.
+ * Frees disk by reclaiming **acked** frames, oldest `ackedAt` first: when capture admission lacks
+ * space ([reclaimUntil]) and periodically for frames acked [AGE_MS] ago or earlier ([reclaimAged]).
+ * Unacked frames and other clients' frames are never candidates: [Spool.nextReclaimable] only
+ * returns acked ones, and a frame is acked by its own client only.
  *
  * Per frame: `reclaimedAt` is written and committed first ([Spool.markReclaimed]), then the files
  * are deleted while holding the frame's exclusive lock in [DerivedFiles], so a `play`/`thumb`
  * generation of that frame either finished before (and its output is deleted too) or sees the
  * mark and writes nothing. A crash in between is finished by [Spool.recover].
+ *
+ * Every pass holds one reclaimer-level lock: [Spool.failedDeletes] is shared state, so an age pass
+ * and a low-space pass must not interleave.
  */
 class SpoolReclaimer(
     private val spool: Spool,
@@ -18,15 +21,37 @@ class SpoolReclaimer(
     private val log: (String) -> Unit = {},
     /** Test hook: runs after `reclaimedAt` is committed and before the files are deleted. */
     private val beforeDelete: (frameId: String) -> Unit = {},
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
+    private val passLock = Any()
+
     /**
      * Reclaims acked frames until `freeBytes() >= neededFree` or none is left.
      * @return the number of frames reclaimed.
      */
-    fun reclaimUntil(neededFree: Long): Int {
+    fun reclaimUntil(neededFree: Long): Int = synchronized(passLock) {
+        pass(ackedAtMax = null) { freeBytes() < neededFree }
+    }
+
+    /**
+     * Reclaims every acked frame whose `ackedAt` is at or before now - [AGE_MS] (any client), oldest
+     * first, at most [AGE_PASS_CAP] per call (the caller runs it again): one pass holds the pass lock, so
+     * a huge backlog must not keep capture admission waiting. With a clock earlier than a frame's
+     * `ackedAt` that frame is not reclaimed. The wall clock is trusted: a forward jump makes acked
+     * frames look old (bounded by the cap per pass, and only acked frames are ever candidates).
+     * @return the number of frames reclaimed.
+     */
+    fun reclaimAged(): Int = synchronized(passLock) {
+        val cutoff = now() - AGE_MS
+        val n = pass(ackedAtMax = cutoff, limit = AGE_PASS_CAP) { true }
+        log("age reclaim: $n frame(s) acked at or before $cutoff")
+        n
+    }
+
+    private fun pass(ackedAtMax: Long?, limit: Int = Int.MAX_VALUE, wanted: () -> Boolean): Int {
         var n = 0
-        while (freeBytes() < neededFree) {
-            val next = spool.nextReclaimable() ?: break
+        while (n < limit && wanted()) {
+            val next = spool.nextReclaimable(ackedAtMax) ?: break
             if (!spool.markReclaimed(next.frameId)) continue
             beforeDelete(next.frameId)
             var freed = 0L
@@ -45,5 +70,13 @@ class SpoolReclaimer(
             log("reclaimed ${next.frameId} ($freed B)")
         }
         return n
+    }
+
+    companion object {
+        /** An acked frame is kept this long before the periodic pass may reclaim it. */
+        const val AGE_MS = 7L * 24 * 60 * 60 * 1000
+
+        /** Frames one age pass reclaims at most; the next pass continues. */
+        const val AGE_PASS_CAP = 200
     }
 }

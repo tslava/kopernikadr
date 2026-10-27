@@ -22,4 +22,20 @@
     <string name="status_error_title">Ошибка</string>
     <string name="status_frames">Кадры: %1$d</string>
     <string name="status_battery">Батарея: %1$d%%</string>
+    <string name="parent_title">Для родителя</string>
+    <string name="parent_close">Закрыть</string>
+    <string name="parent_diagnostics">Диагностика</string>
+    <string name="quarantine_title">Карантин</string>
+    <string name="quarantine_empty">Пусто. Здесь ничего нет.</string>
+    <string name="quarantine_summary">Файлов: %1$d, %2$s</string>
+    <string name="quarantine_hint">Снимки, которые приложение не смогло надёжно отнести к фильму. Сами не удаляются.</string>
+    <string name="quarantine_clear">Очистить</string>
+    <string name="quarantine_confirm_title">Удалить навсегда?</string>
+    <string name="quarantine_confirm_text">Это фото (%1$d), которые так и не были доставлены на планшет, и они могут быть единственной копией. Отменить нельзя.</string>
+    <string name="quarantine_confirm_question">Сколько будет %1$d × %2$d?</string>
+    <string name="quarantine_confirm_label">Ответ</string>
+    <string name="quarantine_confirm_ok">Удалить</string>
+    <string name="quarantine_cancel">Отмена</string>
+    <string name="quarantine_cleared">Удалено: %1$d</string>
+    <string name="quarantine_cleared_failed">Удалено: %1$d, не удалось: %2$d</string>
 </resources>

@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FrameEntry, Project } from '../projects/model';
 import type { FrameSource } from '../play/frameSource';
+import type { PinnedSprites } from '../render/sprites';
 import { createStore } from '../state/store';
 import type { CreateEncoder, ExportImage, ExportWriter } from './mediabunnyExport';
 import {
   canCancel,
   createExportController,
+  type ComposeCanvas,
   exportDisplayName,
   exportGate,
   sanitizeName,
@@ -114,12 +116,14 @@ interface Rig {
   loaded: string[];
   images: { closed: number }[];
   states: ExportState[];
+  adds: string[][];
+  canvases: { draws: string[]; closed?: number }[];
   setProject(p: Project | null): void;
 }
 
 function rig(
   initial: Project,
-  o: { hold?: Hold[]; pickNone?: boolean; failLoad?: string; failPublish?: Error; failPause?: Error; failResume?: Error } = {},
+  o: { hold?: Hold[]; sprites?: Pick<import('../render/sprites').SpriteCache, 'preload'>; pickNone?: boolean; failLoad?: string; failPublish?: Error; failPause?: Error; failResume?: Error } = {},
 ): Rig {
   const log: string[] = [];
   let current: Project | null = initial;
@@ -130,12 +134,17 @@ function rig(
   for (const h of o.hold ?? []) holds[h] = deferred();
   const loaded: string[] = [];
   const images: { closed: number }[] = [];
+  const adds: string[][] = [];
 
   const frameSource: FrameSource = {
     async load(projectId, frameId) {
       loaded.push(`${projectId}/${frameId}`);
       if (frameId === o.failLoad) throw new Error('boom');
       const img = {
+        frame: frameId,
+        tag: frameId,
+        width: 1440,
+        height: 1080,
         closed: 0,
         close() {
           this.closed++;
@@ -163,8 +172,40 @@ function rig(
       log.push('abort');
     },
   };
+  // a recording canvas: a snapshot is the list of draw calls since the last clear (one frame)
+  const canvases: { draws: string[] }[] = [];
+  const createCanvas = (): ComposeCanvas => {
+    let draws: string[] = [];
+    const ctx = {
+      canvas: { width: 1440, height: 1080 },
+      fillStyle: '',
+      fillRect() {},
+      drawImage(img: { tag?: string }, _x: number, _y: number, w: number) {
+        draws.push(`${img.tag ?? 'img'}@${w}`);
+      },
+      save() {},
+      restore() {},
+      translate() {},
+      rotate() {},
+    };
+    // a frame draw starts a new composition (drawFrame is the first pass)
+    const drawImage = ctx.drawImage.bind(ctx);
+    ctx.drawImage = (img, x, y, w) => {
+      if ((img as { frame?: string }).frame !== undefined) draws = [];
+      drawImage(img, x, y, w);
+    };
+    return {
+      ctx: ctx as unknown as ComposeCanvas['ctx'],
+      snapshot: () => {
+        const snap = { closed: 0, draws: [...draws], close() { this.closed++; } };
+        canvases.push(snap);
+        return snap as unknown as ExportImage;
+      },
+    };
+  };
   const createEncoder: CreateEncoder = async () => ({
-    async add(_img: ExportImage) {
+    async add(img: ExportImage) {
+      adds.push((img as unknown as { draws: string[] }).draws);
       log.push('add');
       await holds.add?.promise;
     },
@@ -196,11 +237,13 @@ function rig(
     now: () => new Date(2026, 9, 27),
     isConfigSupported: async () => ({ supported: !o.pickNone }) as VideoEncoderSupport,
     createEncoder,
+    createCanvas,
+    sprites: o.sprites,
   };
   const ctl = createExportController(deps);
   const states: ExportState[] = [];
   ctl.state.subscribe(() => states.push(ctl.state.get()));
-  return { log, deps, ctl, exportingLog, holds, loaded, images, states, setProject: (p) => (current = p) };
+  return { log, deps, ctl, exportingLog, holds, loaded, images, states, adds, canvases, setProject: (p) => (current = p) };
 }
 
 const three = () => project([frame(2), frame(1), frame(3)]);
@@ -464,5 +507,188 @@ describe('export controller: cancel by state', () => {
       { phase: 'failed', reason: 'unknown', detail: '' },
     ];
     expect(states.filter(canCancel).map((s) => s.phase)).toEqual(['encoding']);
+  });
+});
+
+// --- the timeline: holds, off, duplicates, stickers ------------------------------------------
+
+const entry = (frameId: string, over: Partial<{ id: string; hold: number; off: true }> = {}) => ({
+  id: frameId,
+  frameId,
+  hold: 1,
+  ...over,
+});
+const sticker = (id: string, emoji: string, on: string[]) => ({ id, emoji, x: 0.5, y: 0.5, size: 0.25, rot: 0, on });
+
+/** Sprite seam: records the preload and hands out tagged fake bitmaps. */
+function fakeSprites(o: { fail?: boolean; unknown?: boolean } = {}) {
+  const calls: { hexcodes: string[]; bucket: number }[] = [];
+  const released = { n: 0 };
+  const sprites = {
+    async preload(hexcodes: readonly string[], bucket: number): Promise<PinnedSprites> {
+      calls.push({ hexcodes: [...hexcodes], bucket });
+      if (o.fail) throw new Error('sprites failed to load: 1F436');
+      return {
+        get: (h) => (o.unknown ? undefined : ({ tag: `s-${h}` } as unknown as ImageBitmap)),
+        release: () => void released.n++,
+      };
+    },
+  };
+  return { sprites, calls, released };
+}
+
+describe('exportGate on the timeline', () => {
+  it('off frames do not block and do not count', () => {
+    const p = project([frame(1), frame(2, { state: 'pending' }), frame(3)], {
+      cut: [entry('f1'), entry('f2', { off: true }), entry('f3')],
+    });
+    expect(exportGate(p)).toEqual({ kind: 'ready', frames: 2, skipped: 0 });
+  });
+  it('an off unavailable frame needs no confirmation', () => {
+    const p = project([frame(1), frame(2, { state: 'pending', unavailable })], { cut: [entry('f1'), entry('f2', { off: true })] });
+    expect(exportGate(p)).toEqual({ kind: 'ready', frames: 1, skipped: 0 });
+  });
+  it('a frame with both an on and an off entry still blocks while downloading', () => {
+    const p = project([frame(1), frame(2, { state: 'pending' })], {
+      cut: [entry('f1'), entry('f2', { id: 'a', off: true }), entry('f2', { id: 'b' })],
+    });
+    expect(exportGate(p)).toEqual({ kind: 'waiting', downloading: 1 });
+  });
+  it('frames = entries on the timeline (duplicates count)', () => {
+    const p = project([frame(1)], { cut: [entry('f1'), entry('f1', { id: 'c' })] });
+    expect(exportGate(p)).toEqual({ kind: 'ready', frames: 2, skipped: 0 });
+  });
+  it('everything off: empty', () => {
+    expect(exportGate(project([frame(1)], { cut: [entry('f1', { off: true })] })).kind).toBe('empty');
+  });
+});
+
+describe('export controller: the timeline', () => {
+  it('exports in timeline order with the entries of a duplicate, off entries left out', async () => {
+    const p = project([frame(1), frame(2), frame(3)], {
+      cut: [entry('f3'), entry('f1'), entry('f2', { off: true }), entry('f3', { id: 'dup' })],
+    });
+    const r = rig(p);
+    await r.ctl.start();
+    expect(r.adds.map((d) => d[0])).toEqual(['f3@1440', 'f1@1440', 'f3@1440']);
+    expect(r.ctl.state.get()).toMatchObject({ phase: 'done', frames: 3 });
+  });
+
+  it('a frame not in the cut goes to the end', async () => {
+    const r = rig(project([frame(1), frame(2)], { cut: [entry('f2')] }));
+    await r.ctl.start();
+    expect(r.adds.map((d) => d[0])).toEqual(['f2@1440', 'f1@1440']);
+  });
+
+  it('a consecutive duplicate decodes once, the decoded frames are all closed', async () => {
+    const p = project([frame(1), frame(2)], { cut: [entry('f1'), entry('f1', { id: 'd1' }), entry('f1', { id: 'd2' }), entry('f2')] });
+    const r = rig(p);
+    await r.ctl.start();
+    expect(r.loaded).toEqual(['p1/f1', 'p1/f2']);
+    expect(r.images.every((i) => i.closed === 1)).toBe(true);
+    expect(r.canvases.every((c) => c.closed === 1)).toBe(true); // every snapshot closed by the export
+  });
+
+  it('holds become durations: hold/fps with cumulative timestamps', async () => {
+    const stamps: { timestamp: number; duration: number }[] = [];
+    const base = rig(project([frame(1), frame(2), frame(3)], { cut: [entry('f1'), entry('f2', { hold: 4 }), entry('f3', { hold: 2 })] }));
+    const ctl = createExportController({
+      ...base.deps,
+      createEncoder: async () => ({
+        async add(_i, timestamp, duration) {
+          stamps.push({ timestamp, duration });
+        },
+        async finalize() {},
+        async cancel() {},
+      }),
+    });
+    await ctl.start();
+    expect(ctl.state.get()).toMatchObject({ phase: 'done', frames: 3 });
+    expect(stamps).toEqual([
+      { timestamp: 0, duration: 1 / 8 },
+      { timestamp: 1 / 8, duration: 4 / 8 },
+      { timestamp: 5 / 8, duration: 2 / 8 },
+    ]);
+  });
+
+  it('an empty timeline (all off) does not start: the existing empty gate', async () => {
+    const r = rig(project([frame(1)], { cut: [entry('f1', { off: true })] }));
+    expect(await r.ctl.start()).toEqual({ started: false, reason: 'empty' });
+    expect(r.log).toEqual([]);
+  });
+});
+
+describe('export controller: stickers', () => {
+  const stickered = () =>
+    project([frame(1), frame(2), frame(3)], {
+      cut: [entry('f1'), entry('f2'), entry('f3')],
+      stickers: [sticker('s1', '1F436', ['f2', 'f3']), sticker('s2', '1F431', ['f3'])],
+    });
+
+  it('stickers are composed over the frame, per entry, in array order, as separate snapshots', async () => {
+    const sp = fakeSprites();
+    const r = rig(stickered(), { sprites: sp.sprites });
+    await r.ctl.start();
+    // sticker side = size * width = 360
+    expect(r.adds).toEqual([['f1@1440'], ['f2@1440', 's-1F436@360'], ['f3@1440', 's-1F436@360', 's-1F431@360']]);
+    expect(new Set(r.canvases).size).toBe(3); // three snapshots, none shared
+  });
+
+  it('preloads exactly the sprites used by exported entries at the 1024 bucket, before the first frame, and releases them', async () => {
+    const sp = fakeSprites();
+    const p = stickered();
+    p.cut = [entry('f1'), entry('f2'), entry('f3', { off: true })]; // s2 only on the off entry
+    const r = rig(p, { sprites: sp.sprites });
+    await r.ctl.start();
+    expect(sp.calls).toEqual([{ hexcodes: ['1F436'], bucket: 1024 }]);
+    expect(sp.released.n).toBe(1);
+  });
+
+  it('a sprite that was not loaded before is in frame 1 (preload runs before encoding)', async () => {
+    const sp = fakeSprites();
+    const p = project([frame(1)], { cut: [entry('f1')], stickers: [sticker('s1', '1F436', ['f1'])] });
+    const r = rig(p, { sprites: sp.sprites });
+    await r.ctl.start();
+    expect(r.adds[0]).toEqual(['f1@1440', 's-1F436@360']);
+  });
+
+  it('a failing sprite fails the export with the sprite reason, before anything is written', async () => {
+    const sp = fakeSprites({ fail: true });
+    const r = rig(stickered(), { sprites: sp.sprites });
+    await r.ctl.start();
+    expect(r.ctl.state.get()).toMatchObject({ phase: 'failed', reason: 'sprite' });
+    expect((r.ctl.state.get() as { detail: string }).detail).toContain('1F436');
+    expect(r.log).not.toContain('open');
+    expect(r.log).toContain('resume');
+    expect(r.exportingLog).toEqual([true, false]);
+  });
+
+  it('pinned sprites are released on failure and on cancel too', async () => {
+    const sp = fakeSprites();
+    const failed = rig(stickered(), { sprites: sp.sprites, failLoad: 'f2' });
+    await failed.ctl.start();
+    expect(failed.ctl.state.get()).toMatchObject({ phase: 'failed', reason: 'frame' });
+    expect(sp.released.n).toBe(1);
+    const sp2 = fakeSprites();
+    const cancelled = rig(stickered(), { sprites: sp2.sprites, hold: ['add'] });
+    const run = cancelled.ctl.start();
+    await tick();
+    cancelled.ctl.cancel();
+    await run;
+    expect(cancelled.ctl.state.get().phase).toBe('cancelled');
+    expect(sp2.released.n).toBe(1);
+  });
+
+  it('no stickers on the movie: no preload', async () => {
+    const sp = fakeSprites();
+    const r = rig(three(), { sprites: sp.sprites });
+    await r.ctl.start();
+    expect(sp.calls).toEqual([]);
+  });
+
+  it('a sprite missing from the pinned set is skipped, not fatal', async () => {
+    const r = rig(stickered(), { sprites: fakeSprites({ unknown: true }).sprites });
+    await r.ctl.start();
+    expect(r.adds[1]).toEqual(['f2@1440']);
   });
 });

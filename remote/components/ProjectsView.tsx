@@ -13,6 +13,7 @@ import { useStore } from '@/lib/state/useStore';
 import ConnectionBadge from './ConnectionBadge';
 import Icon from './Icon';
 import LongPressButton from './LongPressButton';
+import UndoToast from './UndoToast';
 
 export type FrameUrl = (projectId: string, frameId: string, kind: 'thumb' | 'play' | 'full') => string | null | undefined;
 
@@ -143,7 +144,7 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
           onDelete={() => { run(deletion.requestDelete(confirmDelete.id)); setConfirmDelete(null); }}
         />
       )}
-      <UndoToast t={t} app={app} deletion={deletion} />
+      <ProjectUndo t={t} app={app} deletion={deletion} />
     </>
   );
 }
@@ -179,27 +180,12 @@ function DeleteDialog({ t, name, onDelete, onCancel }: { t: Translate; name: str
   );
 }
 
-/** The latest project in its Undo window, with a countdown driven by the persisted deadline. */
-function UndoToast({ t, app, deletion }: { t: Translate; app: AppContext; deletion: ProjectDeletion }) {
+/** The latest project in its Undo window (the shared toast counts down to the persisted deadline). */
+function ProjectUndo({ t, app, deletion }: { t: Translate; app: AppContext; deletion: ProjectDeletion }) {
   const pending = useStore(app.store.state, (s) => s.index.pendingProjectDeletes);
   const names = useStore(app.store.state, (s) => s.index.projects);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (pending.length === 0) return;
-    setNow(Date.now());
-    const h = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(h);
-  }, [pending]);
-  // past its deadline the window is over (Undo would be refused): no toast
-  const live = pending.filter((p) => Date.parse(p.deadline) > now);
-  const last = live[live.length - 1];
+  const last = pending[pending.length - 1];
   if (!last) return null;
-  const secs = Math.max(0, Math.ceil((Date.parse(last.deadline) - now) / 1000));
   const name = names.find((p) => p.id === last.id)?.name ?? '';
-  return (
-    <div className="undo-toast" role="status">
-      <span>{t('projects.deleted', { name })}</span>
-      <button type="button" className="primary" onClick={() => void deletion.undo(last.id)}>{t('projects.undo', { s: secs })}</button>
-    </div>
-  );
+  return <UndoToast t={t} message={t('projects.deleted', { name })} deadline={last.deadline} label="projects.undo" onUndo={() => void deletion.undo(last.id)} />;
 }

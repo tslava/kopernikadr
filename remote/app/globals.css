@@ -44,6 +44,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .probes li.running .status { color: var(--accent); }
 .probes li.pass .status { color: var(--pass); }
 .probes li.fail .status, p.fail { color: var(--fail); }
+.parent-sec { border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+.parent-sec h2 { margin: 0 0 8px; font-size: 24px; }
+.parent-sec p { margin: 6px 0; }
+.q-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.q-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.q-thumb { width: 120px; height: 90px; object-fit: cover; background: var(--bg); border-radius: 8px; }
 .diagnostics details summary { color: var(--muted); cursor: pointer; }
 .diagnostics pre {
   font-size: 13px; line-height: 1.35; margin: 8px 0 0; padding: 12px; max-height: 360px; overflow: auto;
@@ -119,14 +125,55 @@ button { min-height: 64px; }
 .manual input { min-height: 64px; font-size: 24px; padding: 0 16px; }
 .manual .error { flex-basis: 100%; margin: 0; color: #c93c3c; font-size: 22px; }
 
-.play-canvas { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 16px; }
+.play-stage { position: relative; width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; }
+.play-stage > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.play-stickers { pointer-events: none; }
+.sticker-layer { position: absolute; inset: 0; touch-action: none; user-select: none; -webkit-user-select: none; }
+.sticker-outline { position: absolute; border: 3px dashed #5b8def; border-radius: 6px; pointer-events: none; box-sizing: border-box; }
+.sticker-handle { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: #5b8def; border: 4px solid #fff; box-sizing: border-box; touch-action: none; }
 .play-controls { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
-/* Landscape tablet: the movie takes the full height on the left, the buttons sit on the right (like capture). */
-.play { display: grid; height: 100dvh; overflow: hidden; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px 32px; }
+/* Landscape tablet: the stage on the left, the buttons on the right, the frame strip along the bottom. */
+.play { display: grid; height: 100dvh; overflow: hidden; padding: 16px 32px; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px 32px; }
 .play > .bar { grid-column: 1 / -1; }
-.play > .play-canvas { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; max-height: none; justify-self: center; }
-.play > .play-controls { grid-column: 2; grid-row: 2; flex-direction: column; justify-content: center; align-items: center; margin: 0; }
-.play > .note { grid-column: 2; grid-row: 3; max-width: 260px; }
+.play > .play-stage { grid-column: 1; grid-row: 2; width: auto; height: 100%; max-width: 100%; max-height: none; justify-self: center; }
+.play > .play-side { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; gap: 10px; min-height: 0; width: 312px; }
+.play-side > .play-controls { display: grid; grid-template-columns: repeat(4, 72px); gap: 8px; margin: 0; }
+.play-side > .play-controls .speed { grid-column: 1 / -1; }
+.play-side > .play-controls .speed input { width: 100%; }
+.play-side > .edit-tools { display: grid; grid-template-columns: repeat(4, 72px); gap: 8px; }
+.tool-btn { min-height: 72px; min-width: 72px; padding: 6px 0 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 16px; font-size: 15px; line-height: 1.1; }
+.tool-btn .ic { width: 32px; height: 32px; }
+.sticker-tools .tool-btn:not(.danger) { border-color: #5b8def; }
+.sticker-chip { width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; border: 2px solid #5b8def; border-radius: 16px; background: var(--panel); }
+.sticker-chip img { width: 56px; height: 56px; }
+.picker { min-width: 0; width: 640px; max-height: 680px; gap: 12px; }
+.picker-head { display: flex; align-items: center; justify-content: space-between; }
+.picker-head h2 { margin: 0; font-size: 26px; }
+.picker-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.picker-tabs button { min-height: 56px; padding: 0 16px; font-size: 20px; }
+.picker-tabs button.sel { background: var(--accent); color: #000; }
+.picker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; overflow-y: auto; min-height: 0; }
+.picker-item { min-height: 88px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 16px; }
+.picker-item img { width: 72px; height: 72px; pointer-events: none; }
+.tool-btn.danger { background: var(--panel); border-color: var(--fail); color: var(--fail); font-weight: 400; }
+.play .undo-toast { left: auto; right: 32px; bottom: 120px; transform: none; flex-direction: column; align-items: stretch; gap: 12px; width: 344px; padding: 16px; text-align: center; }
+.play .undo-toast button { min-height: 72px; }
+.play-side > .note { margin: 0; font-size: 18px; }
+.play > .strip { grid-column: 1 / -1; grid-row: 3; }
+/* the big view: the same stage, full screen, until tapped */
+.play-stage.big { position: fixed; inset: 0; z-index: 40; width: 100vw; height: 100dvh; max-width: none; aspect-ratio: auto; border-radius: 0; background: #000; }
+.play-stage.big > canvas { inset: auto; top: 50%; left: 50%; width: min(100vw, calc(100dvh * 4 / 3)); height: auto; aspect-ratio: 4 / 3; transform: translate(-50%, -50%); }
+.strip { overflow-x: auto; overflow-y: hidden; padding: 6px 0 10px; -webkit-overflow-scrolling: touch; }
+.strip-track { list-style: none; margin: 0; padding: 0; position: relative; height: 90px; }
+.strip-track > li { position: absolute; top: 0; }
+.strip-tile { position: relative; width: 112px; height: 84px; min-height: 0; padding: 0; overflow: hidden; border-radius: 10px; background: var(--panel); border: 3px solid transparent; }
+.strip-tile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.strip-tile.selected { border-color: var(--accent); }
+.strip-tile.off img { filter: grayscale(1); opacity: 0.4; }
+.strip-tile.deleting img { opacity: 0.3; }
+.strip-hold { position: absolute; top: 4px; right: 4px; padding: 0 6px; border-radius: 8px; background: rgba(0, 0, 0, 0.7); color: var(--accent); font-size: 18px; line-height: 26px; }
+.strip-flag { position: absolute; inset: auto 0 0 0; padding: 2px 4px; background: rgba(0, 0, 0, 0.7); color: var(--text); font-size: 15px; text-align: center; }
+.strip-mark { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: #5b8def; }
 
 /* Projects list */
 .card.movie { padding: 0; overflow: hidden; position: relative; align-items: stretch; justify-content: flex-start; text-align: left; }

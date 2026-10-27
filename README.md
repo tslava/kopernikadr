@@ -5,10 +5,11 @@ a tablet or laptop is the remote: live preview, onion skin, frame strip, playbac
 export. No app store: everything is installed with `adb` or as an APK.
 
 Status (2026-10-27): the phone camera app works, and the native tablet app (`remote/`) is built:
-projects, shooting with onion skin, playback and export to the gallery (stages 1+2). It is
-tested on an emulator against a fake camera; the session on the real tablet and phone is still
-to do. The browser remote on the phone, **remote-lite**, still works and is the fallback. Next:
-stage 3 (frame strip and editing), then effects ([roadmap](docs/ROADMAP.md)).
+projects, shooting with onion skin, playback, the frame strip, editing, emoji stickers and export
+to the gallery (stages 1+2 and 3a). It is tested on an emulator against a fake camera; the session
+on the real tablet and phone is still to do. The browser remote on the phone, **remote-lite**,
+still works and is the fallback. Next: stage 3b (insert, reshoot, copy/paste, reverse), then more
+effects ([roadmap](docs/ROADMAP.md)).
 
 Docs: [requirements](docs/PROMPT.md) · [architecture](docs/ARCHITECTURE.md) ·
 [protocol](protocol/PROTOCOL.md) · [roadmap](docs/ROADMAP.md) · [plans](docs/plans/) ·
@@ -165,6 +166,19 @@ For the parent. The kid's remote is the **Kopernikadr** app on the tablet.
      frame count. The "new movie" card starts a movie. Tap a card to shoot or to watch.
    - **Capture:** live preview, the faint previous frame over it (onion skin), the big shutter
      button and the frame counter. "Play" opens playback, the back arrow returns to the movies.
+   - **Play and edit:** the movie screen shows the movie, the buttons on the right and the frame
+     strip at the bottom. Tap a frame to select it (tap again for a big view). The tools:
+     **Usuń** (delete a frame; Undo for 5 seconds), **Powiel** (copy), **Dłużej / Krócej** (show it
+     1 to 8 ticks), **Wcześniej / Później** (move), **Wyłącz / Włącz** (keep the frame but leave it
+     out of the movie), **Od tego / Do tego** (trim: leave out everything before / after), and
+     **Cofnij** (undo the last edit, up to 30). Nothing here changes the photos: edits only change
+     what plays, and turned-off frames are kept. A frame shot later goes to the end.
+   - **Emoji:** select a frame and tap **+ Emoji**, pick one of 242 emoji (tabs by category). It
+     appears on that frame and on every frame after it up to the end of the movie (frames shot
+     later do not get it). Drag it to move it, drag the corner handle to resize and rotate it, tap
+     the trash button to remove it. With the emoji selected, tap another frame and use **Od tego
+     kadru / Do tego kadru** to shorten or extend the range. The emoji are drawn in playback and
+     in the video.
    - **Play:** the movie plays at its frame rate. The export button saves a video.
    - **Export:** the video is encoded on the tablet and saved to the gallery, in
      **`Movies/Kopernikadr`**, as `kopernikadr-<name>-<date>.mp4`. The dialog says "Zapisano w
@@ -174,7 +188,10 @@ For the parent. The kid's remote is the **Kopernikadr** app on the tablet.
    the exposure, white balance and focus locks (set the light first, then lock), exposure
    compensation, the camera rotation (0/180, only for a movie with no frames yet), preview
    quality, frames per second, the grid, and the transfer queue, storage and frames that could
-   not be downloaded. The Diagnostics screen (`#/diagnostics`) is for probes.
+   not be downloaded. The Diagnostics screen (`#/diagnostics`) is for probes. It is opened by a
+   long-press on the wrench on the movies screen, and it also has the **quarantine** section
+   (photos that failed the check after download; see below) and "O aplikacji" with the OpenMoji
+   attribution (CC BY-SA 4.0).
 5. Each frame goes to the tablet right after it is shot, and only then does the phone's copy
    become removable. The phone deletes a frame it already handed over only when it runs low on
    space.
@@ -260,8 +277,8 @@ command needs the `/diag` routes, which the camera app doesn't have yet.
 
 ### Diagnostics
 
-- Phone (debug/probe builds): hold the title on the phone's status screen for 2 s to open the
-  diagnostics screen (the `caps` probe). Reports go to the app's external files dir, `diag/`,
+- Phone (debug/probe builds): hold the title on the phone's status screen for 3 s to open the
+  parent screen, and tap "Diagnostyka" there for the diagnostics screen (the `caps` probe). Reports go to the app's external files dir, `diag/`,
   readable with `adb pull` on the probe build too.
 - `scripts/collect-diagnostics.sh [--serial S]` pulls the reports (read-only) from every known
   device into `diagnostics/<YYYY-MM-DD>/<kind>-<model>-<serial>/<package>/` (git-ignored): the
@@ -324,14 +341,28 @@ devices. Never try to bypass supervision.
 
 ## Known limitations (today)
 
-- The phone reclaims frames the tablet app already acknowledged only when it runs low on space
-  (there is no 7-day timer yet, stage 3). Frames shot with remote-lite are never acknowledged
-  and never deleted: that spool grows.
+- The phone deletes the files of a frame the tablet app already acknowledged 7 days after the
+  acknowledgement (checked hourly), or earlier when it runs low on space. **The first launch
+  after upgrading the camera app deletes, in one go, every frame acknowledged more than 7 days
+  ago, including ones acknowledged by an earlier install. Back up the phone's spool before
+  that install.** Frames shot with remote-lite are never acknowledged and never deleted: that
+  spool grows.
 - remote-lite's projects live in the browser that created them (its local storage). Another
   browser or device sees an empty list; clearing site data deletes them.
-- The tablet app has no frame strip or frame editing yet (stage 3).
-- The `quarantine/` folders (phone and tablet app) are never cleaned up automatically.
-- The phone does not dim its screen yet.
+- The tablet app cannot yet insert a frame in the middle, reshoot frame N, copy and paste frames
+  or reverse a range (stage 3b). Stickers do not move by themselves yet.
+- **Where quarantine is cleared.** The `quarantine/` folders hold files that could not be
+  accounted for. A file there may be the only copy of a photo, so nothing deletes them
+  automatically. On the **tablet**: long-press the wrench on the movies screen, then
+  "Kwarantanna zdjęć" shows the count, the size and up to 12 thumbnails; "Wyczyść" asks for the
+  answer to a small multiplication. On the **phone**: hold the title on the status screen for 3
+  seconds to open the parent screen, which has the same card. Clearing is permanent.
+- Edits and stickers are stored only by the tablet app. If you install an older tablet app over
+  a newer one, its first save drops them (the photos stay and the movie goes back to shoot order);
+  install the newer app again before editing.
+- The phone dims its screen after 2 minutes without a touch or a command from the tablet (the
+  preview alone does not count). It never dims while the waiting card with the QR code is
+  shown, and any touch or capture wakes it.
 - One controller at a time; a second remote takes over and pauses the first ("Przejmij").
 - remote-lite has no discovery: use the QR or type the address. The tablet app finds the phone
   by NSD; there is no QR deep link.

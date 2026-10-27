@@ -144,6 +144,44 @@ describe('load', () => {
     await expect(again.store.updateProject(p.id, (x) => x)).rejects.toThrow(/unknown project/);
   });
 
+  it('a malformed cut/stickers field: the original is kept as .corrupt-<ts> before the next write, once', async () => {
+    const { fs, store } = await loaded();
+    const p = await store.createProject('Film');
+    const original = JSON.stringify({ ...p, cut: 'broken', stickers: [{ id: 's' }] });
+    fs.files.set(projectJsonPath(p.id), original);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const again = await loaded(fs, { now: () => 1_700_000_000_123 });
+    const s = again.store.state.get();
+    expect(s.projects[p.id]).toBeDefined();
+    expect(s.projects[p.id]!.cut).toBeUndefined();
+    expect(s.warnings).toEqual([expect.objectContaining({ kind: 'project_edits_dropped', id: p.id })]);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+    // loading alone writes nothing: the file is still the original
+    const copy = `${projectJsonPath(p.id)}.corrupt-1700000000123`;
+    expect(fs.files.get(projectJsonPath(p.id))).toBe(original);
+    expect(fs.files.has(copy)).toBe(false);
+    // the first write keeps the copy, THEN overwrites
+    await again.store.updateProject(p.id, (x) => ({ ...x, name: 'Nowy' }));
+    expect(fs.files.get(copy)).toBe(original);
+    expect(fs.json(projectJsonPath(p.id))).toMatchObject({ name: 'Nowy' });
+    const writes = fs.log.filter((l) => l.includes('project.json'));
+    expect(writes.findIndex((l) => l.includes('.corrupt-'))).toBeLessThan(writes.length - 1);
+    // only once: a later write does not copy the already rewritten file
+    await again.store.updateProject(p.id, (x) => ({ ...x, name: 'Trzeci' }));
+    expect([...fs.files.keys()].filter((k) => k.includes('.corrupt-'))).toEqual([copy]);
+  });
+
+  it('a project with valid edit fields gets no copy and no warning', async () => {
+    const { fs, store } = await loaded();
+    const p = await store.createProject('Film');
+    await store.updateProject(p.id, (x) => ({ ...x, cut: [{ id: 'a', frameId: 'a', hold: 2 }] }));
+    const again = await loaded(fs);
+    expect(again.store.state.get().warnings).toEqual([]);
+    await again.store.updateProject(p.id, (x) => ({ ...x, name: 'Nowy' }));
+    expect([...fs.files.keys()].filter((k) => k.includes('.corrupt-'))).toEqual([]);
+  });
+
   it('missing project.json of an indexed project: project_missing warning (Task 7 repairs)', async () => {
     const { fs, store } = await loaded();
     const p = await store.createProject('Film');
