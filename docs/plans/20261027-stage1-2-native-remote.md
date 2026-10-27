@@ -1,5 +1,8 @@
 # Stages 1+2: native tablet remote — shooting, projects, playback + export
 
+Rev 2 (2026-10-27): revised after the plan review (all critical and important findings accepted;
+the 7-day reclaim timer and the phone dim policy deferred to stage 3).
+
 ## Overview
 - The native tablet app (`remote/`, Next.js static export + Capacitor 8) becomes the kid's remote
   and **replaces remote-lite**. After this plan she can, in one app:
@@ -8,57 +11,63 @@
   - shoot with live preview and onion skin;
   - watch the movie;
   - export it to the tablet gallery.
-- Merges ARCHITECTURE §8 stages **1** (shooting) and **2** (verified transfer, projects, retention).
-  It also takes the **minimal playback + export** from stage 3, using the Mediabunny module
-  proven in 0b. Owner decision, 2026-10-27.
+- Merges ARCHITECTURE §8 stages **1** (shooting) and **2** (verified transfer, projects,
+  retention). It also takes the **minimal playback + export** from stage 3, using the Mediabunny
+  module proven in 0b. Owner decision, 2026-10-27.
 - The frame strip, frame delete/Undo and the editing features (ROADMAP "Editing") stay in stage 3.
   Effects (OpenMoji, comics) and cloud AI come after.
 - **Not in scope**:
   - importing movies shot with remote-lite: owner decision, they stay on the phone and remain
     reachable through remote-lite;
   - the QR deep link (NSD works on the tablet, and manual entry stays);
-  - new camera features.
+  - new camera features;
+  - deferred to stage 3: the 7-day reclaim timer and the phone dim policy (`ScreenPolicy`).
 - remote-lite keeps working unchanged as a fallback until the owner retires it.
 
 ## Context (from discovery)
 - **Specs:**
-  - `docs/ARCHITECTURE.md`: §4.5–4.6 (capture path, recovery, retention), §5.1–5.8 (shell,
-    CameraClient, preview, project model, ProjectStore, capture/transfer/ack, playback/export,
-    deletion/Undo/recovery), §8 rows 1–3.
-  - `protocol/PROTOCOL.md`: v1, frozen in 0b Task 15.
+  - `docs/ARCHITECTURE.md`: §4.5–4.6, §5.1–5.8, §7, §8 rows 1–3;
+  - `protocol/PROTOCOL.md`: v1, frozen 2026-10-27. Its "Today" notes describe the current camera
+    and are updated when this plan changes camera behaviour;
   - `docs/diagnostics/20261027-tablet.md`: the measured tablet facts.
 - **Already built:**
   - camera app (`camera-android/`): durable spool with operation rows, admission under a mutex,
     `getOperation`, `listFrames`/`ack`/`getStatus`, derived `play`/`thumb` caches, sessions/BUSY,
     NSD advertiser, permission screen, keep-screen-on;
-  - remote-core: `CameraConnection` (hello/session/ping/backoff/close codes), `PreviewLoop` (pull
-    loop), protocol helpers, `nsd.js`;
-  - remote (`remote/`): `KopernikadrNative` (`writeTextAtomic`, `installFile`, `freeBytes`, video
-    writer + gallery publish, startup sweep), `KopernikadrNsd` + `lib/discovery.ts`,
-    `lib/export/*` (codec ladder, Mediabunny export, native writer, `runExportBenchmark`),
-    `lib/probes/*`, Diagnostics screen, i18n (pl/ru).
-- **remote-lite** (`camera-android/core/src/main/resources/remote-lite/lib/`): reference for
-  `captures.js` (outstanding captures), `store.js`, `frame-loader.js`, `video.js`,
-  `export-core.js`, and for the kid-facing UX that works today.
+  - remote-core:
+    - `CameraConnection`: hello/session/ping, the token-based single reconnect loop, backoff,
+      BUSY `retryAfterMs`, `closeAction`, `reconnectNow()`;
+    - `PreviewLoop`, protocol helpers incl. `isLockFailed`, `nsd.js`;
+  - remote (`remote/`):
+    - `KopernikadrNative`: `writeTextAtomic`, `installFile` (verifies size + sha256 natively),
+      `freeBytes`, video writer + gallery publish, startup sweep;
+    - `KopernikadrNsd` + `lib/discovery.ts`;
+    - `lib/export/*`: codec ladder, Mediabunny export, native writer;
+    - `lib/probes/*`, the Diagnostics screen, i18n (pl/ru);
+  - `protocol/tools/probe-client/fake-camera.mjs`: the fake camera. It has `/fake/kick` and
+    `/fake/drop-capture`, but no switches for a `cameraId` change, `STORAGE_LOW` or a 404 `full`.
+- **remote-lite** (`camera-android/core/src/main/resources/remote-lite/`) is the reference for the
+  kid-facing UX that works today: `captures.js`, `store.js`, `frame-loader.js`, `video.js`,
+  `export-core.js`.
+  - remote-lite **never acks** and uses its own `clientId` from localStorage. To the camera, all
+    its movies are unacked frames of another client.
 - **Gaps on the camera side** (confirmed by the PROTOCOL v1 audit, 0b Task 15):
-  - **`Spool.recover()` is not implemented** ("No recovery in 0a"). After a crash mid-capture
-    the row stays `pending` and `getOperation` answers `pending` forever. The new remote polls
-    outstanding requests, so this must be fixed first (Task 1);
-  - acked frames are never reclaimed: `ack` only sets `ackedAt`, nothing writes `reclaimedAt`;
+  - **`Spool.recover()` is not implemented**: after a crash mid-capture the row stays `pending`
+    and `getOperation` answers `pending` forever;
+  - acked frames are never reclaimed;
   - `orphanCount` and `integrityErrors` in `getStatus` are hardcoded to 0;
   - admission rejections (`GEOMETRY_MISMATCH`, `STORAGE_LOW`, `CAMERA_NOT_READY`,
-    `CAPTURE_IN_PROGRESS`) leave no operation row, so `getOperation` answers `unknown`. A
-    `failed` reqId replays its error, so every new capture press needs a new reqId;
-  - `focusOk: false` also appears briefly while autofocus is still confirming, so the wire can't
-    tell a transient miss from a timed-out lock (PROTOCOL v1 §6);
-  - the 2-minute dim of `ScreenPolicy` is unverified.
-- **Dependencies:** none new expected. Any new one must be a stable release at least 14 days old.
-  The orchestrator serializes every `package-lock.json` change.
+    `CAPTURE_IN_PROGRESS`) leave no operation row (`getOperation` → `unknown`). A `failed` reqId
+    replays its error, so every capture press needs a new reqId;
+  - `focusOk: false` also appears briefly while autofocus is still confirming;
+  - `ScreenPolicy` (the dim after 2 min) is not implemented; deferred.
+- **Dependencies:** none new expected. Any new one must be a stable release at least 14 days old;
+  the orchestrator serializes `package-lock.json` changes.
 
 ## Development Approach
 - **Testing approach: mixed.**
-  - TDD (tests first) for logic: ProjectStore reducers and persistence, CameraClient, the capture
-    flow, transfer/reconcile/ack eligibility, camera-side retention.
+  - TDD (tests first) for logic: spool recovery and reclaim, ProjectStore, CameraClient, the
+    capture flow, transfer/reconcile/ack eligibility.
   - Code first, then tests for UI components.
 - Complete each task fully before moving to the next; small, focused changes.
 - **CRITICAL: every task MUST include new/updated tests** for its code changes, covering success
@@ -68,10 +77,13 @@
 - **Execution rules:**
   - one subagent at a time, model Sonnet, in its own worktree;
   - the orchestrator merges, runs device checks, commits and pushes at checkpoints.
-- **Safety rules (unchanged):**
+- **Safety rules:**
   - never `adb uninstall` or `pm clear` the camera app; upgrade with `install -r` only;
-  - frames are deleted on the phone **only** through `ack` by their own clientId, and only when
-    ack-eligible (§5.6);
+  - frames are removed on the phone **only** through `ack` by their own clientId when
+    ack-eligible (§5.6), and then only under low space (Task 2);
+  - the camera never deletes a `full` file it can't account for: it quarantines it;
+  - **before the first install of a camera build with Task 1 or 2 on the g05**, the orchestrator
+    backs up the kid's spool (Task 21);
   - remote-lite must keep working: run its tests after any remote-core or server change.
 - **Test commands:**
   - `npm test --workspaces` (root);
@@ -82,15 +94,21 @@
   - `scripts/test/run.sh`.
 
 ## Testing Strategy
-- **Unit (vitest):** pure reducers, mutation queue ordering, CameraClient state machine with a fake
-  socket, transfer and reconcile with fake native + fake camera, playback scheduler, export
-  orchestration.
-- **Integration (vitest + `fake-camera.mjs`):** connect → capture → transfer → ack →
-  reconnect → reconcile against the real fake camera over HTTP/WS. It uses an in-memory fake of
-  the native file APIs that behaves like `installFile`/`writeTextAtomic`, including crash points.
-- **Kotlin (`:core`):** retention/reclaim in the spool; admission under low space.
-- **E2E on the emulator** (orchestrator): a CDP-driven script that runs the main flow against the
-  fake camera. Screenshots + report.
+- **Unit (vitest):**
+  - pure reducers and the mutation queue ordering;
+  - CameraClient target selection with fakes;
+  - capture, transfer and reconcile with a fake native layer and a fake camera;
+  - the playback scheduler and the export orchestration.
+- **Integration (vitest + `fake-camera.mjs`):**
+  - connect → capture → transfer → ack → reconnect → reconcile against the real fake camera
+    over HTTP/WS;
+  - an in-memory fake of `installFile`/`writeTextAtomic` with crash points;
+  - fake-camera switches for §7: new `bootId`, a `cameraId` change, `STORAGE_LOW`, a 404 `full`,
+    a dropped capture response, pending forever.
+- **Kotlin (`:core`):** recovery (each §4.6 row, quarantine), reclaim under low space, races with
+  derived-file generation.
+- **E2E on the emulator** (orchestrator): a CDP-driven script for the main flow against the fake
+  camera, with pass/fail checks.
 - **Hardware** (owner, Post-Completion): the §8 row 2 failure list on the tablet + phone.
 
 ## Progress Tracking
@@ -102,28 +120,29 @@
   - `ProjectStore` is the only writer of `index.json` and `project.json`.
   - Every change is a pure function applied inside one async mutation queue and written with
     `writeTextAtomic`.
-  - UI state is derived from the store through `useSyncExternalStore`. This is a small own store,
-    like remote-lite's `store.js`; no zustand. It deviates from §5.1, and Task 18 records it.
-- **CameraClient** wraps remote-core `CameraConnection` and adds:
-  - discovery: NSD, then the remembered camera, then manual `/info`;
-  - the single reconnect loop with connection generations;
-  - app pause/resume;
-  - hooks after every (re)connect: `resolveOutstanding()`, then `Transfer.reconcile()`.
-- **Capture → transfer → ack** follows §5.6 exactly:
-  - outstanding entries are durable before the network send;
-  - frames are downloaded one at a time, `full` verified by size + sha256, then `installFile`;
+  - UI state comes from the store through `useSyncExternalStore` (a small own store, no zustand;
+    a deviation from §5.1 recorded in Task 23).
+- **CameraClient** is a thin layer over remote-core `CameraConnection`, which already owns the
+  one reconnect loop. It adds:
+  - target selection: NSD, the remembered camera, manual `/info`;
+  - `rememberedCamera` in `index.json`;
+  - wrong-camera and `bootId` detection;
+  - hooks after **every** new session: `resolveOutstanding()`, then `reconcile()`.
+- **Capture → transfer → ack** follows §5.6:
+  - the outstanding entry `{reqId, cameraId, sentAt}`, the camera binding and the geometry freeze
+    are written in **one** mutation before the send;
+  - downloads go one at a time into `tmp/`. `installFile` verifies `full` (size + sha256)
+    natively; `play`/`thumb` are best-effort;
   - `state: local` is committed **before** any ack;
   - `reconcile()` covers frames the tablet missed.
-- **Playback** decodes `play` (1440×1080) into a ring buffer of 8 `ImageBitmap`s at the project's
-  fps.
-- **Export** reuses `lib/export/mediabunnyExport.ts` + `nativeWriter.ts`, fed from local
-  **`play`** files. This is the 0b decision (≈3× faster than decoding 8 MP `full`). Transfers
-  pause while it runs; Cancel only in `encoding`.
-- **Camera side:**
-  - small additions only: acked-frame reclaim (7 days / low space, `reclaimedAt` first) and the
-    phone's dim policy;
-  - the protocol stays at v1. If a protocol change turns out to be needed, it is a ⚠️ blocker for
-    the owner, not a silent edit.
+- **Playback** uses a ring buffer of 8 `ImageBitmap`s from local `play`. If `play` is missing it
+  falls back to `full` with `resizeWidth/Height` 1440×1080.
+- **Export** reuses `lib/export/*`:
+  - source `play`, with the same `full` fallback;
+  - transfers pause while it runs, and shooting is blocked;
+  - Cancel only in `encoding`.
+- **Camera side:** recovery, plus reclaim of acked frames under low space only. The protocol wire
+  stays v1; only PROTOCOL.md's "Today" notes change. A wire change is a ⚠️ blocker for the owner.
 
 ## Technical Details
 - **Directories** (`filesDir/kopernikadr/`):
@@ -134,9 +153,10 @@
   - `index.json` = `{version: 1, clientId, rememberedCamera: {cameraId, host, port} | null,
     projects: [{id, name, createdAt}], deletedProjects: [id], pendingProjectDeletes: [{id,
     deadline}]}`;
-  - `project.json` as in §5.4, plus `version: 1`.
-  - Unknown future `version` → read-only + a parent warning. Corrupt JSON → keep the file
-    renamed to `*.corrupt-<ts>`, rebuild from the directory listing (recovery) and warn the parent.
+  - `project.json` as in §5.4, plus `version: 1`. Each frame entry may carry
+    `unavailable: {reason, since}`, a UI/store flag that is never acked.
+  - Unknown future `version` → read-only + a parent warning. Corrupt JSON → keep the file renamed
+    to `*.corrupt-<ts>`, rebuild from the directory listing and warn the parent.
 - **Constants:**
 
   | Constant | Value |
@@ -145,22 +165,32 @@
   | offline after | 5 s without a reply |
   | reconnect backoff | 0.5 → 5 s |
   | preview watchdog | 3 s |
+  | capture send timeout | 10 s → `resolveOutstanding` for that reqId |
   | `resolveOutstanding` poll | 1 s |
+  | `pending` give-up | 30 s continuous, or `pending` after a `bootId` change |
+  | outstanding limit | 1 (the camera answers `CAPTURE_IN_PROGRESS` anyway) |
+  | download retries | 3 per frame with backoff, then `unavailable` (retried by the next reconcile) |
   | Undo window | 5 s |
   | download reserve | 300 MB + the frame's `full` + 1 MB |
   | export reserve | 300 MB (native) |
-  | phone reclaim of acked frames | after 7 days or under low space (spool reserve 500 MB) |
+  | phone reclaim | acked frames only, under low space only (spool reserve 500 MB), oldest `ackedAt` first |
   | fps | default 8, per project, choices 5/8/12 |
 
 - **Ack eligibility:** `state == local` ∨ `frameId ∈ deletedFrameIds` ∨ project ∈
-  `deletedProjects`. Nothing else is ever acked.
+  `deletedProjects`. A project in `pendingProjectDeletes` (inside the Undo window) is **not**
+  eligible. Nothing else is ever acked.
+- **Spool recovery file rule:** only names matching
+  `^[0-9A-Z]{26}\.(full|play|thumb)\.jpg(\.tmp)?$` are touched.
+  - `*.tmp` are deleted.
+  - `play`/`thumb` with no row are deleted.
+  - A `full` with no row is **moved to `spool/quarantine/`**, never deleted.
+  - `spool.db*` and unknown names are never touched.
 - **Startup sequence:**
-  1. the native sweep (`videoCleanupAbandoned`, at plugin load);
+  1. the native export sweep (at plugin load);
   2. ProjectStore load + startup sweep (§5.8);
   3. UI;
   4. connect;
-  5. `resolveOutstanding`;
-  6. `reconcile`.
+  5. on every session: `resolveOutstanding`, then `reconcile`.
 
 ## What Goes Where
 - **Implementation Steps:** code, tests, docs and emulator runs in this repo.
@@ -169,68 +199,85 @@
 
 ## Implementation Steps
 
-Order (one agent at a time): 1 → 2 → 3 → … → 18. Tasks 1–3 (camera) are independent of the
-remote tasks but go first, because Task 9 (capture flow) relies on Task 1.
+Order: 1 → 2 → … → 23, one agent at a time.
+- Tasks 1–3 (camera + fake camera) come first.
+- Task 12 wires the app together early, so every later UI task runs inside the real boot
+  sequence.
+- Tasks 21 and 22 need the owner and hardware.
 
 ### Task 1: Camera: spool recovery at process start (TDD)
 
 **Files:**
-- Modify: `camera-android/core/src/main/kotlin/pl/slava/kopernikadr/camera/spool/{Spool.kt,SpoolFrameStore.kt}`, the process-start wiring in `:app` (before the server opens)
-- Create/Modify: tests in `camera-android/core/src/test/kotlin/.../spool/`
+- Modify: `camera-android/core/src/main/kotlin/pl/slava/kopernikadr/camera/spool/{Spool.kt,SpoolFrameStore.kt}`, the process-start wiring in `:app` (before the server opens), `protocol/PROTOCOL.md` ("Today" notes in §4, §6 `getOperation`/`getStatus`, §9)
+- Create/Modify: tests in `camera-android/core/src/test/kotlin/.../spool/`, a contract fixture for `getOperation` → `failed(INTERRUPTED)`
 
-- [ ] tests first, then `Spool.recover()` per ARCHITECTURE §4.6, run once per process before
-      the server accepts commands:
+- [ ] tests first, then `Spool.recover()` per ARCHITECTURE §4.6, run once per process before the
+      server accepts commands:
   - `pending` + valid `full` (SOI/EOI, decodable) → sha256 → `committed`;
-  - `pending` without a valid file → delete leftovers → `failed(INTERRUPTED)`;
-  - `committed`, unacked, file missing → mark `lost`, counted as `integrityErrors`;
+  - `pending` without a valid file → delete its tmp leftovers → `failed(INTERRUPTED)`;
+  - `committed`, unacked, file missing → `lost`;
   - `reclaimedAt` set but files exist → delete the files;
-  - `*.tmp` and files with no row → delete
-- [ ] `getOperation` for a recovered row answers `done`/`failed(INTERRUPTED)`, never a stale
-      `pending`
-- [ ] `getStatus`: real `integrityErrors` and `orphanCount` (unacked frames of other clientIds)
-      instead of the hardcoded 0
-- [ ] write tests: each table row, a crash between rename and the commit, idempotent double run,
-      other clients' frames untouched
-- [ ] **the kid's existing spool**: recovery only promotes or fails `pending` rows and deletes
-      junk; it never deletes a committed frame's files. Write a test proving that
+  - stray files: the file rule from Technical Details (pattern only, quarantine a `full` with no
+    row, never touch `spool.db*` or unknown names)
+- [ ] the wire for recovered rows, with no new codes:
+  - `getOperation` answers `done` or `failed(INTERRUPTED)`, never a stale `pending`;
+  - a `lost` frame answers `failed` with the existing integrity code (or `INTERNAL`); document
+    the choice in PROTOCOL.md
+- [ ] `getStatus`:
+  - real `integrityErrors` (lost + quarantined);
+  - real `orphanCount`: unacked frames of other clientIds, which today are remote-lite's movies.
+    The doc wording says "frames of other remotes"
+- [ ] tests:
+  - each table row;
+  - a crash between the rename and the commit;
+  - an idempotent double run;
+  - a `full` with no row is quarantined, not deleted;
+  - `spool.db*` and unknown names are untouched;
+  - other clients' (remote-lite's) frames are untouched;
+  - a committed frame's files are never deleted
+- [ ] update PROTOCOL.md "Today" notes and add a changelog line (wire unchanged)
 - [ ] run the camera + remote-lite tests — must pass before Task 2
 
-### Task 2: Camera: reclaim acked frames (retention)
+### Task 2: Camera: reclaim acked frames under low space (TDD)
 
 **Files:**
-- Modify: `camera-android/core/src/main/kotlin/pl/slava/kopernikadr/camera/spool/Spool.kt`, `SpoolFrameStore.kt`, the capture admission (`SpoolCaptureService.kt`), the host wiring in `:app`
-- Create/Modify: tests in `camera-android/core/src/test/kotlin/.../spool/`
+- Modify: `Spool.kt`, `SpoolFrameStore.kt`, `SpoolCaptureService.kt` (admission), `protocol/PROTOCOL.md` (§6 `STORAGE_LOW`, §9 "Today")
+- Create/Modify: spool tests
 
-- [ ] tests first:
-  - acked frames older than 7 days are reclaimed;
-  - unacked frames are never touched;
-  - `reclaimedAt` is written before the files are deleted;
-  - a crash between the two is finished by `recover()`;
-  - other clients' frames are never reclaimed unless acked by their owner
-- [ ] `Spool.reclaimAcked(olderThan, now)`; run it at process start (after `recover()`) and
-      every hour while started
-- [ ] admission step 2: under low space, reclaim acked frames oldest-first until
-      `free − 500 MB ≥ 2 × expected full`, else `STORAGE_LOW`
-- [ ] tests for the low-space path (fake disk) and for `STORAGE_LOW`
+- [ ] tests first, then admission step 2:
+  - when `free − 500 MB < 2 × expected full`, reclaim **acked** frames, oldest `ackedAt` first;
+  - write `reclaimedAt` → commit → delete the files, until enough space is free;
+  - else `STORAGE_LOW`
+- [ ] no timer and no 7-day expiry (deferred to stage 3)
+- [ ] lock ordering with `SpoolFrameStore` derived-file generation and prefetch: a reclaim never
+      races a `play`/`thumb` generation of the same frame. A request for a reclaimed frame's file
+      answers 404 per PROTOCOL
+- [ ] tests:
+  - only acked frames are reclaimed, never unacked or other clients' frames;
+  - `reclaimedAt` comes before the delete;
+  - the crash in between is finished by `recover()`;
+  - the race with a derived-file generation;
+  - `STORAGE_LOW` when nothing acked is left
+- [ ] update PROTOCOL.md "Today" notes
 - [ ] run the camera + remote-lite tests — must pass before Task 3
 
-### Task 3: Camera: dim policy + orphans on the diagnostics screen
+### Task 3: Fake camera: failure switches for §7
 
 **Files:**
-- Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/MainActivity.kt` (or a new `ScreenPolicy.kt`), `ui/StatusScreen.kt`, the diagnostics screen
-- Create: a `:core` test for the pure inactivity timer
+- Modify: `protocol/tools/probe-client/fake-camera.mjs` + its tests
 
-- [ ] `ScreenPolicy`:
-  - keep-screen-on while started;
-  - after 2 min without remote commands or touches, window brightness drops to ~5%;
-  - any command or touch restores it.
-
-  The timer logic is pure in `:core`, so it can be unit-tested.
-- [ ] the phone diagnostics screen shows the orphan count and size (from the spool stats,
-      real values after Task 1)
-- [ ] write tests for the timer (activity resets, the threshold, a command from the server
-      counts as activity)
-- [ ] run tests — must pass before Task 4
+- [ ] switches (HTTP `/fake/...` or options):
+  - restart with a new `bootId`;
+  - change `cameraId`;
+  - `STORAGE_LOW` on the next capture;
+  - 404 for a given frame's `full`;
+  - a corrupted `full` (sha mismatch);
+  - `pending` forever for the next capture;
+  - reclaim (acked frame files → 404)
+- [ ] keep `/fake/kick` and `/fake/drop-capture` and the existing behaviour (the probes and the
+      remote-lite tests use it)
+- [ ] write tests for each switch
+- [ ] run the probe-client + remote tests — must pass before Task 4
 
 ### Task 4: Remote app shell: views, store hook, i18n, layout
 
@@ -239,296 +286,374 @@ remote tasks but go first, because Task 9 (capture flow) relies on Task 1.
 - Modify: `remote/app/page.tsx`, `remote/components/Home.tsx`, `remote/lib/i18n/{pl,ru}.ts`, `remote/app/globals.css`
 
 - [ ] hash views `#/projects` (default), `#/connect`, `#/capture/<id>`, `#/play/<id>`,
-      `#/diagnostics`; Android back button through `@capacitor/app`
+      `#/diagnostics`; the Android back button through `@capacitor/app`
 - [ ] a tiny observable store + `useSyncExternalStore` hook (no new dependency)
 - [ ] the kid-facing layout baseline:
   - landscape 1920×1200;
-  - big touch targets, at least 64 px;
+  - touch targets of at least 64 px;
   - icons over text;
-  - Polish and Russian strings;
-  - parent-only things behind a long-press, like the camera app
-- [ ] write tests: router parsing, store subscribe/notify, i18n key parity pl/ru
+  - pl/ru strings;
+  - parent-only things behind a long-press
+- [ ] write tests: router parsing, store subscribe/notify, i18n key parity
 - [ ] run tests — must pass before Task 5
 
 ### Task 5: ProjectStore: model + pure reducers (TDD)
 
 **Files:**
-- Create: `remote/lib/projects/{model.ts,reducers.ts}` + tests
+- Create: `remote/lib/projects/{model.ts,reducers.ts,eligibility.ts}` + tests
 
 - [ ] tests first, then the types for `index.json`/`project.json` (version 1) and validation
-      (unknown version, missing fields, bad types)
 - [ ] reducers, all pure:
   - create/rename project;
-  - add/remove outstanding;
-  - merge frame (monotonic, tombstone-aware, keyed by `frameId`, ordered by `seq`);
+  - **`beginCapture`**: in one state change, add outstanding `{reqId, cameraId, sentAt}`, bind
+    `cameraId` if null and freeze geometry/rotation;
+  - remove outstanding;
+  - merge frame (monotonic, tombstone-aware, keyed by `frameId`, ordered by `seq`; refused when
+    the frame's camera ≠ `project.cameraId`);
   - set local;
-  - bind camera + freeze geometry on the first capture;
+  - mark/clear `unavailable`;
   - hide/unhide/expire project;
   - recovered project from `FrameInfo`
-- [ ] ack eligibility as a pure function
-- [ ] write tests: the monotonic-merge table (§5.5), tombstones, duplicate results via capture
-      + reconcile, geometry freeze, camera binding
+- [ ] `ackEligible(frame, project, index)` per Technical Details, including "pendingProjectDeletes
+      → not eligible" and "result for a deleted project → eligible, not merged"
+- [ ] write tests:
+  - the monotonic-merge table (§5.5);
+  - tombstones;
+  - duplicate results via capture + reconcile;
+  - a geometry freeze at `beginCapture` (the first capture is lost, the rotation changes in the
+    UI, then the result arrives → the original rotation holds);
+  - a wrong-camera merge is refused;
+  - the eligibility table
 - [ ] run tests — must pass before Task 6
 
-### Task 6: ProjectStore: persistence, mutation queue, startup sweep (TDD)
+### Task 6: ProjectStore: persistence + mutation queue (TDD)
 
 **Files:**
-- Create: `remote/lib/projects/{store.ts,files.ts,sweep.ts}` + tests, `remote/lib/projects/fakeFs.testutil.ts`
+- Create: `remote/lib/projects/{store.ts,files.ts}` + tests, `remote/lib/projects/fakeFs.testutil.ts`
 
 - [ ] tests first, then one async mutation queue:
   - load → reducer → `writeTextAtomic`;
-  - a mutation's promise resolves after the write;
-  - a failed write leaves memory and disk consistent (the reducer result is applied only after
-    the write succeeds);
-  - mutations are serialized
+  - the reducer result is applied in memory only after the write succeeds;
+  - the mutation's promise resolves after the write;
+  - mutations are strictly serialized
 - [ ] file access through an injected adapter: `KopernikadrNative` + `Filesystem` (listing,
-      `getUri`, delete) in the app, an in-memory fake in tests
-- [ ] corrupt/unknown-version handling as in Technical Details
-- [ ] startup sweep (§5.8):
+      `getUri`, delete, mkdir) in the app, an in-memory fake with crash points in tests
+- [ ] creating a project writes the index entry and creates `projects/{id}/` in the same flow
+      (the sweep handles a crash in between)
+- [ ] write tests:
+  - a failed write (`NO_SPACE`) keeps memory and disk consistent;
+  - a failed merge after a capture result keeps the outstanding entry, so it is retried later;
+  - serialization under concurrent callers
+- [ ] run tests — must pass before Task 7
+
+### Task 7: ProjectStore: startup sweep + corruption recovery (TDD)
+
+**Files:**
+- Create: `remote/lib/projects/sweep.ts` + tests
+
+- [ ] tests first, then the startup sweep (§5.8):
   - promote matching `pending` installs;
   - empty `tmp/`;
   - delete unreferenced files under `frames/`;
   - remove tombstoned dirs;
   - re-add missing project dirs;
-  - expire past deadlines
-- [ ] write tests incl. crash points (kill after `installFile` before `local`, kill between
-      tombstone commit and unlink)
-- [ ] run tests — must pass before Task 7
+  - expire past `pendingProjectDeletes` deadlines
+- [ ] corrupt or unknown-version JSON per Technical Details
+- [ ] write tests for the crash points: a kill after `installFile` before `local`; a kill between
+      the tombstone commit and the unlink; a corrupt `project.json`; a missing index entry
+- [ ] run tests — must pass before Task 8
 
-### Task 7: CameraClient: discovery, single reconnect loop, lifecycle (TDD)
+### Task 8: CameraClient: target selection over `CameraConnection` (TDD)
 
 **Files:**
 - Create: `remote/lib/camera/{client.ts,discover.ts}` + tests
-- Modify (only if needed, JSDoc-level or additive): `packages/remote-core/src/connection.js`
+- Modify (only if a gap is found, additive): `packages/remote-core/src/connection.js` + its tests
 
 - [ ] tests first, then target selection:
   - a project bound to a `cameraId` looks for that one;
   - otherwise the remembered camera, else the single one found;
   - else the connect screen.
 
-  Manual `host:port` is checked with `GET /info`. The remembered camera is saved in `index.json`.
-- [ ] connection generations, so callbacks from a superseded socket are ignored:
-  - `4001` → stop and show "Przejmij" (take over);
-  - `4002` → reconnect only if this socket still owns the current generation;
-  - `4003 BUSY` → retry after `retryAfterMs`;
-  - app pause/resume (`@capacitor/app`) and timeouts reuse the same loop
-- [ ] observable status: `searching | connecting | online | offline | busy | replaced |
-      wrong-camera`; `bootId` changes are surfaced, so preview and outstanding restart
-- [ ] after every (re)connect: hooks run `resolveOutstanding()` then `reconcile()`; they are
-      injected, wired in Tasks 9–10
-- [ ] write tests with a fake socket/discovery: every close code, a superseded socket, resume
-      during backoff, wrong camera, BUSY retry
-- [ ] if a remote-core change is needed: run the remote-lite tests too
-- [ ] run tests — must pass before Task 8
+  Manual `host:port` is checked with `GET /info`; `rememberedCamera` is saved through the store.
+- [ ] reuse `CameraConnection`'s loop. Never open a second one. App resume uses `reconnectNow()`
+- [ ] status: `searching | connecting | online | offline | busy | replaced | wrong-camera`
+- [ ] the `hello` cameraId ≠ the project's → `wrong-camera`; a `bootId` change is surfaced
+- [ ] hooks run on **every** new session, a reconnect with the same `bootId` included:
+      `resolveOutstanding()` then `reconcile()`, in that order
+- [ ] write tests: target selection, wrong camera, hook order, hooks on every session, resume. Add
+      core tests only for gaps (e.g. 4002 on a superseded socket) and then run the remote-lite
+      tests
+- [ ] run tests — must pass before Task 9
 
-### Task 8: Connect view + preview with watchdog + onion skin
+### Task 9: Capture flow: outstanding, timeouts, resolveOutstanding (TDD)
 
 **Files:**
-- Create: `remote/components/{ConnectView.tsx,Preview.tsx,OnionSkin.tsx}`, `remote/lib/camera/previewController.ts` + test
+- Create: `remote/lib/capture/{capture.ts,outstanding.ts}`, `remote/lib/transfer/types.ts` (the `Transfer.enqueue(frameId)` interface) + tests
 
+- [ ] tests first, then capture:
+  1. `beginCapture` mutation (awaited);
+  2. send `capture{projectId, rotation}` with a new reqId per press;
+  3. on the result, a mutation removes outstanding and merges the frame. If the project was
+     deleted, nothing is merged and the frame is handed to the ack pass;
+  4. `Transfer.enqueue(frameId)` (a stub interface; the fake in tests)
+- [ ] a 10 s send timeout → `resolveOutstanding` for that reqId; outstanding limit 1
+- [ ] `resolveOutstanding()`:
+  - only entries whose `cameraId` = the connected camera;
+  - `getOperation` → `done` → result;
+  - `pending` → poll every 1 s, give up after 30 s or after a `bootId` change: drop the entry
+    with "sprawdzimy tę klatkę później"; reconcile still recovers a committed frame;
+  - `failed`/`unknown` → drop with "nie wyszło, spróbuj jeszcze raz"
+- [ ] kid-level messages for `CAPTURE_IN_PROGRESS`, `CAMERA_NOT_READY`, `STORAGE_LOW`,
+      `GEOMETRY_MISMATCH`; no auto-retake
+- [ ] a project bound to another camera → shooting blocked with "new movie needed"; watch/export
+      still work
+- [ ] write tests:
+  - a lost response on a live connection (fake `/fake/drop-capture`);
+  - pending forever (Task 3 switch);
+  - a `bootId` change while pending;
+  - a duplicate result via reconcile;
+  - capture while offline;
+  - entries of another camera are left alone
+- [ ] run tests — must pass before Task 10
+
+### Task 10: Transfer A: download, install, ack (TDD)
+
+**Files:**
+- Create: `remote/lib/transfer/{queue.ts,download.ts,ack.ts}` + tests
+
+- [ ] tests first, then a one-at-a-time queue (ids, not bytes), the newest frame first:
+  - `full` → `tmp/` via `@capacitor/file-transfer`;
+  - `installFile({tmp, dest, bytes, sha256})` verifies natively. `CHECKSUM_MISMATCH` → retry;
+    **no JS-side sha256 pass**;
+  - `play`/`thumb`: best-effort (Content-Length + decode), never blocking
+- [ ] install mutation:
+  - re-check tombstones (a tombstoned frame or project → delete the tmp file);
+  - set `state: local`, committed;
+  - **then** a batched ack
+- [ ] retries: 3 per frame with backoff for 404/mismatch/network errors, then mark
+      `unavailable` (never acked; retried by the next reconcile)
+- [ ] admission:
+  - `freeBytes` ≥ 300 MB + `full` + 1 MB, else pause with "Tablet storage full";
+  - ENOSPC → pause + delete the tmp file;
+  - paused during an export
+- [ ] the ack pass runs right after any commit that makes frames eligible: install, a project
+      tombstone, a result for a deleted project. It does not wait for a reconcile
+- [ ] a project delete drops its queued jobs and their tmp files
+- [ ] write tests:
+  - the eligibility path (pendingProjectDeletes never acked);
+  - a mismatch → retry → `unavailable`;
+  - a 404 `full`;
+  - kill points (after download, after install, before ack);
+  - a Wi-Fi drop mid-download;
+  - storage full;
+  - a delete during a download
+- [ ] run tests — must pass before Task 11
+
+### Task 11: Transfer B: reconcile + integration (TDD)
+
+**Files:**
+- Create: `remote/lib/transfer/reconcile.ts` + test, `remote/lib/transfer/integration.test.ts`
+
+- [ ] tests first, then `reconcile()` over `listFrames` (our clientId, unacked, paged):
+  - ack-eligible → ack;
+  - pending → resume;
+  - unknown in a live project → merge only if `project.cameraId` is null or equals the current
+    camera, then download;
+  - unknown `projectId` that is not tombstoned → an "Odzyskany <date>" project bound to the
+    current camera;
+  - a camera mismatch → recovered project;
+  - a local `pending` frame that vanished from `listFrames` → `unavailable` with "lost on the
+    phone", surfaced to the parent
+- [ ] integration test against `fake-camera.mjs`:
+  - capture → transfer → ack → reconnect → reconcile;
+  - plus the Task 3 switches: new `bootId`, `cameraId` change, 404 `full`, reclaim
+- [ ] run tests — must pass before Task 12
+
+### Task 12: Boot wiring + connect view
+
+**Files:**
+- Create: `remote/lib/app/boot.ts` + test, `remote/components/ConnectView.tsx`
+- Modify: `remote/components/AppShell.tsx`
+
+- [ ] boot: the native sweep (already at plugin load) → ProjectStore load + sweep → UI →
+      CameraClient → hooks (`resolveOutstanding` → `reconcile`) on every session
 - [ ] the connect view:
-  - found cameras (NSD) and their status;
+  - found cameras and their status;
   - a manual address field;
   - "Przejmij" after `4001`;
   - plain messages for BUSY and wrong-camera
-- [ ] `previewController` wraps remote-core `PreviewLoop`:
+- [ ] from here on, the app runs the real flow end to end (no shooting UI yet)
+- [ ] write tests: the boot order with fakes; the connect view's states
+- [ ] the orchestrator runs it on the emulator against the fake camera: connects, reconciles
+- [ ] run tests — must pass before Task 13
+
+### Task 13: Preview with watchdog + onion skin
+
+**Files:**
+- Create: `remote/components/{Preview.tsx,OnionSkin.tsx}`, `remote/lib/camera/previewController.ts` + test
+
+- [ ] `previewController` over remote-core `PreviewLoop`:
   - the 3 s watchdog;
   - restart on resume / new `bootId` / new session;
-  - closes the previous bitmap.
+  - closes the previous bitmap;
+  - the preview quality is a parent setting
+- [ ] onion skin:
+  - the last local frame's `play`, else `thumb`, else nothing ("no frames yet" state);
+  - opacity and toggle (as in remote-lite);
+  - the 3×3 grid is a parent toggle
+- [ ] write tests: the watchdog fires, restart on a new bootId, no double loops, the "no frames
+      yet" state
+- [ ] run tests — must pass before Task 14
 
-  Preview quality is a parent setting.
-- [ ] onion skin: the last frame's local `play` (or `thumb` until `play` arrives) over the live
-      view, opacity slider, toggle; a 3×3 grid toggle
-- [ ] write tests for `previewController` (watchdog fires, restart on new bootId, no double
-      loops) with a fake loop
-- [ ] run tests — must pass before Task 9
-
-### Task 9: Capture flow: outstanding, results, resolveOutstanding (TDD)
-
-**Files:**
-- Create: `remote/lib/capture/{capture.ts,outstanding.ts}` + tests
-
-- [ ] tests first, then capture:
-  1. mutation `add outstanding{reqId}` (awaited);
-  2. send `capture{projectId, rotation}`;
-  3. on the result, mutation: remove outstanding + merge the frame, bind the camera and freeze
-     geometry on the first frame;
-  4. enqueue the download (Task 10)
-- [ ] error mapping, never auto-retaking:
-  - `CAPTURE_IN_PROGRESS`, `CAMERA_NOT_READY`, `STORAGE_LOW`, `GEOMETRY_MISMATCH` and others
-    → kid-level messages;
-  - for `failed`/`unknown`, drop the entry and show "nie wyszło, spróbuj jeszcze raz"
-- [ ] `resolveOutstanding()`: `getOperation` per entry → `done` → result, `pending` → poll every
-      1 s, `failed/unknown` → drop (admission rejections answer `unknown`, PROTOCOL v1 §6)
-- [ ] every shutter press uses a **new** reqId; a retry after `failed` is a new capture
-- [ ] a project bound to another `cameraId` → shooting is blocked with a "new movie needed"
-      message; watch/export still work
-- [ ] write tests: lost response then reconnect, duplicate result via reconcile, capture during
-      offline, rotation mismatch
-- [ ] run tests — must pass before Task 10
-
-### Task 10: Transfer: verified download, install, ack, reconcile (TDD)
-
-**Files:**
-- Create: `remote/lib/transfer/{queue.ts,download.ts,reconcile.ts}` + tests, `remote/lib/transfer/integration.test.ts` (fake camera)
-
-- [ ] tests first, then a one-at-a-time download queue (ids, not bytes), priority to the newest
-      frame:
-  - `thumb` → `play` → `full` via `@capacitor/file-transfer` into `tmp/`;
-  - `full` verified by size + sha256 (`fetch(convertFileSrc)` + `crypto.subtle`);
-  - caches checked by Content-Length + decode and regenerated from `full` if unavailable
-- [ ] install mutation:
-  - re-check tombstones;
-  - `installFile` → `state: local`, committed;
-  - **then** ack (batched)
-- [ ] admission:
-  - `freeBytes` ≥ 300 MB + `full` + 1 MB, else pause with "Tablet storage full" for the parent;
-  - ENOSPC → pause + delete the tmp file;
-  - the queue pauses while an export runs
-- [ ] `reconcile()` over `listFrames` (our clientId, unacked, paged):
-  - ack-eligible → ack;
-  - pending → resume;
-  - unknown in a live project → merge + download;
-  - unknown `projectId` not tombstoned → "Odzyskany <date>" project
-- [ ] write tests:
-  - the ack-eligibility table;
-  - a sha256 mismatch → retry, never ack;
-  - kill points (after download, after install, before ack);
-  - Wi-Fi drop mid-download;
-  - storage full;
-  - the integration flow capture → transfer → ack → reconnect → reconcile against
-    `fake-camera.mjs`
-- [ ] run tests — must pass before Task 11
-
-### Task 11: Capture view + parent drawer
+### Task 14: Capture view (kid UI)
 
 **Files:**
 - Modify: `remote/components/CaptureView.tsx`
-- Create: `remote/components/{ShutterButton.tsx,ParentDrawer.tsx,ConnectionBadge.tsx}` + tests (component tests with the fake client)
+- Create: `remote/components/{ShutterButton.tsx,ConnectionBadge.tsx}` + component tests
 
-- [ ] the kid UI:
-  - preview + onion skin;
-  - a big shutter with the sound and flash feedback (reuse remote-lite's `sound.js` idea);
-  - the frame counter;
-  - pending-capture placeholders;
-  - a connection badge;
-  - error toasts;
-  - "play" and "back to movies" buttons
-- [ ] the parent drawer (long-press):
-  - exposure/WB/focus lock with `confirmed`/`settling`; "lock failed" via remote-core
-    `isLockFailed`, shown only once `settling` is false (focus `focusOk:false` is transient while
-    confirming);
-  - exposure compensation (only when not frozen);
-  - rotation 0/180 for empty projects only;
-  - preview quality;
-  - fps;
-  - camera info and the transfer queue status
-- [ ] keep-awake while the capture view is open
-- [ ] write component tests: shutter disabled while offline / outstanding at the limit, drawer
-      rules (rotation locked after the first frame, compensation hidden when frozen)
-- [ ] run tests — must pass before Task 12
+- [ ] preview + onion skin
+- [ ] a big shutter with sound and flash feedback (from remote-lite's `sound.js`)
+- [ ] the frame counter and pending-capture placeholders
+- [ ] a connection badge and error toasts
+- [ ] "play" and "back to movies" buttons
+- [ ] keep-awake while the view is open
+- [ ] write tests: the shutter is disabled while offline, at the outstanding limit, or during an
+      export; toasts per error code
+- [ ] run tests — must pass before Task 15
 
-### Task 12: Projects view: create, rename, delete + Undo
+### Task 15: Parent drawer
+
+**Files:**
+- Create: `remote/components/ParentDrawer.tsx` + test
+
+- [ ] long-press opens it. It holds:
+  - exposure/WB/focus lock with `confirmed`/`settling`; "lock failed" via `isLockFailed`, only
+    once `settling` is false;
+  - exposure compensation, only when not frozen;
+  - rotation 0/180 for empty projects only (no frames and no outstanding);
+  - preview quality, fps, the grid toggle;
+  - camera info, the transfer queue status, `unavailable` frames, storage
+- [ ] write tests: rotation locked after the first capture begins; compensation hidden when
+      frozen; no "failed" while `settling`
+- [ ] run tests — must pass before Task 16
+
+### Task 16: Projects view: create, rename, delete + Undo
 
 **Files:**
 - Modify: `remote/components/ProjectsView.tsx`
 - Create: `remote/lib/projects/deletion.ts` + test
 
 - [ ] the movies list:
-  - big cards with a cover (the first frame's `thumb`), name, frame count;
+  - big cards with a cover (the first local frame's `thumb`), name, frame count;
+  - "Odzyskany" projects as ordinary cards;
   - a "new movie" card;
   - tap → capture or play
-- [ ] rename (parent long-press or a simple dialog); delete:
-  - `pendingProjectDeletes` with a 5 s Undo;
-  - expiry → tombstone → commit → remove the dir;
-  - after the commit, the project's unacked frames become ack-eligible and are acked by the
-    next reconcile
-- [ ] write tests: Undo inside the window, expiry at startup for past deadlines, acking after
-      delete
-- [ ] run tests — must pass before Task 13
+- [ ] rename via a parent long-press or a simple dialog
+- [ ] delete:
+  - `pendingProjectDeletes` with a 5 s Undo (not ack-eligible in the window);
+  - expiry → tombstone → commit → remove the dir → the immediate ack pass (Task 10)
+- [ ] write tests: Undo inside the window, expiry at startup, the ack pass after delete, nothing
+      acked inside the window
+- [ ] run tests — must pass before Task 17
 
-### Task 13: Playback view
+### Task 17: Playback view
 
 **Files:**
 - Modify: `remote/components/PlayView.tsx`
-- Create: `remote/lib/play/{player.ts,ring.ts}` + tests
+- Create: `remote/lib/play/{player.ts,ring.ts,frameSource.ts}` + tests
 
-- [ ] a canvas player:
-  - a ring buffer of 8 `ImageBitmap`s from local `play` (`fetch(convertFileSrc)` →
-    `createImageBitmap`), closed on eviction;
+- [ ] `frameSource`: local `play`, else `full` with `createImageBitmap(..., {resizeWidth: 1440,
+      resizeHeight: 1080})`; shared with export
+- [ ] the canvas player:
+  - a ring buffer of 8 bitmaps, closed on eviction;
   - rAF timing at the project's fps;
   - play/pause, loop
-- [ ] frames that are not local yet are skipped, with a "N klatek jeszcze się pobiera" note
-- [ ] the ring buffer is released before an export starts and when leaving the view
-- [ ] write tests: the scheduler (fps timing with a fake clock), eviction closes bitmaps,
-      skipping non-local frames
-- [ ] run tests — must pass before Task 14
+- [ ] non-local and `unavailable` frames are skipped, with a "N klatek jeszcze się pobiera" note
+- [ ] the ring buffer is released before an export and when leaving the view
+- [ ] write tests: the scheduler with a fake clock, eviction closes bitmaps, the `full` fallback,
+      skipping
+- [ ] run tests — must pass before Task 18
 
-### Task 14: Export from the app
+### Task 18: Export from the app
 
 **Files:**
 - Create: `remote/lib/export/projectExport.ts` + test, `remote/components/ExportDialog.tsx`
 - Modify: `remote/components/PlayView.tsx`
 
 - [ ] `projectExport`:
-  - requires all frames `local`, else "waiting for N frames";
-  - pauses transfers;
-  - builds the source from local `play` files;
-  - `pickCodec` → `exportVideo` → native writer → publish `kopernikadr-<name>-<date>.mp4`;
+  - waits while frames are still downloading. `unavailable` frames are skipped after a parent
+    confirmation that names their count; they never deadlock the export;
+  - pauses transfers and blocks shooting;
+  - `frameSource` → `pickCodec` → `exportVideo` → the native writer → publish;
   - resumes transfers afterwards
+- [ ] the file name `kopernikadr-<name>-<date>.mp4`, sanitized (Polish/Cyrillic letters
+      transliterated or kept per the native normalizer, slashes and controls removed)
 - [ ] the dialog:
   - progress;
   - Cancel only in `encoding`;
-  - "Zapisano w galerii" at the end;
+  - "Zapisano w galerii";
   - a plain error with a retry
-- [ ] write tests: the state machine (cancel only in encoding, publish/abort exclusive),
-      transfers paused/resumed, the not-all-local gate
-- [ ] run tests — must pass before Task 15
+- [ ] write tests: the state machine (cancel only in encoding, publish/abort exclusive, cancel at
+      each state), pause/resume of transfers, the `unavailable` confirmation, name sanitizing
+- [ ] run tests — must pass before Task 19
 
-### Task 15: App lifecycle wiring + startup
+### Task 19: Lifecycle refinements
 
 **Files:**
-- Create: `remote/lib/app/{boot.ts,lifecycle.ts}` + tests
-- Modify: `remote/components/AppShell.tsx`
+- Create: `remote/lib/app/lifecycle.ts` + test
+- Modify: `remote/lib/app/boot.ts`
 
-- [ ] boot: ProjectStore load + sweep → UI → CameraClient → `resolveOutstanding` →
-      `reconcile` (the native export sweep already ran at plugin load)
 - [ ] pause/resume:
   - preview stops on pause;
-  - the client reuses its loop on resume;
-  - transfers continue while foreground only;
-  - keep-awake is held only in the capture view and during an export
+  - `reconnectNow()` on resume;
+  - transfers only in the foreground;
+  - keep-awake only in the capture view and during an export
+- [ ] background/foreground while a capture is writing: the outstanding entry resolves after
+      resume (a §7 crash point)
 - [ ] the Diagnostics view stays reachable for the parent; probes keep working
-- [ ] write tests for the boot order (fakes) and resume behaviour
-- [ ] run tests — must pass before Task 16
+- [ ] write tests for resume during a capture, during a download, during an export
+- [ ] run tests — must pass before Task 20
 
-### Task 16: Emulator E2E + install on the tablet
+### Task 20: Emulator E2E script
 
 **Files:**
-- Create: `remote/e2e/flow.cdp.mjs` (a CDP-driven script, like the 0b probes driver), `docs/diagnostics/<date>-stage1-2-emulator.md`
+- Create: `remote/e2e/flow.cdp.mjs`, `docs/diagnostics/<date>-stage1-2-emulator.md`
 - Modify: `remote/android/app/build.gradle` (`versionCode`/`versionName` bump)
 
-- [ ] emulator against `fake-camera.mjs`:
+- [ ] a CDP-driven script against `fake-camera.mjs`. Each step passes or fails:
   1. create a movie;
   2. connect;
-  3. shoot 10 frames;
-  4. kill the app mid-transfer;
-  5. relaunch → reconcile completes;
+  3. shoot 10 frames → 10 local;
+  4. kill the app mid-transfer → relaunch → all 10 local, all acked;
+  5. a dropped capture response → resolved;
   6. play;
-  7. export → in the gallery (ffprobe check);
-  8. delete a movie + Undo;
-  9. delete → its frames get acked
-- [ ] install the debug build on the tablet (owner connects it) and smoke against the Pixel or
-      g05
+  7. export → in the gallery (ffprobe: frames = local count);
+  8. delete + Undo → still there;
+  9. delete → the frames are acked on the fake camera
 - [ ] fix what's found (➕ tasks if larger)
-- [ ] run the full suite — must pass before Task 17
+- [ ] run the full suite — must pass before Task 21
 
-### Task 17: Verify acceptance criteria
-- [ ] every Overview bullet works on the emulator; tablet smoke done
+### Task 21: Tablet + phone install and smoke (orchestrator + owner)
+
+- [ ] **back up the kid's spool before the first camera upgrade on the g05.** The release/probe
+      build is not debuggable, so use the HTTP API read-only:
+  1. take remote-lite's `clientId` from the tablet browser (localStorage) or the camera
+     diagnostics;
+  2. list its frames with probe-client;
+  3. download every `full` to the Mac;
+  4. verify the sha256 values;
+  5. **no ack**
+- [ ] list the spool counts before/after the upgrade via `getStatus` and compare
+- [ ] install the camera build (`install -r`) and the remote debug build on the tablet
+- [ ] smoke: a short movie end to end; remote-lite still works on the same phone
+- [ ] record the results in `docs/diagnostics/<date>-stage1-2-tablet.md`
+
+### Task 22: Verify acceptance criteria
+- [ ] every Overview bullet works on the emulator and the tablet
 - [ ] the safety rules hold:
   - no ack outside eligibility (grep + tests);
   - remote-lite tests green;
-  - the camera never deletes unacked frames
+  - the camera never deletes unacked frames or an unaccounted `full`
 - [ ] full suite:
   - `npm test --workspaces`;
   - `cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest`;
@@ -537,18 +662,24 @@ remote tasks but go first, because Task 9 (capture flow) relies on Task 1.
   - `scripts/test/run.sh`
 - [ ] a Codex review of the batch; fix the material findings
 
-### Task 18: [Final] Update documentation
+### Task 23: [Final] Update documentation
 - [ ] `docs/ARCHITECTURE.md`:
-  - §5 matches what was built (own store instead of zustand, hash views, export from `play`,
-    no deep link);
-  - §8 stages 1–2 done
+  - §5 matches what was built: own store, hash views, export from `play` with a `full` fallback,
+    no JS sha pass, no local cache regeneration, no deep link;
+  - §4.6 reclaim under low space only;
+  - §9 decision 2 (export source);
+  - §8 stages 1–2 done;
+  - line 40 `src/schema.ts` removed
 - [ ] `README.md`:
   - how the kid uses the tablet app;
   - the parent drawer;
   - where movies are;
   - "uninstalling the remote deletes movies";
-  - remote-lite as the fallback
-- [ ] `docs/ROADMAP.md`: stages 1+2 done; next = stage 3 (strip + editing) and the effects layer
+  - remote-lite as the fallback;
+  - "frames of other remotes" on the phone
+- [ ] `docs/ROADMAP.md`:
+  - stages 1+2 done;
+  - next = stage 3 (strip + editing, the 7-day reclaim, `ScreenPolicy`) and the effects layer
 - [ ] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
