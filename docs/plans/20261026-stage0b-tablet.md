@@ -489,8 +489,10 @@ Status: rev 2 (after the plan review; all critical and important findings applie
       after verification
 - [x] `videoFrame`: `convertFileSrc` → `createImageBitmap` → `new VideoFrame` → close
 - [x] write tests for each with fake adapters (success and failure paths)
-- [ ] emulator: run against the fake camera (`10.0.2.2`) and the real phone; screenshot + pulled
-      report — pending for the orchestrator
+- [x] emulator against the fake camera (`10.0.2.2`), 2026-10-27: env, storage, camera, download,
+      videoFrame, export OK; nsd fails ("no camera found", mDNS doesn't cross the emulator NAT, as
+      expected); reconnect skipped. Report pulled from `Android/data/…/files/probe/`
+- [ ] emulator against the real phone — ⚠️ pending: phone not connected (Task 13)
 - [x] run tests — must pass before Task 12
 - [x] ➕ camera address: the first NSD camera, else the manual field on Diagnostics (persisted in
       localStorage); no address → the camera probes fail with "no camera address"
@@ -560,8 +562,10 @@ Status: rev 2 (after the plan review; all critical and important findings applie
   - [x] measures per-frame decode/encode ms, total, bytes, URI, codec (the report keeps the
         summary, not the per-frame array);
   - [x] acks the probe frames at the end
-- [ ] emulator: an export via VP9 (no hardware AVC there) lands in the gallery and plays; note
-      that AVC numbers come from the tablet
+- [x] emulator: an export lands in the gallery and plays. ⚠️ The emulator picked **avc1.4d0028**
+      (Main; High unsupported), not VP9 — its software encoder handles AVC. ffprobe on the 100-frame
+      file: h264 Main 1440×1080, 8 fps, 100 frames, decodes clean. 14 ms/frame on the Mac emulator;
+      the real AVC numbers come from the tablet
 - [ ] ➕ conditional (after Task 14): if AVC fails or is too slow on the T610, add a native
       MediaCodec+MediaMuxer `exportNative` task
 - [ ] run tests — must pass before Task 13 (the export lib part passes: remote vitest 148 tests,
