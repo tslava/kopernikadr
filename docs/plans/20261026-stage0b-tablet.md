@@ -554,17 +554,18 @@ Status: rev 2 (after the plan review; all critical and important findings applie
       export → `{uri, codec, bytes, writes, frames, ms, perFrame, pick, summary{decodeMs,
       waitMs, encodeMs: {mean,p50,p95,max}, msPerFrame, speed}}`; `NoEncoderError` (`NO_ENCODER`,
       with `pick`) before anything is written
-- [ ] export probe (`remote/lib/probes/export.ts`, on the Task 10 runner; not written yet):
-  - [ ] captures ~20 frames with the probe's own clientId, downloads their `full`, and cycles
+- [x] export probe (`remote/lib/probes/export.ts`, on the Task 10 runner):
+  - [x] captures ~20 frames with the probe's own clientId, downloads their `full`, and cycles
         them to N (20 and 100);
-  - [ ] measures per-frame decode/encode ms, total, bytes, URI, codec;
-  - [ ] acks the probe frames at the end
+  - [x] measures per-frame decode/encode ms, total, bytes, URI, codec (the report keeps the
+        summary, not the per-frame array);
+  - [x] acks the probe frames at the end
 - [ ] emulator: an export via VP9 (no hardware AVC there) lands in the gallery and plays; note
       that AVC numbers come from the tablet
 - [ ] ➕ conditional (after Task 14): if AVC fails or is too slow on the T610, add a native
       MediaCodec+MediaMuxer `exportNative` task
-- [ ] run tests — must pass before Task 13 (the export lib part passes: remote vitest 76 tests,
-      typecheck, build; remaining: the probe file and the emulator VP9 run)
+- [ ] run tests — must pass before Task 13 (the export lib part passes: remote vitest 148 tests,
+      typecheck, build; remaining: the emulator VP9 run)
 
 ### Task 13: Emulator end-to-end + Chrome dev run
 

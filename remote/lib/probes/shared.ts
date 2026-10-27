@@ -3,7 +3,7 @@
 import type { ParsedService } from '@kopernikadr/remote-core/nsd';
 
 /** Probe names in run order; `probe.<name>` is the i18n label. Interactive `reconnect` runs last. */
-export const PROBE_ORDER = ['env', 'storage', 'nsd', 'camera', 'download', 'videoFrame', 'reconnect'] as const;
+export const PROBE_ORDER = ['env', 'storage', 'nsd', 'camera', 'download', 'videoFrame', 'export', 'reconnect'] as const;
 export type ProbeName = (typeof PROBE_ORDER)[number];
 
 /** localStorage keys (the probe identity survives runs; the address is a convenience). */
