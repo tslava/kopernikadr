@@ -85,6 +85,19 @@ describe('EditController', () => {
     expect(await c.undo('p1')).toBe(false);
   });
 
+  it('a failed write leaves the history as it was (edit and Cofnij)', async () => {
+    const { c, store } = await setup();
+    await c.hold('p1', 'f1', 1);
+    const real = store.updateProject.bind(store);
+    store.updateProject = (() => Promise.reject(new Error('disk'))) as typeof store.updateProject;
+    await expect(c.hold('p1', 'f2', 1)).rejects.toThrow('disk');
+    await expect(c.undo('p1')).rejects.toThrow('disk');
+    store.updateProject = real;
+    expect(c.canUndo('p1')).toBe(true); // the hold of f1 is still undoable, and only it
+    expect(await c.undo('p1')).toBe(true);
+    expect(c.canUndo('p1')).toBe(false);
+  });
+
   it('Delete of a duplicate entry removes the entry (original stays) and is in history', async () => {
     const { c, project, ids } = await setup();
     await c.duplicate('p1', 'f2');

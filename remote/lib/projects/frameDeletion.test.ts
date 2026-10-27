@@ -193,4 +193,44 @@ describe('FrameDeletion', () => {
     expect(await d.hide('p1', 'f3')).toBe(true);
     expect(await d.hide('p1', 'f3')).toBe(false);
   });
+
+  it('an export that starts after the entry check blocks the commit: nothing is tombstoned or unlinked', async () => {
+    const { d, store, exporting, log, advance } = await setup();
+    await d.hide('p1', 'f3');
+    advance(5000);
+    let calls = 0;
+    exporting.get = () => ++calls > 1; // free at the entry of expireDue, running by the time mutate runs
+    expect(await d.expireDue()).toEqual([]);
+    expect(store.state.get().projects.p1!.frames).toHaveLength(3);
+    expect(store.state.get().projects.p1!.deletedFrameIds).toEqual([]);
+    expect(log).toEqual([]);
+  });
+
+  it('a rejected expiry is retried with a growing pause', async () => {
+    const { d, store, timers, advance } = await setup();
+    await d.hide('p1', 'f3');
+    advance(5000);
+    const realMutate = store.mutate.bind(store);
+    let fail = 2;
+    store.mutate = ((fn: never) => (fail-- > 0 ? Promise.reject(new Error('disk')) : realMutate(fn))) as typeof store.mutate;
+    const flush = () => new Promise((r) => setImmediate(r));
+    const fire = (ts: typeof timers) => { const t = ts.filter((x) => x.live).at(-1)!; t.live = false; t.fn(); };
+    fire(timers);
+    await flush();
+    expect(live(timers).map((x) => x.ms)).toEqual([1000]);
+    fire(timers);
+    await flush();
+    expect(live(timers).map((x) => x.ms)).toEqual([2000]);
+    fire(timers);
+    await flush();
+    expect(store.state.get().projects.p1!.deletedFrameIds).toEqual(['f3']);
+    expect(live(timers)).toEqual([]);
+  });
+
+  it('a corrupt hiddenUntil arms no timer', async () => {
+    const { d, store, timers } = await setup();
+    await store.updateProject('p1', (p) => ({ ...p, frames: p.frames.map((f) => (f.frameId === 'f3' ? { ...f, hiddenUntil: 'garbage' } : f)) }));
+    d.schedule();
+    expect(live(timers)).toEqual([]);
+  });
 });

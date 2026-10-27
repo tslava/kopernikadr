@@ -15,6 +15,8 @@ import { expireFrames, hideFrame, unhideFrame } from './reducers';
 import type { ProjectStore } from './store';
 
 const KINDS = ['full', 'play', 'thumb'] as const;
+const RETRY_BASE_MS = 1000;
+const RETRY_MAX_MS = 30_000;
 
 export interface FrameDeletionDeps {
   store: Pick<ProjectStore, 'mutate' | 'updateProject' | 'state'>;
@@ -35,6 +37,8 @@ export class FrameDeletion {
   private readonly clearTimer: (h: unknown) => void;
   private readonly undoMs: number;
   private timer: unknown = null;
+  private failures = 0;
+  private disposed = false;
   private readonly unsubscribe: (() => void) | null;
 
   constructor(private readonly d: FrameDeletionDeps) {
@@ -75,6 +79,8 @@ export class FrameDeletion {
     const nowMs = this.now();
     const projectOf: Record<string, string> = {};
     const expired = await this.d.store.mutate((s) => {
+      // an export may have started since the check above: it loads these files, so nothing commits under it
+      if (this.d.exporting?.get()) return { result: [] as string[] };
       const projects = [];
       const ids: string[] = [];
       for (const p of Object.values(s.projects)) {
@@ -104,6 +110,7 @@ export class FrameDeletion {
         this.d.onError?.(e);
       }
     }
+    this.failures = 0;
     this.schedule();
     return expired;
   }
@@ -115,16 +122,29 @@ export class FrameDeletion {
     if (this.d.exporting?.get()) return; // re-armed when the export ends
     let next = Infinity;
     for (const p of Object.values(this.d.store.state.get().projects)) {
-      for (const f of p.frames) if (f.hiddenUntil !== null) next = Math.min(next, Date.parse(f.hiddenUntil));
+      for (const f of p.frames) {
+        const at = f.hiddenUntil === null ? NaN : Date.parse(f.hiddenUntil);
+        if (Number.isFinite(at)) next = Math.min(next, at); // a corrupt deadline would re-arm a 0 ms timer forever
+      }
     }
     if (next === Infinity) return;
+    this.arm(Math.max(0, next - this.now()));
+  }
+
+  private arm(ms: number): void {
     this.timer = this.setTimer(() => {
       this.timer = null;
-      void this.expireDue().catch((e) => this.d.onError?.(e));
-    }, Math.max(0, next - this.now()));
+      this.expireDue().catch((e) => {
+        this.d.onError?.(e);
+        // a rejected commit (disk error, read-only store) is retried with a growing pause, not forgotten
+        this.failures++;
+        if (this.timer === null && !this.disposed) this.arm(Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (this.failures - 1)));
+      });
+    }, ms);
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.timer !== null) this.clearTimer(this.timer);
     this.timer = null;
     this.unsubscribe?.();

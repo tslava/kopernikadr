@@ -102,15 +102,16 @@ export class StickerController {
 
   private async edit(projectId: string, fn: (p: Project) => Project): Promise<boolean> {
     if (this.d.exporting.get()) return false;
-    let changed = false;
+    const box: { change?: { before: Project; after: Project } } = {};
     await this.d.store.updateProject(projectId, (p) => {
       const next = fn(p);
       if (next === p) return p;
-      this.d.history.record(projectId, p, next);
-      changed = true;
+      box.change = { before: p, after: next };
       return next;
     });
-    return changed;
+    if (!box.change) return false;
+    this.d.history.record(projectId, box.change.before, box.change.after); // only once the write is committed
+    return true;
   }
 }
 

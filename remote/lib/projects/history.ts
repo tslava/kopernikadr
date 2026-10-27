@@ -36,6 +36,19 @@ export class EditHistory {
     return this.stacks.get(projectId)?.pop();
   }
 
+  /** The newest snapshot without removing it: undo drops it only once its write is committed (`discard`). */
+  peek(projectId: string): EditSnapshot | undefined {
+    const stack = this.stacks.get(projectId);
+    return stack?.[stack.length - 1];
+  }
+
+  /** Removes one snapshot object (the one `peek` returned), wherever it sits now. */
+  discard(projectId: string, snap: EditSnapshot): void {
+    const stack = this.stacks.get(projectId);
+    const i = stack?.lastIndexOf(snap) ?? -1;
+    if (stack && i >= 0) stack.splice(i, 1);
+  }
+
   clear(projectId: string): void {
     this.stacks.delete(projectId);
   }

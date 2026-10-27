@@ -72,7 +72,8 @@ export function setRange(project: Project, stickerId: string, fromEntryId: strin
   if (a < 0 || b < 0) return project;
   const on = cut.slice(Math.min(a, b), Math.max(a, b) + 1).map((e) => e.id);
   const cur = list[i]!;
-  if (on.length === cur.on.length && on.every((id, k) => id === cur.on[k])) return project;
+  const had = new Set(cur.on);
+  if (on.length === had.size && on.every((id) => had.has(id))) return project; // same set: the order of `on` carries no meaning
   const out = list.slice();
   out[i] = { ...cur, on };
   return { ...project, cut, stickers: out };

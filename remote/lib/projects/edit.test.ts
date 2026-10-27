@@ -72,7 +72,7 @@ describe('duplicateEntry', () => {
   });
   it('copies the sticker membership of the source entry', () => {
     const p = duplicateEntry(project(3, { stickers: [sticker('S1', ['F2', 'F3']), sticker('S2', ['F1'])] }), 'F2', 'D1');
-    expect(p.stickers![0]!.on).toEqual(['F2', 'F3', 'D1']);
+    expect(p.stickers![0]!.on).toEqual(['F2', 'D1', 'F3']);
     expect(p.stickers![1]!.on).toEqual(['F1']);
   });
   it('an off entry is copied off', () => {
@@ -167,7 +167,7 @@ describe('deleteEntry', () => {
   it('drops the entry from the stickers; an emptied sticker goes', () => {
     const withStickers = project(3, { stickers: [sticker('S1', ['F1']), sticker('S2', ['F1', 'F3'])] });
     const dup = duplicateEntry(withStickers, 'F1', 'D1');
-    expect(dup.stickers!.map((s) => s.on)).toEqual([['F1', 'D1'], ['F1', 'F3', 'D1']]);
+    expect(dup.stickers!.map((s) => s.on)).toEqual([['F1', 'D1'], ['F1', 'D1', 'F3']]);
     // S1 lives only on the copy
     const r = deleteEntry({ ...dup, stickers: [sticker('S1', ['D1']), sticker('S2', ['F1', 'D1'])] }, 'D1');
     expect(r.project.stickers!.map((s) => s.id)).toEqual(['S2']);

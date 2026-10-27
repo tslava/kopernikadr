@@ -40,9 +40,9 @@ export interface ClearResult {
 
 const errMsg = (e: unknown): string => String((e as { message?: unknown } | null)?.message ?? e);
 
-/** A plain file name: no separators, no dot-dot, so it can only point inside the quarantine directory. */
+/** A plain file name: no separators and not `.`/`..`, so it can only point inside the quarantine directory. */
 export const isPlainName = (name: string): boolean =>
-  name !== '' && name !== '.' && !name.includes('..') && !/[\\/\0]/.test(name);
+  name !== '' && name !== '.' && name !== '..' && !/[\\/\0]/.test(name);
 
 export async function listQuarantine(fs: QuarantineFs): Promise<QuarantineSummary> {
   const entries = (await fs.list())
@@ -56,12 +56,14 @@ export const thumbEntries = (s: QuarantineSummary, limit = THUMB_LIMIT): Quarant
   s.entries.filter((e) => /\.jpe?g$/i.test(e.name)).slice(0, limit);
 
 /**
- * Removes what the directory holds right now. A failure on one file does not stop the others; the caller shows
- * `failed`. Names come from a fresh listing and must be plain, so nothing outside the directory is touched.
+ * Removes the files the parent saw (`listed`) that are still there: a file quarantined after the screen was opened
+ * stays. A failure on one file does not stop the others; the caller shows `failed`. Names come from a fresh listing
+ * and must be plain, so nothing outside the directory is touched.
  */
-export async function clearQuarantine(fs: QuarantineFs): Promise<ClearResult> {
+export async function clearQuarantine(fs: QuarantineFs, listed: readonly string[]): Promise<ClearResult> {
   const result: ClearResult = { removed: 0, failed: [] };
-  for (const e of (await fs.list()).filter((x) => isPlainName(x.name))) {
+  const seen = new Set(listed);
+  for (const e of (await fs.list()).filter((x) => isPlainName(x.name) && seen.has(x.name))) {
     try {
       await fs.remove(e.name);
       result.removed++;
@@ -71,6 +73,23 @@ export async function clearQuarantine(fs: QuarantineFs): Promise<ClearResult> {
   }
   return result;
 }
+
+/** The "are you sure" question for clearing: two random two-digit factors (12..29), the answer is their product. */
+export interface ClearQuestion {
+  a: number;
+  b: number;
+  answer: number;
+}
+
+export function newClearQuestion(rand: () => number = Math.random): ClearQuestion {
+  const pick = () => 12 + Math.floor(rand() * 18);
+  const a = pick();
+  const b = pick();
+  return { a, b, answer: a * b };
+}
+
+/** True only for the exact product, typed as plain digits. */
+export const isClearAnswer = (q: ClearQuestion, typed: string): boolean => /^\d+$/.test(typed.trim()) && Number(typed.trim()) === q.answer;
 
 const at = (name?: string) => ({ directory: Directory.Data, path: name === undefined ? `${ROOT}/${QUARANTINE_DIR}` : `${ROOT}/${QUARANTINE_DIR}/${name}` });
 const isMissing = (e: unknown): boolean => /does not exist|not exist|no such file|not found|ENOENT/i.test(errMsg(e));

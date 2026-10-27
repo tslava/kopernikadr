@@ -94,6 +94,12 @@ describe('setRange', () => {
     expect(setRange(dup, 'S', 'D1', 'F3').stickers![0]!.on).toEqual(['D1', 'F2', 'F3']);
     expect(timeline(dup).map((e) => e.id)).toEqual(['F1', 'D1', 'F2', 'F3', 'F4', 'F5']);
   });
+  it('re-applying the same range after a duplicate is a no-op (same set)', () => {
+    const dup = duplicateEntry(base, 'F2', 'D1');
+    expect(setRange(dup, 'S', 'F1', 'F5')).toBe(dup);
+    const reordered = { ...dup, stickers: [{ ...dup.stickers![0]!, on: ['F1', 'F2', 'F3', 'F4', 'F5', 'D1'] }] };
+    expect(setRange(reordered, 'S', 'F1', 'F5')).toBe(reordered);
+  });
   it('is the same reference for the same range, an unknown sticker or an unknown entry', () => {
     expect(setRange(base, 'S', 'F1', 'F5')).toBe(base);
     expect(setRange(base, 'nope', 'F1', 'F2')).toBe(base);

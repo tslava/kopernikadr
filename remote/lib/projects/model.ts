@@ -229,14 +229,15 @@ function parseCut(raw: unknown): CutEntry[] | undefined {
   const out: CutEntry[] = [];
   for (const e of raw) {
     if (typeof e !== 'object' || e === null || Array.isArray(e)) continue;
-    const c = e as Obj;
+    const { off, ...c } = e as Obj; // unknown keys of a kept entry ride along (a newer app's fields survive our rewrite)
     if (!nonEmpty(c.id) || !nonEmpty(c.frameId) || !finite(c.hold) || seen.has(c.id)) continue;
     seen.add(c.id);
     out.push({
+      ...c,
       id: c.id,
       frameId: c.frameId,
       hold: clamp(Math.round(c.hold), HOLD_MIN, HOLD_MAX),
-      ...(c.off === true ? { off: true as const } : {}),
+      ...(off === true ? { off: true as const } : {}),
     });
   }
   return out;
@@ -253,6 +254,7 @@ function parseStickers(raw: unknown): Sticker[] | undefined {
     if (!Array.isArray(s.on) || seen.has(s.id)) continue;
     seen.add(s.id);
     out.push({
+      ...s,
       id: s.id,
       emoji: s.emoji,
       x: clamp(s.x, STICKER_POS_MIN, STICKER_POS_MAX),

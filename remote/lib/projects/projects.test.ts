@@ -526,6 +526,15 @@ describe('validation: index.json / project.json v1', () => {
       expect(lossy({ ...goodProject(), stickers: [sticker, { ...sticker, id: 's2', emoji: 5 }] })).toEqual(['stickers']);
       expect(lossy({ ...goodProject(), cut: [{ id: 'a', frameId: 'F1', hold: 99 }], stickers: [{ ...sticker, size: 9 }] })).toEqual([]);
     });
+    it('unknown keys on kept entries survive the parse', () => {
+      const p = parseProject({
+        ...goodProject(),
+        cut: [{ id: 'a', frameId: 'F1', hold: 1, off: false, future: { x: 1 } }],
+        stickers: [{ ...sticker, flip: true }],
+      });
+      expect(p.cut).toEqual([{ id: 'a', frameId: 'F1', hold: 1, future: { x: 1 } }]);
+      expect(p.stickers?.[0]).toMatchObject({ ...sticker, flip: true });
+    });
     it('a later duplicate id is dropped', () => {
       const p = parseProject({
         ...goodProject(),

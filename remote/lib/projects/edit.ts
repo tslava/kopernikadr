@@ -44,7 +44,7 @@ export function duplicateEntry(project: Project, entryId: string, newId: string)
     return [...cut.slice(0, i + 1), copy, ...cut.slice(i + 1)];
   });
   if (edited === project || !edited.stickers?.some((s) => s.on.includes(entryId))) return edited;
-  return { ...edited, stickers: edited.stickers.map((s) => (s.on.includes(entryId) ? { ...s, on: [...s.on, newId] } : s)) };
+  return { ...edited, stickers: edited.stickers.map((s) => (s.on.includes(entryId) ? { ...s, on: s.on.flatMap((id) => (id === entryId ? [id, newId] : [id])) } : s)) };
 }
 
 /** Absolute hold, clamped to 1..8. */

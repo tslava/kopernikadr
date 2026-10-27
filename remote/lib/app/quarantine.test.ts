@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearQuarantine, isPlainName, listQuarantine, thumbEntries, type QuarantineEntry, type QuarantineFs } from './quarantine';
+import { clearQuarantine, isClearAnswer, isPlainName, newClearQuestion, listQuarantine, thumbEntries, type QuarantineEntry, type QuarantineFs } from './quarantine';
 
 /** In-memory quarantine directory; the fs only ever sees plain names, so `outside` must stay untouched. */
 function fakeDir(entries: QuarantineEntry[], failOn: string[] = []) {
@@ -15,7 +15,7 @@ function fakeDir(entries: QuarantineEntry[], failOn: string[] = []) {
     },
     async uri(name) { return `file:///q/${name}`; },
   };
-  return { fs, files, outside, removed };
+  return { fs, files, outside, removed, names: () => [...files.keys()] };
 }
 const e = (name: string, size: number, mtime: number): QuarantineEntry => ({ name, size, mtime });
 
@@ -31,7 +31,7 @@ describe('quarantine', () => {
   it('a missing directory is empty', async () => {
     const d = fakeDir([]);
     expect(await listQuarantine(d.fs)).toEqual({ count: 0, bytes: 0, entries: [] });
-    expect(await clearQuarantine(d.fs)).toEqual({ removed: 0, failed: [] });
+    expect(await clearQuarantine(d.fs, d.names())).toEqual({ removed: 0, failed: [] });
   });
 
   it('thumbnails: newest 12 jpg files only', async () => {
@@ -45,7 +45,7 @@ describe('quarantine', () => {
 
   it('clear removes the files in the directory and nothing else', async () => {
     const d = fakeDir([e('a.full.jpg', 1, 1), e('b.full.jpg', 1, 2)]);
-    const r = await clearQuarantine(d.fs);
+    const r = await clearQuarantine(d.fs, d.names());
     expect(r).toEqual({ removed: 2, failed: [] });
     expect(d.files.size).toBe(0);
     expect(d.removed.every((n) => !n.includes('/'))).toBe(true);
@@ -54,18 +54,45 @@ describe('quarantine', () => {
 
   it('path guard: a name that could leave the directory is skipped', async () => {
     expect(isPlainName('a-F1-1.full.jpg')).toBe(true);
-    for (const bad of ['', '.', '..', '../index.json', 'a/b.jpg', 'a\\b.jpg', 'x..y']) expect(isPlainName(bad)).toBe(false);
+    for (const bad of ['', '.', '..', '../index.json', 'a/b.jpg', 'a\\b.jpg']) expect(isPlainName(bad)).toBe(false);
     const d = fakeDir([e('../index.json', 1, 1), e('sub/x.jpg', 1, 2), e('ok.full.jpg', 1, 3)]);
     expect((await listQuarantine(d.fs)).entries.map((x) => x.name)).toEqual(['ok.full.jpg']);
-    expect(await clearQuarantine(d.fs)).toEqual({ removed: 1, failed: [] });
+    expect(await clearQuarantine(d.fs, d.names())).toEqual({ removed: 1, failed: [] });
     expect(d.removed).toEqual(['ok.full.jpg']);
   });
 
   it('a partial failure is reported and the rest is still removed', async () => {
     const d = fakeDir([e('a.full.jpg', 1, 1), e('b.full.jpg', 1, 2), e('c.full.jpg', 1, 3)], ['b.full.jpg']);
-    const r = await clearQuarantine(d.fs);
+    const r = await clearQuarantine(d.fs, d.names());
     expect(r.removed).toBe(2);
     expect(r.failed).toEqual([{ name: 'b.full.jpg', error: 'boom b.full.jpg' }]);
     expect([...d.files.keys()]).toEqual(['b.full.jpg']);
+  });
+
+  it('clear removes only what the parent saw: a file quarantined meanwhile stays', async () => {
+    const d = fakeDir([e('a.full.jpg', 1, 1), e('b.full.jpg', 1, 2)]);
+    const seen = d.names();
+    d.files.set('late.full.jpg', e('late.full.jpg', 1, 3));
+    expect(await clearQuarantine(d.fs, seen)).toEqual({ removed: 2, failed: [] });
+    expect([...d.files.keys()]).toEqual(['late.full.jpg']);
+  });
+
+  it('a name with dots inside is a plain name and can be cleared', async () => {
+    expect(isPlainName('a..b.jpg')).toBe(true);
+  });
+
+  it('the clear question: product of two factors in 12..29, only the exact digits pass', () => {
+    for (const r of [0, 0.5, 0.999999]) {
+      const q = newClearQuestion(() => r);
+      expect(q.a).toBeGreaterThanOrEqual(12);
+      expect(q.a).toBeLessThanOrEqual(29);
+      expect(q.b).toBeGreaterThanOrEqual(12);
+      expect(q.b).toBeLessThanOrEqual(29);
+      expect(q.answer).toBe(q.a * q.b);
+    }
+    const q = { a: 23, b: 17, answer: 391 };
+    expect(isClearAnswer(q, '391')).toBe(true);
+    expect(isClearAnswer(q, ' 391 ')).toBe(true);
+    for (const bad of ['', '390', '39', '3910', '391x', '0x187', '391.0', '-391']) expect(isClearAnswer(q, bad)).toBe(false);
   });
 });

@@ -7,7 +7,7 @@
  */
 import { changeHold, deleteEntry, duplicateEntry, endHere, moveEntry, setOff, startHere } from '../projects/edit';
 import type { FrameDeletion } from '../projects/frameDeletion';
-import { EditHistory, restoreSnapshot } from '../projects/history';
+import { EditHistory, restoreSnapshot, type EditSnapshot } from '../projects/history';
 import { HOLD_MAX, HOLD_MIN, type Project } from '../projects/model';
 import type { ProjectStore } from '../projects/store';
 import { timeline } from '../projects/timeline';
@@ -97,15 +97,16 @@ export class EditController {
   async delete(projectId: string, entryId: string): Promise<'entry' | 'frame' | 'none'> {
     if (this.d.exporting.get()) return 'none';
     let hideFrameId: string | null = null;
-    let changed = false;
+    const box: { change?: { before: Project; after: Project } } = {};
     await this.d.store.updateProject(projectId, (p) => {
       const r = deleteEntry(p, entryId);
       hideFrameId = r.hideFrameId;
       if (r.project === p) return p;
-      this.history.record(projectId, p, r.project);
-      changed = true;
+      box.change = { before: p, after: r.project };
       return r.project;
     });
+    const changed = box.change !== undefined;
+    if (box.change) this.history.record(projectId, box.change.before, box.change.after); // only once the write is committed
     if (hideFrameId !== null) return (await this.d.frameDeletion.hide(projectId, hideFrameId)) ? 'frame' : 'none';
     return changed ? 'entry' : 'none';
   }
@@ -113,26 +114,29 @@ export class EditController {
   /** Cofnij: restores the previous `{cut, stickers}` against the current project. */
   async undo(projectId: string): Promise<boolean> {
     if (this.d.exporting.get()) return false;
-    let done = false;
+    const box: { used?: EditSnapshot } = {};
     await this.d.store.updateProject(projectId, (p) => {
-      const snap = this.history.pop(projectId);
+      const snap = this.history.peek(projectId);
       if (!snap) return p;
-      done = true;
+      box.used = snap;
       return restoreSnapshot(p, snap);
     });
-    return done;
+    if (!box.used) return false;
+    this.history.discard(projectId, box.used); // only once the write is committed
+    return true;
   }
 
   private async edit(projectId: string, fn: (p: Project) => Project): Promise<boolean> {
     if (this.d.exporting.get()) return false;
-    let changed = false;
+    const box: { change?: { before: Project; after: Project } } = {};
     await this.d.store.updateProject(projectId, (p) => {
       const next = fn(p);
       if (next === p) return p;
-      this.history.record(projectId, p, next);
-      changed = true;
+      box.change = { before: p, after: next };
       return next;
     });
-    return changed;
+    if (!box.change) return false;
+    this.history.record(projectId, box.change.before, box.change.after); // only once the write is committed
+    return true;
   }
 }
