@@ -6,6 +6,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.withLock
 import pl.slava.kopernikadr.camera.core.Ulid
 import pl.slava.kopernikadr.camera.image.StillPipeline
@@ -45,6 +46,17 @@ class DerivedFiles(
     /** Running generations by cache file name; the future yields the file, or null if `full` vanished. */
     private val inFlight = ConcurrentHashMap<String, CompletableFuture<File?>>()
 
+    /**
+     * Striped per-frame locks: a generation holds the read side, a reclaim ([withFrameExclusive])
+     * the write side, so they never overlap for one frame.
+     */
+    private val frameLocks = Array(STRIPES) { ReentrantReadWriteLock() }
+
+    private fun frameLock(frameId: String) = frameLocks[(frameId.hashCode() and Int.MAX_VALUE) % STRIPES]
+
+    /** Runs [block] while no generation of [frameId]'s caches runs, and none starts. */
+    fun <T> withFrameExclusive(frameId: String, block: () -> T): T = frameLock(frameId).writeLock().withLock(block)
+
     private val slots = ReentrantLock()
     private val slotFreed = slots.newCondition()
     private var busy = 0 // guarded by [slots]
@@ -56,6 +68,7 @@ class DerivedFiles(
      * @throws FrameUnavailableException if the generation failed twice.
      */
     fun ensure(frameId: String, variant: FrameVariant): File? {
+        if (Ulid.isValid(frameId) && spool.isReclaimed(frameId)) return null
         val full = fullOf(frameId) ?: return null
         if (variant == FrameVariant.FULL) return full
         val target = spool.file(frameId, variant)
@@ -74,7 +87,7 @@ class DerivedFiles(
                     return@repeat
                 }
             }
-            val result = runCatching { withSlot(urgent = true) { generate(full, target, variant) } }
+            val result = runCatching { withSlot(urgent = true) { generate(frameId, full, target, variant) } }
             // Unregister before completing: a woken waiter that retries must not find this future again.
             inFlight.remove(target.name, mine)
             result.onSuccess {
@@ -95,6 +108,7 @@ class DerivedFiles(
      */
     fun prefetch(frameId: String, variant: FrameVariant) {
         if (variant == FrameVariant.FULL) return
+        if (Ulid.isValid(frameId) && spool.isReclaimed(frameId)) return
         val full = fullOf(frameId) ?: return
         val target = spool.file(frameId, variant)
         repeat(ATTEMPTS) { attempt ->
@@ -104,7 +118,7 @@ class DerivedFiles(
                     // Claim the file only now: a request never waits for a generation that has no slot.
                     val mine = CompletableFuture<File?>()
                     if (target.isFile || inFlight.putIfAbsent(target.name, mine) != null) return
-                    val result = runCatching { generate(full, target, variant) }
+                    val result = runCatching { generate(frameId, full, target, variant) }
                     inFlight.remove(target.name, mine) // before completing, as in [ensure]
                     result.onSuccess {
                         mine.complete(it)
@@ -125,15 +139,24 @@ class DerivedFiles(
     }
 
     /** Generates [target] from [full] unless it exists; null if `full` vanished (reclaimed). */
-    private fun generate(full: File, target: File, variant: FrameVariant): File? {
-        if (target.isFile) return target
-        val jpeg = try {
-            full.readBytes()
-        } catch (e: FileNotFoundException) {
-            return null
+    private fun generate(frameId: String, full: File, target: File, variant: FrameVariant): File? {
+        // The read lock keeps a reclaim of this frame out; the mark is checked under it, so a
+        // generation that starts after the mark writes nothing.
+        val lock = frameLock(frameId).readLock()
+        lock.lock()
+        try {
+            if (target.isFile) return target
+            if (spool.isReclaimed(frameId)) return null
+            val jpeg = try {
+                full.readBytes()
+            } catch (e: FileNotFoundException) {
+                return null
+            }
+            val size = if (variant == FrameVariant.PLAY) StillPipeline.PLAY else StillPipeline.THUMB
+            return files.writeAtomic(spool.dir, target.name, pipeline.derive(jpeg, size), durable = false)
+        } finally {
+            lock.unlock()
         }
-        val size = if (variant == FrameVariant.PLAY) StillPipeline.PLAY else StillPipeline.THUMB
-        return files.writeAtomic(spool.dir, target.name, pipeline.derive(jpeg, size), durable = false)
     }
 
     /** Runs [block] holding one of [maxParallel] slots; [urgent] callers are served first. */
@@ -160,6 +183,7 @@ class DerivedFiles(
     private companion object {
         /** A failed generation is retried once. */
         const val ATTEMPTS = 2
+        const val STRIPES = 64
     }
 }
 

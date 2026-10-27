@@ -14,7 +14,8 @@ import pl.slava.kopernikadr.camera.protocol.ProtocolError
  *
  * 1. `args.rotation` ≠ the controls' project rotation → `GEOMETRY_MISMATCH`;
  * 2. the camera is not bound and open → `CAMERA_NOT_READY` (retryable);
- * 3. less than [minFreeBytes] free → `STORAGE_LOW`;
+ * 3. free − [minFreeBytes] < 2 × the expected `full` size → [reclaim] acked frames (oldest first)
+ *    and look again; still short → `STORAGE_LOW`;
  * 4. a lock is settling → wait up to [settleTimeoutMs] for `settling == false`, else
  *    `CAMERA_NOT_READY` (retryable).
  */
@@ -25,6 +26,10 @@ class CaptureAdmission(
     private val freeBytes: () -> Long,
     private val settleTimeoutMs: Long = SETTLE_TIMEOUT_MS,
     private val minFreeBytes: Long = MIN_FREE_BYTES,
+    /** Expected size of the next `full` (the spool's recent maximum); 0 = just the reserve. */
+    private val expectedFullBytes: () -> Long = { 0L },
+    /** Frees space by reclaiming acked frames until at least `needFreeBytes` are free (or none is left). */
+    private val reclaim: suspend (needFreeBytes: Long) -> Unit = {},
 ) {
     suspend fun check(args: CaptureArgs): ProtocolError? {
         val c = currentControls()
@@ -35,9 +40,14 @@ class CaptureAdmission(
             )
         }
         if (!cameraReady()) return ProtocolError(ErrorCodes.CAMERA_NOT_READY, "camera is not open")
-        val free = freeBytes()
-        if (free < minFreeBytes) {
-            return ProtocolError(ErrorCodes.STORAGE_LOW, "only ${free / 1_000_000} MB free (need ${minFreeBytes / 1_000_000} MB)")
+        val need = minFreeBytes + 2 * expectedFullBytes()
+        var free = freeBytes()
+        if (free < need) {
+            reclaim(need)
+            free = freeBytes()
+        }
+        if (free < need) {
+            return ProtocolError(ErrorCodes.STORAGE_LOW, "only ${free / 1_000_000} MB free (need ${need / 1_000_000} MB)")
         }
         if (c.settling) {
             val settled = withTimeoutOrNull(settleTimeoutMs) { controls.first { !it.settling } }

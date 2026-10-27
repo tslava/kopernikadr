@@ -20,6 +20,11 @@ step by tests on both sides:
 3. `packages/remote-core` (the JS client: `protocol.js`, `connection.js`, `preview.js`).
 
 **Changelog.**
+- **v1, 2026-10-27 (no wire change)**: documentation of the camera's new behaviour only. The
+  **Today** notes (§3, §6 `capture`/`getOperation`/`getStatus`, §9, §10) now describe spool recovery
+  at camera start (a stale `pending` becomes `done` or `failed(INTERRUPTED)`; a missing committed
+  file becomes `failed(INTERNAL)`; `orphanCount` and `integrityErrors` are measured) and the
+  reclaim of acked frames under low space. No field, message, code or fixture changed.
 - **v1 (2026-10-27)**, from rev 3.1 (v0 provisional): frozen after the stage 0b probes. Only
   documentation, fixtures and tests changed; no wire behaviour changed.
   - Added: the focus `failed` decision (§6: there is no `failed` focus mode); flat `setControl`
@@ -90,7 +95,7 @@ step by tests on both sides:
 | `GET /info` | `{cameraId, name, bootId, protocolVersions:{min,max}}`. No session needed. |
 | `GET /ws/control` | WebSocket, UTF-8 JSON (§5). |
 | `GET /ws/preview?session=<sessionId>` | WebSocket, pull-based preview (§7). Current session only; otherwise HTTP 409. |
-| `GET /frames/{frameId}/{variant}.jpg` | `variant` ∈ `full`, `play`, `thumb`. `Content-Length` is always set. `full`: 404 if the frame is unknown (or its file is gone). `play`/`thumb` are generated on demand if missing (they may take ~1 s); 404 if `full` is gone. A bad `frameId` (not a ULID) or variant → 404. No session needed. Acked frames are still served (**Today**, §9). |
+| `GET /frames/{frameId}/{variant}.jpg` | `variant` ∈ `full`, `play`, `thumb`. `Content-Length` is always set. `full`: 404 if the frame is unknown (or its file is gone). `play`/`thumb` are generated on demand if missing (they may take ~1 s); 404 if `full` is gone. A bad `frameId` (not a ULID) or variant → 404. No session needed. Acked frames are still served until the camera reclaims them under low space (**Today**, §9); after that every variant is 404. |
 
 - **`503` + `Retry-After`.** If a `play`/`thumb` cannot be generated (the camera retries once, then
   gives up), `GET /frames/…` answers `503 Service Unavailable` with `Retry-After: 1`. The remote
@@ -203,7 +208,8 @@ Rules:
   An interrupted operation is NEVER re-executed.
 - Another capture in flight → `CAPTURE_IN_PROGRESS`. The camera not open → `CAMERA_NOT_READY`.
   Locks still settling: the camera waits up to 1.5 s for them to settle, then → `CAMERA_NOT_READY`.
-  Less than 500 MB free on the app's volume → `STORAGE_LOW`.
+  If free space minus a 500 MB reserve is less than twice the expected `full` size, the camera first
+  reclaims acked frames (§9) and looks again; still short → `STORAGE_LOW` (**Today**).
 - Images are upright pixels in the project orientation, 4:3 landscape, with EXIF orientation
   normal. `full`, `play` and `thumb` show the same crop.
 
@@ -219,11 +225,19 @@ Rules:
 - `failed` and `unknown` mean no frame exists for that request. The remote MUST NOT retry
   automatically. A retry after `failed` MUST use a new `reqId`: sending the old one again replays
   the recorded error.
-- **Today, a crash leaves `pending`**: a capture row whose process died (the camera app was
-  killed mid-capture) stays `pending`, because nothing sweeps it at start. It becomes
-  `failed(INTERRUPTED)` only when the same `(clientId, reqId)` is sent to `capture` again. A
-  remote that sees `pending` together with a changed `bootId` therefore cannot rely on it ending
-  and should apply its own limit.
+- **Today, recovery at process start**: the camera settles its records before it accepts any
+  command, so `getOperation` never answers a stale `pending` for a dead process:
+  - a `pending` capture whose complete `full` file survived (a crash after the file was written,
+    before the commit) becomes `done`: the photo is kept;
+  - any other `pending` capture becomes `{state:"failed", error:{code:"INTERRUPTED"}}`; it is never
+    re-executed;
+  - a committed, unacked frame whose `full` file has gone missing is marked `lost` in the camera's
+    records. It leaves `listFrames`, and `getOperation` answers `{state:"failed",
+    error:{code:"INTERNAL", message:"the frame's file is lost"}}` (no new code). It counts in
+    `integrityErrors` (`getStatus`).
+  `pending` therefore only means a capture running in the current camera process. A remote that
+  sees `pending` together with a changed `bootId` may treat it as not finishing (it was a previous
+  process's), and should still apply its own limit.
 
 ### `listFrames`
 - **Args**: `{afterSeq?: int, limit?: int}`. `afterSeq` is exclusive (`seq > afterSeq`; absent =
@@ -252,8 +266,11 @@ Data: `Status`:
 ```
 Field notes (**Today**): `freeBytes` is the free space of the app's data volume; `spoolBytes` is
 the total size of the `full` files of all committed frames (acked included, every client);
-`unackedCount` counts unacked committed frames of **all** clients; `orphanCount` and
-`integrityErrors` are always `0` (not measured yet); `charging` is true when plugged in.
+`unackedCount` counts unacked committed frames of **all** clients; `orphanCount` counts unacked
+committed frames of other remotes (every client except the one in the current session, e.g. the
+browser remote-lite's movies); `integrityErrors` counts `lost` frames plus `full` files the camera
+quarantined at start (a `full` file with no record is moved aside, never deleted); `charging` is
+true when plugged in.
 
 A `status` event with the same `Status` data is pushed every 10 s to the current session's control
 socket. It is periodic only (not sent on change); `getStatus` reads it on demand.
@@ -384,15 +401,22 @@ compatibility promise) may be added later without a version bump (§11).
 
 ## 9. Retention (camera)
 
-**Today: the camera deletes nothing.** The frame and operation records and the `full` files are
-kept forever; the only files ever removed are those of a capture that failed before its commit
-(nothing was listed or acked for them). Consequences:
-- `ack` (own `clientId` only) is the only state change of a committed frame: it sets "acked", the
-  frame leaves `listFrames`, and its `full`/`play`/`thumb` stay on disk and stay servable.
-- There is no reclaim, no 7-day expiry, no free-space eviction, and no `clearAcked` (§6). The
-  only protection of the disk is the `STORAGE_LOW` floor (500 MB free) on `capture`.
-- Records stay valid for ever, so `getOperation`, dedup and `seq` never lose a frame.
-- `orphanCount` is always `0`; frames of a client that never returns are simply kept.
+**Today:** the camera deletes a frame's files only in two cases, both for **acked** frames, and
+keeps every record for ever. The frame and operation records stay, so `getOperation`, dedup and
+`seq` never lose a frame. Consequences:
+- `ack` (own `clientId` only) marks a frame as acked: it leaves `listFrames`, and its
+  `full`/`play`/`thumb` stay on disk and stay servable until reclaimed.
+- **Reclaim under low space.** Only when a `capture` finds too little free space (§6) the camera
+  reclaims acked frames, oldest ack first, until there is enough, or no acked frame is left
+  (then `STORAGE_LOW`). There is no timer and no 7-day expiry, and no `clearAcked` (§6). The
+  camera commits the record of the reclaim before it deletes the files. After a reclaim, `full`,
+  `play` and `thumb` of that frame are `404`.
+- **Recovery** (§6 `getOperation`) after a crash finishes an interrupted reclaim (record set, files
+  still there) and deletes leftover temporary files and cache files without a record. A `full`
+  file without a record is moved to a `quarantine/` folder, never deleted. Files it does not
+  recognise are never touched.
+- Unacked frames are never deleted, whichever client they belong to. A client that never returns
+  (or never acks, like remote-lite) keeps its frames; `orphanCount` reports them (§6 `getStatus`).
 
 Rules that hold for any later retention policy (they bind the camera, v1 or later):
 - Unacked frames MUST NOT be deleted for any reason.
@@ -413,7 +437,7 @@ Rules that hold for any later retention policy (they bind the camera, v1 or late
 | `CAPTURE_FAILED` | no | the camera failed; nothing committed |
 | `INTERRUPTED` | no | (in `getOperation`) the camera stopped mid-capture; nothing committed |
 | `GEOMETRY_MISMATCH` | no | the capture rotation ≠ the camera's current rotation |
-| `STORAGE_LOW` | no | less than 500 MB free on the app's volume (nothing is reclaimed, §9) |
+| `STORAGE_LOW` | no | free space on the app's volume minus a 500 MB reserve is less than twice the expected `full` size, and no acked frame is left to reclaim (§9) |
 | `REQ_ID_REUSED` | no | same reqId, different args |
 | `UNSUPPORTED_CONTROL`, `INVALID_VALUE` | no | unknown or unsupported control; bad value or range |
 | `INTERNAL` | yes | unexpected; details in `message` |

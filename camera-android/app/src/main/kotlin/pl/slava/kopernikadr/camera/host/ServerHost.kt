@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import pl.slava.kopernikadr.camera.App
 import pl.slava.kopernikadr.camera.BuildConfig
 import pl.slava.kopernikadr.camera.camera.CharacteristicsReader
@@ -51,6 +52,7 @@ import pl.slava.kopernikadr.camera.spool.DurableFiles
 import pl.slava.kopernikadr.camera.spool.Spool
 import pl.slava.kopernikadr.camera.spool.SpoolCaptureService
 import pl.slava.kopernikadr.camera.spool.SpoolFrameStore
+import pl.slava.kopernikadr.camera.spool.SpoolReclaimer
 import pl.slava.kopernikadr.camera.spool.AndroidDirSync
 
 /** What the status screen shows about the server. */
@@ -86,6 +88,7 @@ class ServerHost(
     // Confined to [serial].
     private var stack: Stack? = null
     private var server: AdvertisedServer? = null
+    @Volatile
     private var sessions: SessionManager? = null
     private var poll: Job? = null
 
@@ -163,13 +166,23 @@ class ServerHost(
         val cameraId = IdentityStore(app.filesDir, files, log = { Log.i(TAG, it) }).cameraId()
         val spool = Spool.open(File(app.filesDir, "spool"))
         val codec = AndroidImageCodec()
+        // ARCHITECTURE §4.6: settle what a dead process left, before the server can answer anything.
+        try {
+            val report = spool.recover { jpeg -> runCatching { codec.decode(jpeg, 8).release() }.isSuccess }
+            Log.i(TAG, "spool recovery: $report")
+        } catch (e: Throwable) {
+            Log.e(TAG, "spool recovery failed (the spool is left as it is)", e)
+        }
         val pipeline = StillPipeline(codec)
         val derived = DerivedFiles(spool, pipeline, files, log = { Log.w(CAP_TAG, it) })
+        val reclaimer = SpoolReclaimer(spool, derived, ::freeBytes, log = { Log.i(CAP_TAG, it) })
         val admission = CaptureAdmission(
             controls = controls.controls,
             currentControls = { controls.controls.value },
             cameraReady = { camera.status.value.ready },
             freeBytes = ::freeBytes,
+            expectedFullBytes = spool::expectedFullBytes,
+            reclaim = { need -> withContext(Dispatchers.IO) { reclaimer.reclaimUntil(need) } },
         )
         val capture = SpoolCaptureService(
             camera = camera,
@@ -214,8 +227,8 @@ class ServerHost(
             freeBytes = freeBytes(),
             spoolBytes = stats.fullBytes,
             unackedCount = stats.unackedCount,
-            orphanCount = 0,
-            integrityErrors = 0,
+            orphanCount = sessions?.current()?.clientId?.let(spool::orphanCount) ?: 0,
+            integrityErrors = spool.integrityErrors(),
             thermal = ThermalMapping.fromAndroid(thermal),
         )
     }

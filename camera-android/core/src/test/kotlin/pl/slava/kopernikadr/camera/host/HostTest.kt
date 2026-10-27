@@ -83,6 +83,47 @@ class HostTest {
     }
 
     @Test
+    fun `free space below the reserve plus twice the expected full reclaims, then rechecks`() = runTest {
+        free = 500_000_000 + 2 * 3_000_000 - 1
+        val asked = mutableListOf<Long>()
+        val a = CaptureAdmission(
+            controls, { controls.value }, { ready }, { free }, expectedFullBytes = { 3_000_000 },
+            reclaim = { need -> asked += need; free += 3_000_000 },
+        )
+        assertNull(a.check(args()))
+        assertEquals(listOf(506_000_000L), asked)
+    }
+
+    @Test
+    fun `enough space does not reclaim anything`() = runTest {
+        free = 600_000_000
+        val a = CaptureAdmission(
+            controls, { controls.value }, { ready }, { free }, expectedFullBytes = { 3_000_000 },
+            reclaim = { error("must not reclaim") },
+        )
+        assertNull(a.check(args()))
+    }
+
+    @Test
+    fun `still short after reclaim is STORAGE_LOW`() = runTest {
+        free = 100_000_000
+        var calls = 0
+        val a = CaptureAdmission(
+            controls, { controls.value }, { ready }, { free }, expectedFullBytes = { 3_000_000 },
+            reclaim = { calls++ },
+        )
+        assertEquals(ErrorCodes.STORAGE_LOW, a.check(args())!!.code)
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun `a rejected geometry never reclaims`() = runTest {
+        free = 0
+        val a = CaptureAdmission(controls, { controls.value }, { ready }, { free }, reclaim = { error("no") })
+        assertEquals(ErrorCodes.GEOMETRY_MISMATCH, a.check(args(rotation = 180))!!.code)
+    }
+
+    @Test
     fun `settling waits for the locks to settle`() = runTest {
         controls.value = FakeControls.DEFAULT.copy(settling = true)
         val r = async { admission().check(args()) }
