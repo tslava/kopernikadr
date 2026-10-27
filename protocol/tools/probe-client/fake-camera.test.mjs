@@ -104,6 +104,19 @@ const sw = async (cam, path) => (await get(cam, `/fake/${path}`)).json();
 const full = (cam, id) => get(cam, `/frames/${id}/full.jpg`);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
+test('switch state: frames carry projectId and acked, plus bootId and cameraId', () => withCamera(async (cam) => {
+  const c = await control(cam);
+  const a = (await capture(c, randomUUID(), 'pa')).data.frameId;
+  const b = (await capture(c, randomUUID(), 'pb')).data.frameId;
+  await c.req('ack', { frameIds: [a] });
+  const st = await sw(cam, 'state');
+  assert.equal(st.bootId, c.hello.data.bootId);
+  assert.equal(st.cameraId, c.hello.data.cameraId);
+  const by = Object.fromEntries(st.frames.map((f) => [f.frameId, f]));
+  assert.deepEqual([by[a].projectId, by[a].acked, by[b].projectId, by[b].acked], ['pa', true, 'pb', false]);
+  c.ws.close();
+}));
+
 test('switch restart: new bootId, sockets dropped, session gone, frames and cameraId kept', () => withCamera(async (cam) => {
   const c = await control(cam);
   const { bootId, cameraId } = c.hello.data;

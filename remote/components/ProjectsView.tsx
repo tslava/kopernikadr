@@ -95,7 +95,7 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
         {cards.map((c) => {
           const cover = c.coverFrameId ? frameUrl?.(c.id, c.coverFrameId, 'thumb') : null;
           return (
-            <div className="movie-wrap" key={c.id}>
+            <div className="movie-wrap" key={c.id} data-testid="movie-card" data-project-id={c.id}>
               <button type="button" className="card movie" onClick={() => open(c)}>
                 <span className="cover">
                   {cover ? (

@@ -159,7 +159,7 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
       <div className="cap-bar">
         <span className="counter" role="status" aria-label={t('capture.frames', { n: count })}>
           <Icon name="film" />
-          <b>{count}</b>
+          <b data-testid="frame-count">{count}</b>
         </span>
         {pending > 0 && (
           <span className="pending" aria-label={t('capture.pending')} title={t('capture.pending')}>

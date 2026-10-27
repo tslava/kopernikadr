@@ -101,6 +101,7 @@ export function ConnectScreen({ t, client, onConnected }: { t: Translate; client
           {t('connect.address')}
           <input
             type="text"
+            data-testid="connect-address"
             inputMode="url"
             autoCapitalize="none"
             autoCorrect="off"
