@@ -2,6 +2,7 @@ package pl.slava.kopernikadr.remote
 
 import android.os.Bundle
 import com.getcapacitor.BridgeActivity
+import pl.slava.kopernikadr.remote.native.KopernikadrNativePlugin
 import pl.slava.kopernikadr.remote.nsd.NsdPlugin
 
 // Kotlin (not the template's Java): the in-app plugin lives in package `...remote.native`, and
@@ -9,6 +10,7 @@ import pl.slava.kopernikadr.remote.nsd.NsdPlugin
 // super.onCreate.
 class MainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        registerPlugin(KopernikadrNativePlugin::class.java)
         registerPlugin(NsdPlugin::class.java)
         super.onCreate(savedInstanceState)
     }
