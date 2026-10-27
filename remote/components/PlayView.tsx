@@ -5,8 +5,10 @@ import type { OverlayStack } from '@/lib/app/overlays';
 import type { Translate } from '@/lib/i18n';
 import type { Project } from '@/lib/projects/model';
 import { createFrameSource, PLAY_HEIGHT, PLAY_WIDTH, type FrameUrl } from '@/lib/play/frameSource';
-import { createPlayer, type Clock, type Player, type PlayerStatus } from '@/lib/play/player';
+import { createPlayer, timelineOf, type Clock, type Player, type PlayerStatus } from '@/lib/play/player';
 import { createRing } from '@/lib/play/ring';
+import { drawFrame, drawStickers } from '@/lib/render/compose';
+import { bucketFor, SpriteCache } from '@/lib/render/sprites';
 import { createNativeWriter } from '@/lib/export/nativeWriter';
 import { isActive, type CameraLink } from '@/lib/export/projectExport';
 import { sharedExportFor } from '@/lib/export/sharedExport';
@@ -52,10 +54,42 @@ const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown:
 
 export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, link, onFps, ref }: PlayViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const stickerCanvas = useRef<HTMLCanvasElement>(null);
+  const sprites = useRef<SpriteCache | null>(null);
   const player = useRef<Player | null>(null);
   const [status, setStatus] = useState<PlayerStatus>(IDLE);
 
   useImperativeHandle(ref, () => ({ release: () => player.current?.release() }), []);
+
+  // The sticker canvas is its own layer: it is redrawn on every shown entry or sticker change
+  // without the frame bitmap (the ring closes that right after drawing).
+  const stickersRef = useRef(project?.stickers ?? []);
+  stickersRef.current = project?.stickers ?? [];
+  const shownRef = useRef<string | null>(null);
+  const paintStickers = useRef((_entryId: string | null): void => {});
+  paintStickers.current = (entryId) => {
+    shownRef.current = entryId;
+    const el = stickerCanvas.current;
+    const ctx = el?.getContext('2d');
+    if (!el || !ctx) return;
+    ctx.clearRect(0, 0, el.width, el.height);
+    const cache = (sprites.current ??= new SpriteCache());
+    const list = stickersRef.current.filter((st) => entryId !== null && st.on.includes(entryId));
+    // rasterize at the size the sticker is shown at (device pixels)
+    const scale = (el.clientWidth * window.devicePixelRatio) / PLAY_WIDTH;
+    const bucket = bucketFor(Math.max(0, ...list.map((st) => st.size * PLAY_WIDTH * scale)));
+    for (const st of list) {
+      if (cache.get(st.emoji, bucket)) continue;
+      cache.load(st.emoji, bucket).then(
+        () => {
+          if (shownRef.current === entryId) paintStickers.current(entryId);
+        },
+        () => {}, // unknown emoji: skipped
+      );
+    }
+    drawStickers(ctx, stickersRef.current, entryId, (hex) => cache.get(hex, bucket));
+  };
+  useEffect(() => () => sprites.current?.clear(), []);
 
   // Export (Task 18): the controller reads the latest project through a ref.
   const projectRef = useRef(project);
@@ -101,7 +135,11 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
       clock: browserClock,
       fps: 8,
       loop: false,
-      draw: (bmp) => canvas.current?.getContext('2d')?.drawImage(bmp, 0, 0, PLAY_WIDTH, PLAY_HEIGHT),
+      draw: (bmp, entryId) => {
+        const ctx = canvas.current?.getContext('2d');
+        if (ctx) drawFrame(ctx, bmp);
+        paintStickers.current(entryId);
+      },
       onChange: setStatus,
     });
     player.current = p;
@@ -120,8 +158,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
   useEffect(() => {
     if (exportBusy) return; // the ring is released for the export: do not reload it meanwhile
     player.current?.setFps(project?.fps ?? 8);
-    player.current?.setFrames(project?.frames ?? []);
+    const t = timelineOf({ frames: project?.frames ?? [], cut: project?.cut });
+    player.current?.setTimeline(t.items, t.downloading);
   }, [project, frameUrl, id, exportBusy]);
+  useEffect(() => paintStickers.current(shownRef.current), [project?.stickers]);
 
   return (
     <main className="screen play" data-project={id}>
@@ -131,7 +171,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
         </button>
         <h1>{t('play.title')}</h1>
       </header>
-      <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
+      <div className="play-stage">
+        <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
+        <canvas ref={stickerCanvas} className="play-stickers" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
+      </div>
       <div className="play-controls">
         <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={() => player.current?.seekToStart()} disabled={status.playable === 0}>
           <Icon name="restart" />

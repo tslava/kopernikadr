@@ -414,20 +414,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/play/player.test.ts`
 - Modify: `remote/components/PlayView.tsx`
 
-- [ ] write tests first for `compose()` with a recording fake context:
+- [x] write tests first for `compose()` with a recording fake context:
   - the frame is drawn letterboxed into the canvas;
   - only the stickers whose `on` contains the entry id are drawn, in array order;
   - the transform matches the geometry;
   - a missing sprite is skipped.
-- [ ] write the player tests:
+- [x] write the player tests:
   - `setTimeline` with holds: an entry stays `hold` ticks;
   - duplicates share one ring bitmap;
   - `shown` is the entryId;
   - loop/no-loop/seek still pass (the existing tests are ported);
   - `seekTo(entryId)` pauses and shows that entry, including a duplicate entry (the right id is shown);
   - a frame that becomes local mid-play is picked up.
-- [ ] implement `compose.ts` (two passes), the player timeline API + `seekTo`, and the two stacked stage canvases in PlayView (frame by the player, stickers by `drawStickers`).
-- [ ] run tests — must pass before Task 6.
+- [x] implement `compose.ts` (two passes), the player timeline API + `seekTo`, and the two stacked stage canvases in PlayView (frame by the player, stickers by `drawStickers`).
+- [x] run tests — must pass before Task 6.
+- [x] device check on emulator-5584 (Film 1, 9 frames): the stage shows the frame, play runs once, loop toggle, speed slider and Back work by touch, `scrollHeight == innerHeight` (728). Stickers cannot be placed yet (UI is Task 9), so the sticker canvas was exercised by unit tests only.
 
 ### Task 6: Export on the timeline with stickers
 

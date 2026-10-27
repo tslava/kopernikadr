@@ -18,6 +18,17 @@ export function timeline(project: Pick<Project, 'frames' | 'cut'>): CutEntry[] {
   return out;
 }
 
+/** Frames the movie needs that are still on their way: on-entries' frames, visible, not local, not unavailable. */
+export function downloadingCount(project: Pick<Project, 'frames' | 'cut'>): number {
+  const byId = new Map<string, FrameEntry>(project.frames.map((f) => [f.frameId, f]));
+  const wait = new Set<string>();
+  for (const e of timeline(project)) {
+    const f = byId.get(e.frameId);
+    if (!e.off && f && f.hiddenUntil === null && f.state !== 'local' && !f.unavailable) wait.add(f.frameId);
+  }
+  return wait.size;
+}
+
 /** The timeline entries that play and export: on, local, visible and available. */
 export function playableItems(project: Pick<Project, 'frames' | 'cut'>): CutEntry[] {
   const byId = new Map<string, FrameEntry>(project.frames.map((f) => [f.frameId, f]));

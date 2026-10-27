@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CutEntry, FrameEntry } from './model';
-import { playableItems, timeline } from './timeline';
+import { downloadingCount, playableItems, timeline } from './timeline';
 
 const frame = (n: number, over: Partial<FrameEntry> = {}): FrameEntry => ({
   frameId: `F${n}`,
@@ -55,5 +55,20 @@ describe('playableItems', () => {
   });
   it('without a cut it is every playable frame in seq order', () => {
     expect(playableItems({ frames: [frame(2), frame(1, { state: 'pending' })] }).map((e) => e.id)).toEqual(['F2']);
+  });
+});
+
+describe('downloadingCount', () => {
+  it('counts distinct visible, available, not-local frames of on-entries', () => {
+    const frames = [
+      frame(1),
+      frame(2, { state: 'pending' }),
+      frame(3, { state: 'pending' }),
+      frame(4, { state: 'pending', hiddenUntil: '2030-01-01T00:00:00Z' }),
+      frame(5, { state: 'pending', unavailable: { reason: 'r', since: 's' } }),
+    ];
+    const cut = [entry('F1', 'F1'), entry('F2', 'F2'), entry('D2', 'F2'), entry('F3', 'F3', { off: true }), entry('F4', 'F4'), entry('F5', 'F5')];
+    expect(downloadingCount({ frames, cut })).toBe(1);
+    expect(downloadingCount({ frames: [frame(1, { state: 'pending' }), frame(2, { state: 'pending' })] })).toBe(2);
   });
 });

@@ -119,12 +119,14 @@ button { min-height: 64px; }
 .manual input { min-height: 64px; font-size: 24px; padding: 0 16px; }
 .manual .error { flex-basis: 100%; margin: 0; color: #c93c3c; font-size: 22px; }
 
-.play-canvas { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 16px; }
+.play-stage { position: relative; width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; }
+.play-stage > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.play-stickers { pointer-events: none; }
 .play-controls { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
 /* Landscape tablet: the movie takes the full height on the left, the buttons sit on the right (like capture). */
 .play { display: grid; height: 100dvh; overflow: hidden; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px 32px; }
 .play > .bar { grid-column: 1 / -1; }
-.play > .play-canvas { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; max-height: none; justify-self: center; }
+.play > .play-stage { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; max-height: none; justify-self: center; }
 .play > .play-controls { grid-column: 2; grid-row: 2; flex-direction: column; justify-content: center; align-items: center; margin: 0; }
 .play > .note { grid-column: 2; grid-row: 3; max-width: 260px; }
 
