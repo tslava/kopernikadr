@@ -438,7 +438,7 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/lib/export/mediabunnyExport.ts` (only if a compose hook is needed)
 - Modify: `remote/lib/export/mediabunnyExport.test.ts`
 
-- [ ] write tests first:
+- [x] write tests first:
   - `exportGate` ignores off frames and counts only frames used by on-entries;
   - export order = timeline order;
   - durations = hold/fps with cumulative timestamps;
@@ -446,9 +446,9 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
   - stickers are composed (fake context records it), inside `source.load`, as snapshots: two prefetched frames don't share a canvas;
   - sprites are preloaded before the first frame: a sticker whose sprite was not loaded yet is still in exported frame 1; a failed sprite fails the export with a clear message;
   - an empty timeline → the existing "no frames" gate.
-- [ ] implement it: the timeline drives the export loop; frame bitmap → `compose` on an OffscreenCanvas → sample.
-- [ ] export on the tablet a project with holds of 1 and 4 at 8 fps (seed the holds through CDP + a store mutation; the UI comes in Task 8). Check `ffprobe` duration and frame timing. Check that it plays at the right speed in the system player. If variable durations misbehave, switch to repeated samples (decide here, record ➕).
-- [ ] run tests — must pass before Task 7.
+- [x] implement it: the timeline drives the export loop; frame bitmap → `compose` on an OffscreenCanvas → sample. (Also: new `sprite` failure reason + `export.errSprite` in pl/ru; `playableFrames` removed from player.ts, nothing else used it.)
+- [x] export on the tablet a project with holds of 1 and 4 at 8 fps (seed the holds through CDP + a store mutation; the UI comes in Task 8). Check `ffprobe` duration and frame timing. Check that it plays at the right speed in the system player. If variable durations misbehave, switch to repeated samples (decide here, record ➕). (Done on emulator-5584 with holds 1,4,1,4,1 at 8 fps plus a sticker on entries 2 and 4, seeded by writing project.json via run-as: ffprobe shows 5 packets, pts 0/0.125/0.625/0.75/1.25, durations 0.125/0.5/0.125/0.5/0.125, stream 1.375 s; MediaStore duration 1375; the sticker is in frames 2 and 4 only. Variable sample durations work, no repeated-sample fallback needed. 'Obejrzyj film' opened Google Photos' viewer.)
+- [x] run tests — must pass before Task 7.
 
 ### Task 7: Frame strip + movie screen layout
 

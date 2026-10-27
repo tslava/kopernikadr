@@ -48,6 +48,8 @@ export interface ExportWriter {
 
 export interface ExportFrameSource {
   count: number;
+  /** Ticks (1/fps) frame `index` is shown for; default 1. Timestamps are the cumulative sum. */
+  hold?(index: number): number;
   /** Optional first pass over every frame before the file is opened (e.g. check it exists). */
   prepare?(index: number, opts: { signal: AbortSignal }): Promise<void>;
   /** Loads and decodes frame `index` at the export size. */
@@ -260,6 +262,7 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
 
     // 3. Encode, strictly in order; frame i+1..i+ahead load while frame i encodes.
     o.onProgress?.({ phase: 'encoding', i: 0, n });
+    let ticks = 0; // whole ticks before frame i: no float drift in the timestamps
     for (let i = 0; i < n; i++) {
       for (; nextToLoad <= Math.min(i + ahead, n - 1); nextToLoad++) startLoad(nextToLoad);
       const tw = now();
@@ -269,7 +272,9 @@ export async function exportVideo(o: ExportOptions): Promise<ExportResult> {
       try {
         checkAbort();
         const te = now();
-        await abortable(encoder.add(image, i / fps, 1 / fps));
+        const hold = source.hold?.(i) ?? 1;
+        await abortable(encoder.add(image, ticks / fps, hold / fps));
+        ticks += hold;
         encodeMs = now() - te;
       } finally {
         image.close();

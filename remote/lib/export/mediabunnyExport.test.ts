@@ -222,6 +222,18 @@ describe('exportVideo: success', () => {
     expect(src.images.map((im) => im.closed)).toEqual([1, 1, 1, 1]);
   });
 
+  it('a source hold makes the duration hold/fps and the timestamps the cumulative ticks', async () => {
+    const { enc, src, options } = setup(4);
+    const holds = [1, 4, 2, 1];
+    await exportVideo({ ...options, source: { ...src, hold: (i) => holds[i] } });
+    expect(enc.added.map((a) => [a.timestamp, a.duration])).toEqual([
+      [0, 1 / 8],
+      [1 / 8, 4 / 8],
+      [5 / 8, 2 / 8],
+      [7 / 8, 1 / 8],
+    ]);
+  });
+
   it('reports progress through the phases', async () => {
     const { progress, options } = setup(2);
     await exportVideo(options);

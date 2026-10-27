@@ -2,17 +2,21 @@
 // downloading, `unavailable` frames), the controller state machine, and the file name.
 //
 //   gate -> release the player ring -> transfer.pause() -> exporting flag on
-//        -> frameSource (local play, else full resized) -> pickCodec -> exportVideo -> native writer
+//        -> preload the stickers' sprites (1024) -> pickCodec
+//        -> exportVideo over the timeline (frameSource -> compose frame + stickers -> sample, hold/fps each)
+//        -> native writer
 //        -> finally transfer.resume() + exporting flag off
 //
 // UI-free: everything the browser/native side provides is injected (see `ExportDeps`).
-import type { FrameEntry, Project } from '../projects/model';
+import type { Project } from '../projects/model';
 import { PLAY_HEIGHT, PLAY_WIDTH, type FrameSource } from '../play/frameSource';
-import { playableFrames } from '../play/player';
+import { playableItems, timeline } from '../projects/timeline';
+import { drawFrame, drawStickers, type Ctx2D } from '../render/compose';
+import { SpriteCache, type PinnedSprites } from '../render/sprites';
 import { createStore, type Store } from '../state/store';
 import type { TransferPause } from '../transfer/types';
 import { pickCodec, type CodecPickInput } from './codecPick';
-import { exportVideo, ExportFrameError, type CreateEncoder, type ExportWriter } from './mediabunnyExport';
+import { exportVideo, ExportFrameError, type CreateEncoder, type ExportImage, type ExportWriter } from './mediabunnyExport';
 
 export const EXPORT_WIDTH = PLAY_WIDTH;
 export const EXPORT_HEIGHT = PLAY_HEIGHT;
@@ -83,7 +87,17 @@ export type ExportGate =
   | { kind: 'ready'; frames: number; skipped: number }
   | { kind: 'empty' };
 
-const visible = (p: Project): FrameEntry[] => p.frames.filter((f) => f.hiddenUntil === null);
+/** Frames the movie uses: referenced by an on-entry and visible (off frames never block or count). */
+function usedFrames(p: Project): Project['frames'] {
+  const used = new Set(timeline(p).filter((e) => !e.off).map((e) => e.frameId));
+  return p.frames.filter((f) => used.has(f.frameId) && f.hiddenUntil === null);
+}
+
+/** Used frames that will not be in the movie: unavailable ones (and, once confirmed, ones that cannot arrive). */
+function skippedCount(p: Project): number {
+  const playable = new Set(playableItems(p).map((e) => e.frameId));
+  return usedFrames(p).filter((f) => !playable.has(f.frameId)).length;
+}
 
 /** What the gate needs to know about the camera connection. */
 export interface CameraLink {
@@ -100,14 +114,14 @@ const cameraGone = (project: Project, link: CameraLink): boolean =>
  * deadlock the gate. `confirmedSkip`: the parent agreed to skip them.
  */
 export function exportGate(project: Project, confirmedSkip = false, link?: CameraLink): ExportGate {
-  const frames = visible(project);
+  const frames = usedFrames(project);
   const downloading = frames.filter((f) => f.state !== 'local' && !f.unavailable).length;
   // The camera is gone (or it is another camera): the not-yet-local frames cannot arrive, so they
   // are treated like `unavailable` ones (skip them, with a confirm) instead of waiting forever.
   const stuck = downloading > 0 && link !== undefined && cameraGone(project, link);
   if (downloading > 0 && !stuck) return { kind: 'waiting', downloading };
   const unavailable = frames.filter((f) => f.unavailable).length + (stuck ? downloading : 0);
-  const playable = playableFrames(project.frames).length;
+  const playable = playableItems(project).length;
   if (playable === 0) return { kind: 'empty' };
   if (unavailable > 0 && !confirmedSkip) return { kind: 'confirm', unavailable, frames: playable };
   return { kind: 'ready', frames: playable, skipped: unavailable };
@@ -115,7 +129,7 @@ export function exportGate(project: Project, confirmedSkip = false, link?: Camer
 
 // --- the state machine -------------------------------------------------------------------------
 
-export type ExportFailure = 'frame' | 'codec' | 'space' | 'unknown';
+export type ExportFailure = 'frame' | 'sprite' | 'codec' | 'space' | 'unknown';
 
 export type ExportState =
   | { phase: 'idle' }
@@ -143,12 +157,39 @@ export class NoCodecError extends Error {
   }
 }
 
+/** A sticker's sprite could not be loaded: the export fails instead of silently dropping the sticker. */
+export class SpriteLoadError extends Error {
+  readonly code = 'SPRITE_LOAD_FAILED';
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'SpriteLoadError';
+  }
+}
+
 export function classifyFailure(e: unknown): ExportFailure {
   if (e instanceof ExportFrameError) return 'frame';
+  if (e instanceof SpriteLoadError) return 'sprite';
   if (e instanceof NoCodecError) return 'codec';
   if ((e as { code?: unknown } | null)?.code === 'NO_SPACE') return 'space';
   return 'unknown';
 }
+
+/** The canvas the frame and its stickers are composed on, and the snapshot taken from it. */
+export interface ComposeCanvas {
+  ctx: Ctx2D;
+  /** A copy of what is drawn now (a VideoFrame), so the next composition cannot overwrite it. */
+  snapshot(): ExportImage;
+}
+
+export const createOffscreenCompose = (width: number, height: number): ComposeCanvas => {
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('export: no 2d context');
+  return { ctx: ctx as unknown as Ctx2D, snapshot: () => new VideoFrame(canvas, { timestamp: 0 }) };
+};
+
+/** Sprites are rasterized at the largest bucket: a full-width sticker is 1440 px. */
+export const EXPORT_SPRITE_BUCKET = 1024;
 
 export interface ExportDeps {
   /** The current project (read at start and again after the pause). */
@@ -161,6 +202,10 @@ export interface ExportDeps {
   /** Closes the player ring buffer (`PlayViewHandle.release`). */
   releasePlayer: () => void;
   frameSource: FrameSource;
+  /** Preloads every sprite the movie uses (default: a SpriteCache). */
+  sprites?: Pick<SpriteCache, 'preload'>;
+  /** Default: an OffscreenCanvas of the export size. */
+  createCanvas?: (width: number, height: number) => ComposeCanvas;
   /** One writer per export (it holds one temp file). */
   createWriter: () => ExportWriter;
   now?: () => Date;
@@ -185,16 +230,65 @@ export interface ExportController {
   reset(): void;
 }
 
+interface Composer {
+  load(index: number, opts: { signal: AbortSignal }): Promise<ExportImage>;
+  /** Closes the cached decoded frame. */
+  dispose(): void;
+}
+
+const ignore = () => {};
+
+/**
+ * `source.load` of the export: decodes the entry's frame (the last decoded frame is reused when the
+ * next entry is a copy of it), draws frame + stickers onto one canvas and returns a snapshot, so the
+ * prefetched frame never shares pixels with the one being encoded. The draw and the snapshot run in
+ * one synchronous step, so two loads in flight cannot interleave on the canvas.
+ */
+function createComposer(project: Project, items: ReturnType<typeof playableItems>, sprites: PinnedSprites | undefined, deps: ExportDeps): Composer {
+  const stickers = project.stickers ?? [];
+  const canvas = (deps.createCanvas ?? createOffscreenCompose)(EXPORT_WIDTH, EXPORT_HEIGHT);
+  let cached: { frameId: string; bitmap: Promise<ImageBitmap> } | null = null;
+  const closeLater = (c: typeof cached) => void c?.bitmap.then((b) => b.close(), ignore);
+  return {
+    async load(i, { signal }) {
+      const { id, frameId } = items[i];
+      let mine = cached;
+      if (!mine || mine.frameId !== frameId) {
+        // an earlier load awaits the old bitmap before this close runs (reactions run in order)
+        closeLater(cached);
+        mine = cached = { frameId, bitmap: deps.frameSource.load(project.id, frameId, signal) };
+      }
+      let bitmap: ImageBitmap;
+      try {
+        bitmap = await mine.bitmap;
+      } catch (e) {
+        if (cached === mine) cached = null; // a retry decodes again
+        throw e;
+      }
+      drawFrame(canvas.ctx, bitmap);
+      drawStickers(canvas.ctx, stickers, id, (hex) => sprites?.get(hex));
+      return canvas.snapshot();
+    },
+    dispose() {
+      closeLater(cached);
+      cached = null;
+    },
+  };
+}
+
 const isAbort = (e: unknown) => (e as { name?: unknown } | null)?.name === 'AbortError';
 
 export function createExportController(deps: ExportDeps): ExportController {
   const state = createStore<ExportState>({ phase: 'idle' });
+  const spriteCache = deps.sprites ?? new SpriteCache();
   let abort: AbortController | null = null;
   let running = false;
 
   async function run(): Promise<void> {
     const ctl = (abort = new AbortController());
     let skipped = 0;
+    let pinned: PinnedSprites | undefined;
+    let composer: Composer | undefined;
     let final: ExportState;
     state.set({ phase: 'preparing' });
     deps.exporting.set(true);
@@ -204,15 +298,26 @@ export function createExportController(deps: ExportDeps): ExportController {
       // Downloads that finished while pausing are included; shooting is blocked, so nothing else changed.
       const project = deps.getProject();
       if (!project) throw new Error('project is gone');
-      const ids = playableFrames(project.frames).map((f) => f.frameId);
-      if (ids.length === 0) throw new Error('nothing to export');
-      skipped = visible(project).length - ids.length;
+      const items = playableItems(project);
+      if (items.length === 0) throw new Error('nothing to export');
+      skipped = skippedCount(project);
       const fps = project.fps;
       const bitrate = deps.bitrate ?? EXPORT_BITRATE;
+      const stickers = project.stickers ?? [];
+      const entryIds = new Set(items.map((e) => e.id));
+      const hexcodes = stickers.filter((st) => st.on.some((id) => entryIds.has(id))).map((st) => st.emoji);
+      if (hexcodes.length > 0) {
+        try {
+          pinned = await spriteCache.preload(hexcodes, EXPORT_SPRITE_BUCKET);
+        } catch (e) {
+          throw new SpriteLoadError(e);
+        }
+      }
       const pick = await pickCodec({ width: EXPORT_WIDTH, height: EXPORT_HEIGHT, fps, bitrate, isConfigSupported: deps.isConfigSupported });
       if (!pick.chosen) throw new NoCodecError(pick.tried.map((t) => t.codecString));
+      composer = createComposer(project, items, pinned, deps);
       const result = await exportVideo({
-        source: { count: ids.length, load: (i, { signal }) => deps.frameSource.load(project.id, ids[i], signal) },
+        source: { count: items.length, hold: (i) => items[i].hold, load: composer.load },
         fps,
         width: EXPORT_WIDTH,
         height: EXPORT_HEIGHT,
@@ -237,6 +342,8 @@ export function createExportController(deps: ExportDeps): ExportController {
           : { phase: 'failed', reason: classifyFailure(e), detail: e instanceof Error ? e.message : String(e) };
     } finally {
       // always: success, failure and cancel
+      composer?.dispose();
+      pinned?.release();
       try {
         deps.transfer.resume();
       } catch (e) {

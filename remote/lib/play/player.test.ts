@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CutEntry, FrameEntry } from '../projects/model';
-import { createPlayer, playableFrames, timelineOf, type Player } from './player';
+import { createPlayer, timelineOf, type Player } from './player';
 import { createRing } from './ring';
 import { asBitmap, bmp, FakeClock, flush, frame, type FakeBitmap } from './play.testutil';
 
@@ -154,7 +154,6 @@ describe('player frame selection', () => {
     player.play();
     await clock.advance(400);
     expect(drawn.map((d) => d.id).slice(0, 4)).toEqual(['f1', 'f4', 'f1', 'f4']);
-    expect(playableFrames([frame(2), frame(1)]).map((f) => f.frameId)).toEqual(['f1', 'f2']);
   });
 
   it('picks up frames that become local while playing', async () => {

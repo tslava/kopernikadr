@@ -2,7 +2,7 @@
 // injected. It plays a timeline of entries (see lib/projects/timeline.ts `playableItems`): an entry
 // stays on screen `hold` ticks; entries that share a frame share one ring bitmap.
 
-import type { FrameEntry, Project } from '../projects/model';
+import type { Project } from '../projects/model';
 import { downloadingCount, playableItems } from '../projects/timeline';
 import { RING_SIZE, type Ring } from './ring';
 
@@ -62,12 +62,6 @@ export function timelineOf(project: Pick<Project, 'frames' | 'cut'>): { items: T
     items: playableItems(project).map((e) => ({ entryId: e.id, frameId: e.frameId, hold: e.hold })),
     downloading: downloadingCount(project),
   };
-}
-
-export function playableFrames(frames: readonly FrameEntry[]): FrameEntry[] {
-  return frames
-    .filter((f) => f.hiddenUntil === null && f.state === 'local' && !f.unavailable)
-    .sort((a, b) => a.seq - b.seq);
 }
 
 export function createPlayer(o: PlayerOptions): Player {
