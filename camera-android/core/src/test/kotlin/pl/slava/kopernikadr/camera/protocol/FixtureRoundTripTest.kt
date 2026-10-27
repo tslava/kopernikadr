@@ -9,6 +9,15 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import pl.slava.kopernikadr.camera.server.AckResult
+import pl.slava.kopernikadr.camera.server.FramePage
+import pl.slava.kopernikadr.camera.server.parseAck
+import pl.slava.kopernikadr.camera.server.parseListFrames
 
 /**
  * Contract test: every fixture in `protocol/fixtures` parses into its model and re-encodes to
@@ -88,6 +97,68 @@ class FixtureRoundTripTest {
         "getOperation.res.unknown.json" to { name ->
             assertEquals(OperationState.Unknown, okData(name, OperationState.serializer()))
         },
+        "setControl.req.json" to { name ->
+            val args = request<SetControlArgs>(name, Ops.SET_CONTROL)
+            assertEquals(SetControlArgs(control = "exposure", mode = "locked"), args)
+        },
+        "setControl.res.json" to { name ->
+            val c = okData(name, Controls.serializer())
+            assertEquals(ControlMode.LOCKED, c.exposure.mode)
+            assertFalse(c.exposure.confirmed)
+            assertTrue(c.settling)
+        },
+        "setControl.err.json" to { name ->
+            val e = error(name, ErrorCodes.UNSUPPORTED_CONTROL)
+            assertFalse(e.retryable)
+        },
+        "controls.focusFailed.evt.json" to { name ->
+            // Focus has no `failed` mode (PROTOCOL.md §6): a failed lock is locked + unconfirmed + focusOk:false.
+            val c = event(name, Events.CONTROLS, Controls.serializer())
+            assertEquals(FocusControl(FocusMode.LOCKED, confirmed = false, focusOk = false), c.focus)
+            assertFalse(c.settling)
+        },
+        "listFrames.req.json" to { name ->
+            val req = (decodeRequest(Fixtures.text(name)) as ProtocolResult.Ok).value
+            assertEquals("listFrames", req.op)
+            val a = parseListFrames(req.args)
+            assertEquals(41L, a.afterSeq)
+            assertEquals(2, a.limit)
+            assertJsonEquals(
+                Fixtures.json(name).obj("args"),
+                buildJsonObject { a.afterSeq?.let { put("afterSeq", it) }; put("limit", a.limit) },
+            )
+        },
+        "listFrames.res.json" to { name ->
+            val page = okData(name, FramePage.serializer())
+            assertEquals(listOf(42L, 43L), page.frames.map { it.seq })
+            assertTrue(page.hasMore)
+            assertNull(page.frames[1].exposure)
+        },
+        "ack.req.json" to { name ->
+            val req = (decodeRequest(Fixtures.text(name)) as ProtocolResult.Ok).value
+            assertEquals("ack", req.op)
+            val ids = parseAck(req.args)
+            assertEquals(2, ids.size)
+            assertJsonEquals(
+                Fixtures.json(name).obj("args"),
+                buildJsonObject { put("frameIds", JsonArray(ids.map(::JsonPrimitive))) },
+            )
+        },
+        "ack.res.json" to { name ->
+            val r = okData(name, AckResult.serializer())
+            assertEquals(1, r.acked)
+            assertEquals(1, r.unknown.size)
+        },
+        "getStatus.req.json" to { name ->
+            val req = (decodeRequest(Fixtures.text(name)) as ProtocolResult.Ok).value
+            assertEquals("getStatus", req.op)
+            assertEquals(JsonObject(emptyMap()), req.args)
+        },
+        "getStatus.res.json" to { name ->
+            val s = okData(name, Status.serializer())
+            assertEquals(2, s.unackedCount)
+            assertEquals(Thermal.NONE, s.thermal)
+        },
         "status.evt.json" to { name ->
             assertEquals(Thermal.LIGHT, event(name, Events.STATUS, Status.serializer()).thermal)
         },
@@ -131,7 +202,12 @@ class FixtureRoundTripTest {
             when {
                 name.endsWith(".req.json") -> {
                     val req = (decodeRequest(text) as ProtocolResult.Ok).value
-                    assertTrue(name, req.decodeArgs() is ProtocolResult.Ok)
+                    when (req.op) {
+                        "listFrames" -> parseListFrames(req.args)
+                        "ack" -> parseAck(req.args)
+                        "getStatus" -> Unit // no args
+                        else -> assertTrue(name, req.decodeArgs() is ProtocolResult.Ok)
+                    }
                 }
                 name == "info.json" -> ProtocolJson.decodeFromString(Info.serializer(), text)
                 name == "preview.header.json" -> ProtocolJson.decodeFromString(PreviewHeader.serializer(), text)
@@ -144,6 +220,10 @@ class FixtureRoundTripTest {
                         name.startsWith("hello") -> HelloData.serializer()
                         name.startsWith("ping") -> PingData.serializer()
                         name.startsWith("capture") -> FrameInfo.serializer()
+                        name.startsWith("listFrames") -> FramePage.serializer()
+                        name.startsWith("ack") -> AckResult.serializer()
+                        name.startsWith("getStatus") -> Status.serializer()
+                        name.startsWith("setControl") -> Controls.serializer()
                         else -> OperationState.serializer()
                     }
                     ProtocolJson.decodeFromJsonElement(ser, data)
@@ -209,6 +289,8 @@ class FixtureRoundTripTest {
     }
 
     private fun parse(text: String): JsonElement = Json.parseToJsonElement(text)
+
+    private fun JsonElement.obj(key: String): JsonElement = (this as JsonObject).getValue(key)
 }
 
 private fun addUnknownFields(e: JsonElement): JsonElement = when (e) {

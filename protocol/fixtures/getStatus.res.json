@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "e5a7d3b9-6c2f-4180-9b4e-0a8f6d1c3b75",
+  "ok": true,
+  "data": {
+    "batteryPct": 79,
+    "charging": true,
+    "freeBytes": 41230987654,
+    "spoolBytes": 319874512,
+    "unackedCount": 2,
+    "orphanCount": 0,
+    "integrityErrors": 0,
+    "thermal": "none"
+  }
+}

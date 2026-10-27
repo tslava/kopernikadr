@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "t": "evt",
+  "name": "controls",
+  "data": {
+    "generation": 5,
+    "settling": false,
+    "exposure": {
+      "mode": "auto",
+      "confirmed": true,
+      "exact": true,
+      "compensationSteps": 0,
+      "compensationEnabled": true
+    },
+    "whiteBalance": {
+      "mode": "auto",
+      "confirmed": true,
+      "exact": true
+    },
+    "focus": {
+      "mode": "locked",
+      "confirmed": false,
+      "focusOk": false
+    },
+    "rotation": 0,
+    "previewQuality": "normal"
+  }
+}

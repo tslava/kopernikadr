@@ -1,0 +1,63 @@
+{
+  "v": 1,
+  "t": "res",
+  "reqId": "b83e5a1d-7c9f-4026-8d4b-1e6a0f3c9b52",
+  "ok": true,
+  "data": {
+    "frames": [
+      {
+        "frameId": "01K8GZ4V7Q3M9X2B5N6R8T1WCD",
+        "seq": 42,
+        "projectId": "7a1f3c5e-8b2d-4f69-9c04-e6b8d2a4f1c3",
+        "clientId": "c4e7a1d9-2f6b-4a83-b5e0-9d1c7f3a6b25",
+        "rotation": 0,
+        "capturedAt": "2026-10-26T15:04:05.123Z",
+        "full": {
+          "w": 3264,
+          "h": 2448,
+          "bytes": 2345678,
+          "sha256": "cace12409042a8e13eab5df9a83c7a18956bbc9d8715ae2794a7859174f18295"
+        },
+        "derived": {
+          "play": {
+            "w": 1440,
+            "h": 1080
+          },
+          "thumb": {
+            "w": 256,
+            "h": 192
+          }
+        },
+        "exposure": {
+          "iso": 200,
+          "exposureTimeNs": 16666666
+        }
+      },
+      {
+        "frameId": "01K8GZ4WB1P5C7D9F2H4J6K8MN",
+        "seq": 43,
+        "projectId": "7a1f3c5e-8b2d-4f69-9c04-e6b8d2a4f1c3",
+        "clientId": "c4e7a1d9-2f6b-4a83-b5e0-9d1c7f3a6b25",
+        "rotation": 0,
+        "capturedAt": "2026-10-26T15:04:06.123Z",
+        "full": {
+          "w": 3264,
+          "h": 2448,
+          "bytes": 2391204,
+          "sha256": "7e4b1f0a96d3c85270fa1b4e9d6c3a85f1e07b2d4c9a6038e5d1f7b2a4c80693"
+        },
+        "derived": {
+          "play": {
+            "w": 1440,
+            "h": 1080
+          },
+          "thumb": {
+            "w": 256,
+            "h": 192
+          }
+        }
+      }
+    ],
+    "hasMore": true
+  }
+}

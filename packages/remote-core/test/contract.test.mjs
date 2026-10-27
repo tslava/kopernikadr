@@ -3,7 +3,7 @@
 // (or the explicit not-for-the-client list) takes it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ControlClient, ProtocolError, PROTOCOL_VERSION } from '../src/protocol.js';
+import { ControlClient, ProtocolError, PROTOCOL_VERSION, isLockFailed } from '../src/protocol.js';
 import { CameraConnection } from '../src/connection.js';
 import { PreviewLoop } from '../src/preview.js';
 import { parsePreviewFrame } from '../src/preview-frame.js';
@@ -97,6 +97,45 @@ test('ControlClient resolves every *.res fixture for its pending request; errors
     assert.equal(c.pendingCount, 0, name);
     c.abort();
   }
+});
+
+test('stage-1 fixtures have the shapes the JS side relies on (same key sets as the shared models)', () => {
+  const frameKeys = sortedKeys(fixture('capture.res.json').data);
+  const page = fixture('listFrames.res.json').data;
+  assert.deepEqual(sortedKeys(page), ['frames', 'hasMore']);
+  assert.ok(page.frames.length > 0 && typeof page.hasMore === 'boolean');
+  for (const f of page.frames) assert.deepEqual(sortedKeys(f).filter((k) => k !== 'exposure'), frameKeys.filter((k) => k !== 'exposure'));
+  assert.deepEqual(sortedKeys(fixture('listFrames.req.json').args), ['afterSeq', 'limit']);
+  const ack = fixture('ack.res.json').data;
+  assert.deepEqual(sortedKeys(ack), ['acked', 'unknown']);
+  assert.ok(Number.isInteger(ack.acked) && Array.isArray(ack.unknown));
+  assert.ok(fixture('ack.req.json').args.frameIds.every((id) => typeof id === 'string'));
+  assert.deepEqual(sortedKeys(fixture('getStatus.res.json').data), sortedKeys(fixture('status.evt.json').data));
+  assert.deepEqual(fixture('getStatus.req.json').args, {});
+  // setControl answers with the full Controls object; its error is a plain protocol error
+  const controls = sortedKeys(fixture('controls.evt.json').data);
+  assert.deepEqual(sortedKeys(fixture('setControl.res.json').data), controls);
+  assert.deepEqual(sortedKeys(fixture('controls.focusFailed.evt.json').data), controls);
+  const set = fixture('setControl.req.json').args;
+  assert.equal(set.control, 'exposure');
+  assert.ok(!('args' in set) && !('value' in set && 'mode' in set), 'setControl args are flat');
+  assert.equal(fixture('setControl.err.json').error.code, 'UNSUPPORTED_CONTROL');
+});
+
+test('isLockFailed: focus has no failed mode on the wire; the focusFailed fixture is the failed lock', () => {
+  const failedFocus = fixture('controls.focusFailed.evt.json').data;
+  assert.equal(isLockFailed('focus', failedFocus.focus), true);
+  assert.equal(isLockFailed('exposure', failedFocus.exposure), false);
+  for (const name of ['controls.evt.json', 'setControl.res.json']) {
+    const c = fixture(name).data;
+    for (const key of ['exposure', 'whiteBalance', 'focus']) assert.equal(isLockFailed(key, c[key]), false, `${name} ${key}`);
+  }
+  const hello = fixture('hello.res.json').data.controls;
+  for (const key of ['exposure', 'whiteBalance', 'focus']) assert.equal(isLockFailed(key, hello[key]), false);
+  assert.equal(isLockFailed('exposure', { mode: 'failed', confirmed: false }), true);
+  assert.equal(isLockFailed('whiteBalance', { mode: 'failed' }), true);
+  assert.equal(isLockFailed('focus', { mode: 'locked', confirmed: true, focusOk: false }), false);
+  assert.equal(isLockFailed('focus', undefined), false);
 });
 
 test('ControlClient routes every *.evt fixture to onEvent(name, data)', () => {

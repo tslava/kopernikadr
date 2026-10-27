@@ -35,6 +35,19 @@ export function buildRequest(op, args = {}, reqId = uuid()) {
   return { v: PROTOCOL_VERSION, t: 'req', reqId, op, args };
 }
 
+/**
+ * Whether a lock control is in the "Lock failed" state (PROTOCOL.md §6). `exposure` and
+ * `whiteBalance` report `mode: 'failed'`. Focus has no `failed` mode on the wire: its failed lock
+ * is `mode: 'locked'` + `confirmed: false` + `focusOk: false`.
+ * @param {'exposure' | 'whiteBalance' | 'focus'} key
+ * @param {{ mode?: string, confirmed?: boolean, focusOk?: boolean } | null | undefined} control
+ */
+export function isLockFailed(key, control) {
+  if (!control) return false;
+  if (control.mode === 'failed') return true;
+  return key === 'focus' && control.mode === 'locked' && control.confirmed === false && control.focusOk === false;
+}
+
 /** A `res` with `ok:false`, or a local failure (`TIMEOUT`, `CLOSED`) with `local: true`. */
 export class ProtocolError extends Error {
   /** @param {string} op @param {ErrorBody} [error] @param {{ local?: boolean }} [opts] */

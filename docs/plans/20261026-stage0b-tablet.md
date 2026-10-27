@@ -628,17 +628,39 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 **Files:**
 - Modify: `protocol/PROTOCOL.md`, `protocol/fixtures/*` (new: setControl req/res/err, listFrames req/res, ack req/res, getStatus), Kotlin fixture-coverage test, remote-core contract tests
 
-- [ ] PROTOCOL.md:
-  - [ ] header + §2: fixtures + Kotlin models + remote-core (no `src/schema.ts`);
-  - [ ] 503 + `Retry-After`; HEAD; incoming 64 KiB → close 1009;
-  - [ ] **decide the focus `failed` mode** (add `failed` to focus modes, or keep locked +
+- [x] PROTOCOL.md:
+  - [x] header + §2: fixtures + Kotlin models + remote-core (no `src/schema.ts`);
+  - [x] 503 + `Retry-After`; HEAD; incoming 64 KiB → close 1009;
+  - [x] **decide the focus `failed` mode** (add `failed` to focus modes, or keep locked +
         confirmed:false) and align Kotlin + JS + fixtures;
-  - [ ] flat `setControl`; `listFrames`/`ack`/`getStatus` shapes;
-  - [ ] `getOperation` behaviours; retention today;
-  - [ ] NSD TXT; CORS rules (Capacitor origin + debug-only `localhost:*`)
-- [ ] mark it **"v1 (frozen <date>)"**
-- [ ] new fixtures + coverage tests on both sides
-- [ ] run tests — must pass before Task 16
+    - **Decision: keep the enum.** The camera never emits a `failed` focus mode: `ControlsReducer`
+      reports a failed focus lock as `locked` + `confirmed:false` + `focusOk:false`
+      (`settling:false`), and remote-lite already renders that as "Lock failed". No camera or
+      Kotlin type change; added the fixture `controls.focusFailed.evt.json` and
+      `isLockFailed()` in remote-core (same rule as remote-lite's `lockState`), recorded in
+      PROTOCOL.md §6.
+    - ⚠️ `focusOk:false` is also set when AF ends "not focused", already during the confirmation,
+      so the wire cannot tell that moment from a timed-out lock; remote-lite shows "Lock failed"
+      a moment early then. Documented as a caveat; behaviour unchanged.
+  - [x] flat `setControl`; `listFrames`/`ack`/`getStatus` shapes;
+  - [x] `getOperation` behaviours; retention today;
+    - ⚠️ retention today is narrower than "frames are deleted only by `ack`": nothing is ever
+      deleted, `ack` only hides a frame from `listFrames`; `clearAcked`/`getDiagnostics` are not
+      implemented (`UNKNOWN_OP`). The doc says so (§6, §9).
+    - ⚠️ a crash mid-capture leaves the row `pending` for ever (no sweep at start; it becomes
+      `INTERRUPTED` only if the same `reqId` is sent to `capture` again). Documented, code not
+      changed.
+  - [x] NSD TXT; CORS rules (Capacitor origin + debug-only `localhost:*`)
+- [x] mark it **"v1 (frozen 2026-10-27)"**
+- [x] new fixtures + coverage tests on both sides
+  - ➕ `FixtureServerTest` (Kotlin): the fixture requests go through the real server and the
+    whole `res` must equal the fixture; `setControl.err` is real server output.
+  - ➕ other doc/code corrections made in PROTOCOL.md (the code was not changed): the `status`
+    event is periodic only; `capture` waits up to 1.5 s for settling locks; `STORAGE_LOW` is a
+    500 MB floor; admission rejections leave no operation record; `UNSUPPORTED_VERSION` closes
+    with 1000; the web remote is served at `/`.
+  - ➕ `docs/ARCHITECTURE.md` line 40 still lists `src/schema.ts` (Task 17).
+- [x] run tests — must pass before Task 16
 
 ### Task 16: Verify acceptance criteria
 - [ ] every Overview question has a measured answer in `docs/diagnostics/<date>-tablet.md`

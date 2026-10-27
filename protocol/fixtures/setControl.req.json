@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "t": "req",
+  "reqId": "6d2a9c4e-1b7f-4e83-a0c5-3f8e2b6d9a14",
+  "op": "setControl",
+  "args": {
+    "control": "exposure",
+    "mode": "locked"
+  }
+}
