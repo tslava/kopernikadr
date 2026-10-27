@@ -15,12 +15,12 @@ import {
 } from './model';
 import { timeline } from './timeline';
 
-type Pose = Pick<Sticker, 'x' | 'y' | 'size' | 'rot'>;
+export type Pose = Pick<Sticker, 'x' | 'y' | 'size' | 'rot'>;
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
 /** Clamped to the model ranges; a non-finite value is dropped (the field keeps its value). */
-function clampPose(p: Partial<Pose>): Partial<Pose> {
+export function clampPose(p: Partial<Pose>): Partial<Pose> {
   const out: Partial<Pose> = {};
   if (Number.isFinite(p.x)) out.x = clamp(p.x!, STICKER_POS_MIN, STICKER_POS_MAX);
   if (Number.isFinite(p.y)) out.y = clamp(p.y!, STICKER_POS_MIN, STICKER_POS_MAX);

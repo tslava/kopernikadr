@@ -512,21 +512,21 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `remote/components/Icon.tsx`
 - Modify: `remote/lib/i18n/pl.ts`, `remote/lib/i18n/ru.ts`
 
-- [ ] write the controller tests first:
+- [x] write the controller tests first (12 tests; a cancelled gesture writes nothing, so there is nothing to restore):
   - pointer drag → move;
   - handle drag → scale + rotate;
   - one commit + one history entry per gesture;
   - selection; range from/to; delete;
   - a pointercancel restores the pre-gesture state.
-- [ ] picker: category tabs, a grid of SVG `<img>`s (lazy), a tap adds to the selected frame through the end.
-- [ ] sticker layer over the stage: handles shown only for the selected sticker; the strip shows that sticker's frames.
-- [ ] tablet run:
+- [x] picker: category tabs, a grid of SVG `<img>`s (lazy), a tap adds to the selected frame through the end.
+- [x] sticker layer over the stage: handles shown only for the selected sticker; the strip shows that sticker's frames.
+- [x] tablet run (emulator-5584, Film 3, real adb swipes; project.json, playback sampling and screencaps checked):
   - add 🐶 on frame 2, drag it, scale and rotate it with the handle, set the range 2–4;
   - play: it shows only on 2–4;
   - move frame 3 to the end: the sticker follows it;
   - delete the sticker; Cofnij;
   - screencap.
-- [ ] run tests — must pass before Task 10.
+- [x] run tests (vitest 744, typecheck clean) — must pass before Task 10.
 
 ### Task 10: Tablet parent: quarantine show/clear + "O aplikacji" attribution
 

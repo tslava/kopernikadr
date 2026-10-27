@@ -3,10 +3,13 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { toolStates, type EditController, type EditTool } from '@/lib/app/editController';
 import type { FrameUrls } from '@/lib/app/frames';
+import { reconcileSticker, stickersOn, withLivePose, type StickerController } from '@/lib/app/stickerController';
 import type { OverlayStack } from '@/lib/app/overlays';
 import { reconcileSelection, stripTiles } from '@/lib/app/stripModel';
 import type { Translate } from '@/lib/i18n';
 import type { Project } from '@/lib/projects/model';
+import type { Pose } from '@/lib/projects/stickers';
+import { useTranslator } from '@/lib/i18n/useTranslator';
 import { createFrameSource, PLAY_HEIGHT, PLAY_WIDTH, type FrameUrl } from '@/lib/play/frameSource';
 import { createPlayer, timelineOf, type Clock, type Player, type PlayerStatus } from '@/lib/play/player';
 import { createRing } from '@/lib/play/ring';
@@ -20,6 +23,8 @@ import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
 import type { FrameDeletion } from '@/lib/projects/frameDeletion';
 import EditTools from './EditTools';
+import EmojiPicker from './EmojiPicker';
+import StickerLayer from './StickerLayer';
 import ExportDialog from './ExportDialog';
 import FrameStrip from './FrameStrip';
 import Icon from './Icon';
@@ -55,7 +60,7 @@ export interface PlayViewProps {
   /** Camera connection, for the export gate (frames of a gone camera are skippable). */
   link?: CameraLink;
   /** The edit tools (Task 8); without it there is no tools row. */
-  edit?: { controller: EditController; frameDeletion: Pick<FrameDeletion, 'undo'> };
+  edit?: { controller: EditController; stickers: StickerController; frameDeletion: Pick<FrameDeletion, 'undo'> };
   ref?: Ref<PlayViewHandle>;
 }
 
@@ -64,6 +69,7 @@ const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), s
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
 export default function PlayView({ t, id, onBack, project = null, frameUrl, urls, exportEnv, link, onFps, edit, ref }: PlayViewProps) {
+  const { lang } = useTranslator();
   const canvas = useRef<HTMLCanvasElement>(null);
   const stickerCanvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<SpriteCache | null>(null);
@@ -74,8 +80,11 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
 
   // The sticker canvas is its own layer: it is redrawn on every shown entry or sticker change
   // without the frame bitmap (the ring closes that right after drawing).
-  const stickersRef = useRef(project?.stickers ?? []);
-  stickersRef.current = project?.stickers ?? [];
+  // a sticker being dragged is drawn at its live pose; the store is written on pointerup
+  const [live, setLive] = useState<{ id: string; pose: Pose } | null>(null);
+  const stickerList = useMemo(() => withLivePose(project?.stickers ?? [], live), [project?.stickers, live]);
+  const stickersRef = useRef(stickerList);
+  stickersRef.current = stickerList;
   const shownRef = useRef<string | null>(null);
   const paintStickers = useRef((_entryId: string | null): void => {});
   paintStickers.current = (entryId) => {
@@ -172,7 +181,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
     const t = timelineOf({ frames: project?.frames ?? [], cut: project?.cut });
     player.current?.setTimeline(t.items, t.downloading);
   }, [project, frameUrl, id, exportBusy]);
-  useEffect(() => paintStickers.current(shownRef.current), [project?.stickers]);
+  useEffect(() => paintStickers.current(shownRef.current), [stickerList]);
 
   // The strip: a tap selects the entry (and pauses on it); a second tap opens the big view.
   const [selected, setSelected] = useState<string | null>(null);
@@ -180,6 +189,13 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const tiles = useMemo(() => stripTiles({ frames: project?.frames ?? [], cut: project?.cut, stickers: project?.stickers }), [project?.frames, project?.cut, project?.stickers]);
   useEffect(() => setSelected((cur) => reconcileSelection(cur, tiles)), [tiles]);
   const bigOpen = big && selected !== null;
+  // the selected sticker (its handles show only while the entry on the stage carries it)
+  const [stickerSel, setStickerSel] = useState<string | null>(null);
+  useEffect(() => setStickerSel((cur) => reconcileSticker(cur, project)), [project?.stickers]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const stickerOnStage = stickerSel !== null && stickersOn({ stickers: stickerList }, status.shown).some((s) => s.id === stickerSel);
+  // its actions stay while another entry is shown: that is how the range is extended to a frame without it
+  const stickerShown = stickerSel !== null ? (project?.stickers?.find((s) => s.id === stickerSel) ?? null) : null;
   const onTile = (entryId: string) => {
     if (entryId === selected) {
       setBig(true);
@@ -194,6 +210,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const onTool = (tool: EditTool) => {
     const c = edit?.controller;
     if (!c || (selected === null && tool !== 'undo')) return;
+    if (tool === 'undo') setLive(null);
     const sel = selected ?? '';
     const run: Promise<unknown> =
       tool === 'delete' ? c.delete(id, sel).then((r) => { if (r === 'frame') setSelected(null); })
@@ -208,6 +225,21 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       : c.undo(id);
     run.catch((e) => console.error('edit', e));
   };
+  const onPick = (hex: string) => {
+    setPickerOpen(false);
+    if (selected === null) return;
+    edit?.stickers.add(id, selected, hex).then((sid) => sid && setStickerSel(sid)).catch((e) => console.error('sticker', e));
+  };
+  const onStickerTool = (what: 'from' | 'to' | 'delete') => {
+    const c = edit?.stickers;
+    if (!c || stickerSel === null) return;
+    const run = what === 'delete' ? c.remove(id, stickerSel) : selected === null ? Promise.resolve(false) : what === 'from' ? c.rangeFrom(id, stickerSel, selected) : c.rangeTo(id, stickerSel, selected);
+    run.catch((e) => console.error('sticker', e));
+  };
+  useEffect(() => {
+    if (!pickerOpen || !overlays) return;
+    return overlays.push(() => setPickerOpen(false));
+  }, [pickerOpen, overlays]);
   const toolsShown = !!edit && (selected !== null || states.undo);
   // the latest frame in its Undo window (the Undo toast of a frame Delete)
   const hiding = project?.frames.filter((f) => f.hiddenUntil !== null).sort((a, b) => Date.parse(a.hiddenUntil!) - Date.parse(b.hiddenUntil!)).pop();
@@ -230,6 +262,18 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       <div className={`play-stage${bigOpen ? ' big' : ''}`} onClick={bigOpen ? () => setBig(false) : undefined} role={bigOpen ? 'button' : undefined} aria-label={bigOpen ? t('strip.closeBig') : undefined}>
         <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
         <canvas ref={stickerCanvas} className="play-stickers" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
+        {edit && project && !bigOpen && !exportBusy && (
+          <StickerLayer
+            t={t}
+            project={project}
+            entryId={status.shown}
+            stickers={stickersOn({ stickers: stickerList }, status.shown)}
+            selectedId={stickerOnStage ? stickerSel : null}
+            controller={edit.stickers}
+            onSelect={setStickerSel}
+            onLive={setLive}
+          />
+        )}
       </div>
       <div className="play-side">
         <div className="play-controls">
@@ -256,18 +300,6 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
           >
             <Icon name="repeat" />
           </button>
-          <label className="speed">
-            <span>{t('play.speed', { n: fps })}</span>
-            <input
-              type="range"
-              min={0}
-              max={FPS_CHOICES.length - 1}
-              step={1}
-              value={fpsIndex}
-              disabled={!project || !onFps}
-              onChange={(e) => onFps?.(FPS_CHOICES[Number(e.target.value)])}
-            />
-          </label>
           {exporter && (
             <button
               type="button"
@@ -280,15 +312,37 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
               <Icon name="save" />
             </button>
           )}
+          <label className="speed">
+            <span>{t('play.speed', { n: fps })}</span>
+            <input
+              type="range"
+              min={0}
+              max={FPS_CHOICES.length - 1}
+              step={1}
+              value={fpsIndex}
+              disabled={!project || !onFps}
+              onChange={(e) => onFps?.(FPS_CHOICES[Number(e.target.value)])}
+            />
+          </label>
         </div>
-        {toolsShown && <EditTools t={t} states={states} isOff={selectedOff} onTool={onTool} />}
+        {toolsShown && (
+          <EditTools
+            t={t}
+            states={states}
+            isOff={selectedOff}
+            onTool={onTool}
+            onEmoji={() => setPickerOpen(true)}
+            sticker={stickerShown ? { emoji: stickerShown.emoji, onFrom: () => onStickerTool('from'), onTo: () => onStickerTool('to'), onDelete: () => onStickerTool('delete') } : null}
+          />
+        )}
         {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
         {status.downloading > 0 && <p className="note">{t('play.downloading', { n: status.downloading })}</p>}
       </div>
-      {project && <FrameStrip t={t} project={project} selected={selected} onTap={onTile} urls={urls} />}
+      {project && <FrameStrip t={t} project={project} selected={selected} onTap={onTile} urls={urls} stickerId={stickerSel} />}
       {edit && hiding && (
         <UndoToast t={t} message={t('tools.frameDeleted')} deadline={hiding.hiddenUntil!} label="tools.frameUndo" onUndo={() => void edit.frameDeletion.undo(id, hiding.frameId)} />
       )}
+      {pickerOpen && <EmojiPicker t={t} lang={lang} onPick={onPick} onClose={() => setPickerOpen(false)} />}
       {exporter && exportOpen && project && (
         <ExportDialog t={t} project={project} controller={exporter} link={link} onClose={() => setExportOpen(false)} />
       )}

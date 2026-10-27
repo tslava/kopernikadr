@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { EditController } from '@/lib/app/editController';
+import { StickerController } from '@/lib/app/stickerController';
 import { retryApp, startApp, useApp, useBootState } from '@/lib/app/app';
 import { PREVIEW_QUALITIES } from '@/lib/app/drawerModel';
 import { useFrameUrls, type FrameUrls } from '@/lib/app/frames';
@@ -129,15 +130,17 @@ export default function AppShell() {
 }
 
 /** One edit controller per booted app: its Cofnij history outlives the Play screen. */
-const editors = new WeakMap<AppContext, EditController>();
-function editorFor(app: AppContext): EditController | null {
+const editors = new WeakMap<AppContext, { controller: EditController; stickers: StickerController }>();
+function editorFor(app: AppContext) {
   if (!app.frameDeletion) return null;
-  let c = editors.get(app);
-  if (!c) {
-    c = new EditController({ store: app.store, frameDeletion: app.frameDeletion, exporting: app.exporting });
-    editors.set(app, c);
+  let e = editors.get(app);
+  if (!e) {
+    const controller = new EditController({ store: app.store, frameDeletion: app.frameDeletion, exporting: app.exporting });
+    // stickers share the frame edits' Cofnij history
+    e = { controller, stickers: new StickerController({ store: app.store, exporting: app.exporting, history: controller.history }) };
+    editors.set(app, e);
   }
-  return c;
+  return e;
 }
 
 /** PlayView with its project from the store and `frameUrl` over the local files. */
@@ -164,8 +167,8 @@ function PlayRoute({ t, id, app, urls, onBack }: { t: Translate; id: string; app
   const snap = useStore(app.client.store);
   const link = useMemo(() => ({ online: snap.status === 'online' && snap.hello !== null, cameraId: snap.hello?.cameraId ?? null }), [snap.status, snap.hello]);
   const onFps = (fps: number) => void app.store.updateProject(id, (p) => setFps(p, fps)).catch(() => {});
-  const controller = editorFor(app);
-  const edit = controller && app.frameDeletion ? { controller, frameDeletion: app.frameDeletion } : undefined;
+  const editor = editorFor(app);
+  const edit = editor && app.frameDeletion ? { ...editor, frameDeletion: app.frameDeletion } : undefined;
   return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} urls={urls} exportEnv={exportEnv} link={link} onFps={onFps} edit={edit} />;
 }
 
