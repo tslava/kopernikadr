@@ -406,31 +406,33 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Create: `remote/lib/capture/{capture.ts,outstanding.ts}`, `remote/lib/transfer/types.ts` (the `Transfer.enqueue(frameId)` interface) + tests
 
-- [ ] tests first, then capture:
+- [x] tests first, then capture:
   1. `beginCapture` mutation (awaited);
   2. send `capture{projectId, rotation}` with a new reqId per press;
   3. on the result, a mutation removes outstanding and merges the frame. If the project was
      deleted, nothing is merged and the frame is handed to the ack pass;
   4. `Transfer.enqueue(frameId)` (a stub interface; the fake in tests)
-- [ ] a 10 s send timeout → `resolveOutstanding` for that reqId; outstanding limit 1
-- [ ] `resolveOutstanding()`:
+- [x] a 10 s send timeout → `resolveOutstanding` for that reqId; outstanding limit 1
+- [x] `resolveOutstanding()`:
   - only entries whose `cameraId` = the connected camera;
   - `getOperation` → `done` → result;
   - `pending` → poll every 1 s, give up after 30 s or after a `bootId` change: drop the entry
     with "sprawdzimy tę klatkę później"; reconcile still recovers a committed frame;
   - `failed`/`unknown` → drop with "nie wyszło, spróbuj jeszcze raz"
-- [ ] kid-level messages for `CAPTURE_IN_PROGRESS`, `CAMERA_NOT_READY`, `STORAGE_LOW`,
+- [x] kid-level messages for `CAPTURE_IN_PROGRESS`, `CAMERA_NOT_READY`, `STORAGE_LOW`,
       `GEOMETRY_MISMATCH`; no auto-retake
-- [ ] a project bound to another camera → shooting blocked with "new movie needed"; watch/export
+- [x] a project bound to another camera → shooting blocked with "new movie needed"; watch/export
       still work
-- [ ] write tests:
+- [x] write tests:
   - a lost response on a live connection (fake `/fake/drop-capture`);
   - pending forever (Task 3 switch);
   - a `bootId` change while pending;
   - a duplicate result via reconcile;
   - capture while offline;
   - entries of another camera are left alone
-- [ ] run tests — must pass before Task 10
+- [x] run tests — must pass before Task 10
+
+- ➕ Task 9 decisions (agent, accepted): press refuses while offline or reconciling; limit 1 is per connected camera and checked inside the `beginCapture` mutation; camera error answers (no frame) drop the entry without `getOperation`; local failures (timeout, socket, LEASE_LOST, INTERNAL) resolve via `getOperation`; only a freshly inserted frame is enqueued
 
 ### Task 10: Transfer A: download, install, ack (TDD)
 
