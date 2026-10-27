@@ -439,25 +439,25 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Create: `remote/lib/transfer/{queue.ts,download.ts,ack.ts}` + tests
 
-- [ ] tests first, then a one-at-a-time queue (ids, not bytes), the newest frame first:
+- [x] tests first, then a one-at-a-time queue (ids, not bytes), the newest frame first:
   - `full` → `tmp/` via `@capacitor/file-transfer`;
   - `installFile({tmp, dest, bytes, sha256})` verifies natively. `CHECKSUM_MISMATCH` → retry;
     **no JS-side sha256 pass**;
   - `play`/`thumb`: best-effort (Content-Length + decode), never blocking
-- [ ] install mutation:
+- [x] install mutation:
   - re-check tombstones (a tombstoned frame or project → delete the tmp file);
   - set `state: local`, committed;
   - **then** a batched ack
-- [ ] retries: 3 per frame with backoff for 404/mismatch/network errors, then mark
+- [x] retries: 3 per frame with backoff for 404/mismatch/network errors, then mark
       `unavailable` (never acked; retried by the next reconcile)
-- [ ] admission:
+- [x] admission:
   - `freeBytes` ≥ 300 MB + `full` + 1 MB, else pause with "Tablet storage full";
   - ENOSPC → pause + delete the tmp file;
   - paused during an export
-- [ ] the ack pass runs right after any commit that makes frames eligible: install, a project
+- [x] the ack pass runs right after any commit that makes frames eligible: install, a project
       tombstone, a result for a deleted project. It does not wait for a reconcile
-- [ ] a project delete drops its queued jobs and their tmp files
-- [ ] write tests:
+- [x] a project delete drops its queued jobs and their tmp files
+- [x] write tests:
   - the eligibility path (pendingProjectDeletes never acked);
   - a mismatch → retry → `unavailable`;
   - a 404 `full`;
@@ -465,7 +465,9 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - a Wi-Fi drop mid-download;
   - storage full;
   - a delete during a download
-- [ ] run tests — must pass before Task 11
+- [x] run tests — must pass before Task 11
+
+- ➕ Task 10 decisions (agent, accepted): 3 retries after the first attempt (4 downloads) then `unavailable`; Wi-Fi loss and storage-full don't consume retries; `ackNow(frameIds, projectOf?)`; only `ack.ts` sends `ack`, re-checking `ackEligible` per id at send time; the want-set is in memory (after a restart, acks come from the sweep promotion diff and reconcile); `kick()` must run on every session (Task 11 / boot wiring)
 
 ### Task 11: Transfer B: reconcile + integration (TDD)
 
