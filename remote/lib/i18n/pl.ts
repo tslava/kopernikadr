@@ -127,6 +127,7 @@ export const pl = {
   'projects.undo': 'Cofnij ({s} s)',
   'projects.error': 'Nie udało się. Spróbuj jeszcze raz.',
   'drawer.title': 'Dla rodzica',
+  'longpress.hint': 'Przytrzymaj dłużej',
   'drawer.close': 'Zamknij',
   'drawer.exposure': 'Ekspozycja',
   'drawer.whiteBalance': 'Balans bieli',

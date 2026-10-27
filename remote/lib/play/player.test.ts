@@ -80,6 +80,21 @@ describe('player scheduling', () => {
     expect(drawn.at(-1)!.id).toBe('f1');
   });
 
+  it('turning loop on after the movie ended: play starts again from frame 1', async () => {
+    const { clock, drawn, player } = setup(12, { loop: false });
+    player.setFrames(four);
+    await flush();
+    player.play();
+    await clock.advance(1000);
+    expect(player.status().playing).toBe(false);
+    player.setLoop(true);
+    player.play();
+    drawn.length = 0;
+    await clock.advance(1000);
+    expect(drawn.slice(0, 6).map((d) => d.id)).toEqual(['f1', 'f2', 'f3', 'f4', 'f1', 'f2']);
+    expect(player.status().playing).toBe(true);
+  });
+
   it('seekToStart while playing restarts from frame 1', async () => {
     const { clock, drawn, player } = setup(8);
     player.setFrames(four);

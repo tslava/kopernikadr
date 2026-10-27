@@ -129,6 +129,7 @@ export const ru: Strings = {
   'projects.undo': 'Отменить ({s} с)',
   'projects.error': 'Не получилось. Попробуйте ещё раз.',
   'drawer.title': 'Для родителя',
+  'longpress.hint': 'Подержи подольше',
   'drawer.close': 'Закрыть',
   'drawer.exposure': 'Экспозиция',
   'drawer.whiteBalance': 'Баланс белого',

@@ -146,7 +146,8 @@ export function createPlayer(o: PlayerOptions): Player {
       if (playing || dead) return;
       playing = true;
       nextDue = o.clock.now();
-      if (!loop && cursor >= ids.length) cursor = 0;
+      // at the end (a non-looping run finished, maybe before loop was turned on): start over
+      if (cursor >= ids.length) cursor = 0;
       refill();
       emit();
       schedule();

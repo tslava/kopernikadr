@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLongPress } from './longPress';
+import { beyondSlop, createLongPress, LONG_PRESS_SLOP_PX } from './longPress';
 
 describe('createLongPress', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -37,5 +37,15 @@ describe('createLongPress', () => {
     expect(fn).not.toHaveBeenCalled();
     vi.advanceTimersByTime(200);
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('beyondSlop', () => {
+  it('a small drift keeps the hold, a real move cancels it', () => {
+    expect(beyondSlop(0, 0)).toBe(false);
+    expect(beyondSlop(8, 12)).toBe(false);
+    expect(beyondSlop(LONG_PRESS_SLOP_PX, 0)).toBe(false);
+    expect(beyondSlop(LONG_PRESS_SLOP_PX + 1, 0)).toBe(true);
+    expect(beyondSlop(-20, -20)).toBe(true);
   });
 });
