@@ -141,12 +141,13 @@ class ServerHost(
             // immediate (the upgrade reclaims what is already old), then hourly.
             ageReclaim = scope.launch {
                 while (isActive) {
+                    var more = false
                     try {
-                        s.reclaimer.reclaimAged()
+                        more = s.reclaimer.reclaimAged() >= SpoolReclaimer.AGE_PASS_CAP
                     } catch (e: Exception) {
                         Log.w(CAP_TAG, "age reclaim failed", e)
                     }
-                    delay(AGE_RECLAIM_MS)
+                    delay(if (more) AGE_RECLAIM_MORE_MS else AGE_RECLAIM_MS) // a capped pass continues soon
                 }
             }
             poll = scope.launch {
@@ -305,5 +306,6 @@ class ServerHost(
         const val NAME = "Kopernikadr Kamera"
         private const val POLL_MS = 500L
         private const val AGE_RECLAIM_MS = 60L * 60 * 1000
+        private const val AGE_RECLAIM_MORE_MS = 10_000L // after a pass that hit the cap
     }
 }

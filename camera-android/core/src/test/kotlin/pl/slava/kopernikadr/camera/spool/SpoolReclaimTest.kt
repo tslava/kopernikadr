@@ -314,6 +314,17 @@ class SpoolReclaimTest {
     }
 
     @Test
+    fun `an age pass reclaims at most the cap, the next one continues`() {
+        val ids = (1..SpoolReclaimer.AGE_PASS_CAP + 5).map { frame("native", "c$it", ackedAt = it.toLong()) }
+        val r = aged(1_000 + week)
+        assertEquals(SpoolReclaimer.AGE_PASS_CAP, r.reclaimAged())
+        assertEquals(5, ids.count { !spool.isReclaimed(it) })
+        assertEquals(5, r.reclaimAged())
+        assertEquals(0, r.reclaimAged())
+        assertTrue(ids.all { spool.isReclaimed(it) })
+    }
+
+    @Test
     fun `age pass commits reclaimedAt before the delete and finishes oldest first`() {
         val newer = frame("native", "r1", ackedAt = 300)
         val older = frame("native", "r2", ackedAt = 100)

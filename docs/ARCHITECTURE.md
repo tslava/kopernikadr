@@ -313,6 +313,13 @@ stage 3 UI, same on the tablet).
     start), then hourly, and cancels it in `stop()`. It reclaims every acked frame, of any
     `clientId`, whose `ackedAt` is at or before now − 7 days, and logs the count
     (`age reclaim: N frame(s)`). A clock earlier than `ackedAt` reclaims nothing.
+    A pass reclaims at most 200 frames (it holds the reclaimer lock, so capture admission never
+    waits behind a huge backlog); a capped pass is followed by another 10 s later. **Clock trust:**
+    the pass reads the wall clock and cannot tell a real week from a clock jump. A frame acked in
+    the future (the clock went back) is skipped, but a forward jump (or a first sync after a boot
+    at 1970) makes every acked frame look old; the damage is bounded because only already-acked
+    frames are candidates, and the 200 cap spreads it over time. A running pass is not
+    interruptible (`stop()` cancels the job between passes).
   - Both go through one reclaimer-level lock, because `Spool.failedDeletes` is shared state.
   - **First launch after the upgrade:** the first age pass reclaims every frame acked more than
     7 days ago in one go, including frames acked by an earlier install. Back up the spool

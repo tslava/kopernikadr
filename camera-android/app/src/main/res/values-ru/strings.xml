@@ -31,8 +31,9 @@
     <string name="quarantine_hint">Снимки, которые приложение не смогло надёжно отнести к фильму. Сами не удаляются.</string>
     <string name="quarantine_clear">Очистить</string>
     <string name="quarantine_confirm_title">Удалить навсегда?</string>
-    <string name="quarantine_confirm_text">Введи число файлов (%1$d), чтобы удалить их. Отменить нельзя.</string>
-    <string name="quarantine_confirm_label">Число файлов</string>
+    <string name="quarantine_confirm_text">Это фото (%1$d), которые так и не были доставлены на планшет, и они могут быть единственной копией. Отменить нельзя.</string>
+    <string name="quarantine_confirm_question">Сколько будет %1$d × %2$d?</string>
+    <string name="quarantine_confirm_label">Ответ</string>
     <string name="quarantine_confirm_ok">Удалить</string>
     <string name="quarantine_cancel">Отмена</string>
     <string name="quarantine_cleared">Удалено: %1$d</string>

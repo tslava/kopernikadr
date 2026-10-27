@@ -46,6 +46,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pl.slava.kopernikadr.camera.R
+import pl.slava.kopernikadr.camera.spool.ClearQuestion
 import pl.slava.kopernikadr.camera.spool.QuarantineEntry
 import pl.slava.kopernikadr.camera.spool.QuarantineListing
 import pl.slava.kopernikadr.camera.spool.QuarantineStore
@@ -60,7 +61,7 @@ private val GREEN_OK = Color(0xFF7CD992)
 /**
  * The quarantine section of the parent screen: count, size, up to [THUMB_LIMIT] newest thumbnails
  * (decoded downsampled off the main thread), and "Wyczyść", which asks the parent to type the
- * file count. The clear deletes exactly the files this screen listed (see [QuarantineStore.clear]).
+ * answer to an arithmetic question ([ClearQuestion]). The clear deletes exactly the files this screen listed (see [QuarantineStore.clear]).
  */
 @Composable
 fun QuarantineSection(store: QuarantineStore) {
@@ -115,9 +116,10 @@ fun QuarantineSection(store: QuarantineStore) {
     }
 }
 
-/** The parent types the file count; only an exact match enables the button. */
+/** The parent answers a fresh multiplication (new each time the dialog opens); only the exact product enables the button. */
 @Composable
 private fun ConfirmClear(count: Int, onCancel: () -> Unit, onConfirm: () -> Unit) {
+    val question = remember { ClearQuestion.random() }
     var typed by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onCancel,
@@ -125,6 +127,7 @@ private fun ConfirmClear(count: Int, onCancel: () -> Unit, onConfirm: () -> Unit
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(stringResource(R.string.quarantine_confirm_text, count))
+                Text(stringResource(R.string.quarantine_confirm_question, question.a, question.b), fontWeight = FontWeight.Bold)
                 OutlinedTextField(
                     value = typed,
                     onValueChange = { typed = it.filter(Char::isDigit).take(6) },
@@ -135,7 +138,7 @@ private fun ConfirmClear(count: Int, onCancel: () -> Unit, onConfirm: () -> Unit
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, enabled = typed.toIntOrNull() == count) { Text(stringResource(R.string.quarantine_confirm_ok)) }
+            TextButton(onClick = onConfirm, enabled = question.accepts(typed)) { Text(stringResource(R.string.quarantine_confirm_ok)) }
         },
         dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.quarantine_cancel)) } },
     )

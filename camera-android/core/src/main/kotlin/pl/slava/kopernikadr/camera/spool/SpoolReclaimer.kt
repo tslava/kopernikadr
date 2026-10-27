@@ -35,19 +35,22 @@ class SpoolReclaimer(
 
     /**
      * Reclaims every acked frame whose `ackedAt` is at or before now - [AGE_MS] (any client), oldest
-     * first. With a clock earlier than a frame's `ackedAt` that frame is not reclaimed.
+     * first, at most [AGE_PASS_CAP] per call (the caller runs it again): one pass holds the pass lock, so
+     * a huge backlog must not keep capture admission waiting. With a clock earlier than a frame's
+     * `ackedAt` that frame is not reclaimed. The wall clock is trusted: a forward jump makes acked
+     * frames look old (bounded by the cap per pass, and only acked frames are ever candidates).
      * @return the number of frames reclaimed.
      */
     fun reclaimAged(): Int = synchronized(passLock) {
         val cutoff = now() - AGE_MS
-        val n = pass(ackedAtMax = cutoff) { true }
+        val n = pass(ackedAtMax = cutoff, limit = AGE_PASS_CAP) { true }
         log("age reclaim: $n frame(s) acked at or before $cutoff")
         n
     }
 
-    private fun pass(ackedAtMax: Long?, wanted: () -> Boolean): Int {
+    private fun pass(ackedAtMax: Long?, limit: Int = Int.MAX_VALUE, wanted: () -> Boolean): Int {
         var n = 0
-        while (wanted()) {
+        while (n < limit && wanted()) {
             val next = spool.nextReclaimable(ackedAtMax) ?: break
             if (!spool.markReclaimed(next.frameId)) continue
             beforeDelete(next.frameId)
@@ -72,5 +75,8 @@ class SpoolReclaimer(
     companion object {
         /** An acked frame is kept this long before the periodic pass may reclaim it. */
         const val AGE_MS = 7L * 24 * 60 * 60 * 1000
+
+        /** Frames one age pass reclaims at most; the next pass continues. */
+        const val AGE_PASS_CAP = 200
     }
 }

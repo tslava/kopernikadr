@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private var screenPolicy = ScreenPolicy(SystemClock::elapsedRealtime)
     private val main = Handler(Looper.getMainLooper())
     private var dimmed = false
+    private var wakeTouch = false
     private val dimTick = object : Runnable {
         override fun run() {
             applyBrightness()
@@ -121,6 +122,8 @@ class MainActivity : ComponentActivity() {
                             onTitleHeld = { parentOpen = true },
                         )
                     } else {
+                        // the permission screen never dims (like the QR card): the parent may be about to grant it
+                        SideEffect { screenPolicy.setQrShown(true) }
                         PermissionScreen(onRetry = { permissionRequest.launch(Manifest.permission.CAMERA) })
                     }
                     if (parentOpen && !diagnosticsOpen) {
@@ -173,8 +176,15 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // The touch that wakes a dimmed status screen only restores brightness: it must not press anything
+        // (a dialog or the parent screen never dims, so nothing else is ever swallowed).
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) wakeTouch = dimmed && cameraGranted && !parentOpen && !diagnosticsOpen
         screenPolicy.onActivity()
         applyBrightness()
+        if (wakeTouch) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) wakeTouch = false
+            return true
+        }
         return super.dispatchTouchEvent(ev)
     }
 
