@@ -686,18 +686,18 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - [ ] record the results in `docs/diagnostics/<date>-stage1-2-tablet.md`
 
 ### Task 22: Verify acceptance criteria
-- [ ] every Overview bullet works on the emulator and the tablet
-- [ ] the safety rules hold:
+- [x] every Overview bullet works on the emulator (E2E 9/9, three runs); ⚠️ the tablet part is Task 21 (owner)
+- [x] the safety rules hold (2026-10-27):
   - no ack outside eligibility (grep + tests);
   - remote-lite tests green;
   - the camera never deletes unacked frames or an unaccounted `full`
-- [ ] full suite:
+- [x] full suite (2026-10-27: remote 583, remote-core 42, probe-client 44, camera core+app, remote android, remote-lite 28, e2e helpers 4, scripts 36):
   - `npm test --workspaces`;
   - `cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest`;
   - `cd remote/android && ./gradlew-jbr :app:testDebugUnitTest`;
   - the remote-lite node tests;
   - `scripts/test/run.sh`
-- [ ] a Codex review of the batch; fix the material findings
+- [x] review of the batch — on a Claude reviewer (Codex out of credits): 3 medium + minor UI findings (concurrent export via hardware Back, a pending deletion never expiring after a restart, an invisible boot failure, a stuck shutter, the export gate dead end, …) all fixed; E2E re-run 9/9 PASS. `ack` is sent only from `remote/lib/transfer/ack.ts` (grep; probes ack only their own frames)
 
 ### Task 23: [Final] Update documentation
 - [x] `docs/ARCHITECTURE.md` (rev 4, 2026-10-27):
