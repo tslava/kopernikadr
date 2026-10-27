@@ -114,7 +114,7 @@ class SpoolRecoveryTest {
         val a = spool.insertPending("c1", "ra", "h", "p1", 0)
         val b = spool.insertPending("c1", "rb", "h", "p1", 0)
         val c = spool.insertPending("c1", "rc", "h", "p1", 0)
-        val tmpA = write(fileOf(a.frameId, FrameVariant.FULL).name + ".6f1c2a9e-0b1d-4c5e-8f3a-123456789abc.tmp")
+        val tmpA = write(fileOf(a.frameId, FrameVariant.FULL).name + ".6f1c2a9e-0b1d-4c5e-8f3a-123456789abc.tmp", byteArrayOf(1))
         write(fileOf(b.frameId, FrameVariant.FULL).name, jpeg.copyOf(jpeg.size - 2)) // no EOI
         write(fileOf(c.frameId, FrameVariant.FULL).name, byteArrayOf(1, 2, 3))
         val report = spool.recover()
@@ -124,8 +124,8 @@ class SpoolRecoveryTest {
             assertEquals(ErrorCodes.INTERRUPTED, s.error.code)
         }
         assertFalse(tmpA.exists())
-        // the bad fulls are kept, in quarantine
-        assertEquals(2, quarantined().size)
+        // the bad fulls (and the empty full tmp) are kept, in quarantine
+        assertEquals(3, quarantined().size)
         assertTrue(names().none { it.endsWith(".tmp") || it.contains(".full.") })
     }
 
@@ -188,7 +188,7 @@ class SpoolRecoveryTest {
     }
 
     @Test
-    fun `tmp files are deleted, with and without a row`() {
+    fun `play and thumb tmps are deleted, full tmps are quarantined, with and without a row`() {
         val id = committed(req = "r1")
         val other = ids.next()
         val tmps = listOf(
@@ -200,7 +200,44 @@ class SpoolRecoveryTest {
         spool.recover()
         assertTrue(tmps.none { it.exists() })
         assertTrue(fileOf(id, FrameVariant.FULL).isFile)
-        assertEquals(emptySet<String>(), quarantined()) // a tmp is not a photo
+        assertEquals(setOf("$id.full.jpg.tmp", "$other.full.jpg.tmp"), quarantined())
+    }
+
+    private val uuidTmp = ".6f1c2a9e-0b1d-4c5e-8f3a-123456789abc.tmp"
+
+    @Test
+    fun `pending with a complete full tmp is renamed and committed, not deleted`() {
+        val p = spool.insertPending("c1", "r1", "h", "p1", 0)
+        val tmpFile = write(fileOf(p.frameId, FrameVariant.FULL).name + uuidTmp)
+        val report = spool.recover()
+        assertEquals(1, report.committed)
+        assertEquals(0, report.interrupted)
+        assertFalse(tmpFile.exists())
+        assertArrayEquals(jpeg, fileOf(p.frameId, FrameVariant.FULL).readBytes())
+        val done = spool.getOperation("c1", "r1") as OperationState.Done
+        assertEquals(DurableFiles.sha256(jpeg), done.result.full.sha256)
+        assertEquals(emptySet<String>(), quarantined())
+    }
+
+    @Test
+    fun `pending with a truncated full tmp quarantines it and fails`() {
+        val p = spool.insertPending("c1", "r1", "h", "p1", 0)
+        val name = fileOf(p.frameId, FrameVariant.FULL).name + uuidTmp
+        write(name, jpeg.copyOf(jpeg.size - 2))
+        spool.recover()
+        assertTrue(spool.getOperation("c1", "r1") is OperationState.Failed)
+        assertEquals(setOf(name), quarantined())
+        assertFalse(File(dir, name).exists())
+    }
+
+    @Test
+    fun `an undecodable full tmp of a pending row is quarantined`() {
+        val p = spool.insertPending("c1", "r1", "h", "p1", 0)
+        val name = fileOf(p.frameId, FrameVariant.FULL).name + uuidTmp
+        write(name)
+        spool.recover(isDecodable = { false })
+        assertTrue(spool.getOperation("c1", "r1") is OperationState.Failed)
+        assertEquals(setOf(name), quarantined())
     }
 
     @Test

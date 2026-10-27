@@ -29,9 +29,20 @@ class SpoolReclaimer(
             val next = spool.nextReclaimable() ?: break
             if (!spool.markReclaimed(next.frameId)) continue
             beforeDelete(next.frameId)
-            derived.withFrameExclusive(next.frameId) { spool.deleteFiles(next.frameId) }
+            var freed = 0L
+            var failed: List<String> = emptyList()
+            derived.withFrameExclusive(next.frameId) {
+                spool.failedDeletes.clear()
+                freed = spool.deleteFiles(next.frameId)
+                failed = spool.failedDeletes.toList()
+            }
+            if (failed.isNotEmpty()) {
+                // the row stays marked (recover retries the delete); nothing was freed for it, so stop here
+                log("reclaim of ${next.frameId} failed to delete $failed; stopping")
+                break
+            }
             n++
-            log("reclaimed ${next.frameId} (${next.bytes} B)")
+            log("reclaimed ${next.frameId} ($freed B)")
         }
         return n
     }
