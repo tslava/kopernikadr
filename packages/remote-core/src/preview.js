@@ -5,11 +5,11 @@
 import { parsePreviewFrame } from './preview-frame.js';
 
 export class PreviewLoop {
-  #ws = null;
-  #sessionId = null;
+  /** @type {any} */ #ws = null;
+  /** @type {string | null} */ #sessionId = null;
   #running = false;
-  #watchdog = null;
-  #reopenTimer = null;
+  /** @type {any} */ #watchdog = null;
+  /** @type {any} */ #reopenTimer = null;
   #token = 0;
   #failures = 0;
 
@@ -18,7 +18,12 @@ export class PreviewLoop {
    *          onError?: (e: Error) => void, WebSocketImpl?: any, watchdogMs?: number, reopenDelayMs?: number}} opts
    */
   constructor({ urlFor, onFrame, onError, WebSocketImpl = globalThis.WebSocket, watchdogMs = 3000, reopenDelayMs = 300 }) {
-    Object.assign(this, { urlFor, onFrame, onError, WebSocketImpl, watchdogMs, reopenDelayMs });
+    this.urlFor = urlFor;
+    this.onFrame = onFrame;
+    this.onError = onError;
+    this.WebSocketImpl = WebSocketImpl;
+    this.watchdogMs = watchdogMs;
+    this.reopenDelayMs = reopenDelayMs;
     this.frames = 0;
     this.reopens = 0;
   }
@@ -28,6 +33,7 @@ export class PreviewLoop {
   }
 
   /** A new session (after hello) or null (offline). The loop only runs with a session. */
+  /** @param {string | null} sessionId */
   setSession(sessionId) {
     if (sessionId === this.#sessionId) return;
     this.#sessionId = sessionId;
@@ -51,17 +57,17 @@ export class PreviewLoop {
     const token = ++this.#token;
     let ws;
     try {
-      ws = new this.WebSocketImpl(this.urlFor(this.#sessionId));
+      ws = new this.WebSocketImpl(this.urlFor(/** @type {string} */ (this.#sessionId)));
     } catch (e) {
-      this.onError?.(e);
+      this.onError?.(/** @type {Error} */ (e));
       this.#reopenLater(token);
       return;
     }
     ws.binaryType = 'arraybuffer';
     this.#ws = ws;
     ws.addEventListener('open', () => { if (token === this.#token) this.#next(token); });
-    ws.addEventListener('message', (e) => this.#onMessage(token, e.data));
-    ws.addEventListener('close', (e) => {
+    ws.addEventListener('message', (/** @type {any} */ e) => this.#onMessage(token, e.data));
+    ws.addEventListener('close', (/** @type {any} */ e) => {
       if (token !== this.#token) return;
       this.#ws = null;
       clearTimeout(this.#watchdog);
@@ -71,6 +77,7 @@ export class PreviewLoop {
     });
   }
 
+  /** @param {number} token @param {any} data */
   async #onMessage(token, data) {
     if (token !== this.#token || typeof data === 'string') return;
     clearTimeout(this.#watchdog);
@@ -80,13 +87,14 @@ export class PreviewLoop {
       this.frames++;
       this.#failures = 0;
     } catch (e) {
-      this.onError?.(e);
+      this.onError?.(/** @type {Error} */ (e));
       if (token === this.#token) this.#restart(token);
       return;
     }
     if (token === this.#token) this.#next(token);
   }
 
+  /** @param {number} token */
   #next(token) {
     const ws = this.#ws;
     if (!ws || token !== this.#token) return;
@@ -100,12 +108,14 @@ export class PreviewLoop {
     this.#watchdog = setTimeout(() => this.#restart(token), this.watchdogMs);
   }
 
+  /** @param {number} token */
   #restart(token) {
     if (token !== this.#token) return;
     this.#close();
     this.#reopenLater(this.#token);
   }
 
+  /** @param {number} token */
   #reopenLater(token) {
     if (token !== this.#token || !this.#running || !this.#sessionId) return;
     clearTimeout(this.#reopenTimer);
