@@ -266,7 +266,7 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Modify: `protocol/tools/probe-client/fake-camera.mjs` + its tests
 
-- [ ] switches (HTTP `/fake/...` or options):
+- [x] switches (HTTP `/fake/...` or options):
   - restart with a new `bootId`;
   - change `cameraId`;
   - `STORAGE_LOW` on the next capture;
@@ -274,10 +274,10 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - a corrupted `full` (sha mismatch);
   - `pending` forever for the next capture;
   - reclaim (acked frame files → 404)
-- [ ] keep `/fake/kick` and `/fake/drop-capture` and the existing behaviour (the probes and the
+- [x] keep `/fake/kick` and `/fake/drop-capture` and the existing behaviour (the probes and the
       remote-lite tests use it)
-- [ ] write tests for each switch
-- [ ] run the probe-client + remote tests — must pass before Task 4
+- [x] write tests for each switch
+- [x] run the probe-client + remote tests — must pass before Task 4
 
 ### Task 4: Remote app shell: views, store hook, i18n, layout
 
