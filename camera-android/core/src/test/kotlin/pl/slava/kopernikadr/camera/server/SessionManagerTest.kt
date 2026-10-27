@@ -212,4 +212,23 @@ class SessionManagerTest {
         assertTrue(current !in replaced)
         assertEquals(results.map { it.session.sessionId }.toSet() - current, replaced.toSet())
     }
+
+    @Test
+    fun `connected only while the control socket is open, the lease outlives it`() {
+        val g = granted("A")
+        assertNull(sm.connected())
+        sm.socketOpened("s1")
+        assertEquals(g.session, sm.connected())
+        // a reconnect: the new socket opens before the old close is seen
+        sm.socketOpened("s1")
+        sm.socketClosed("s1")
+        assertEquals(g.session, sm.connected())
+        sm.socketClosed("s1")
+        assertNull(sm.connected())
+        assertEquals(g.session, sm.current()) // still leased to A for the TTL
+        clock.advanceMs(10_000L)
+        assertNull(sm.current())
+        sm.socketClosed("s1") // a stray close is harmless
+        assertNull(sm.connected())
+    }
 }

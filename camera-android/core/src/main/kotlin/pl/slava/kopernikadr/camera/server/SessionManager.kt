@@ -44,6 +44,7 @@ class SessionManager(
     private val lock = Any()
     private val ttlNanos = ttlMs * 1_000_000L
     private var current: Current? = null
+    private val sockets = HashMap<String, Int>()
 
     /** The current session after it lapsed, until a new grant reports it. */
     private var lapsed: Session? = null
@@ -74,6 +75,28 @@ class SessionManager(
     /** Checks [sessionId] without renewing it. */
     fun validate(sessionId: String): Validation = synchronized(lock) {
         if (live(sessionId, clock.nanos()) != null) Validation.Ok else Validation.LeaseLost
+    }
+
+    /**
+     * The control socket of [sessionId] opened / closed. Counted per session, so a reconnect whose new
+     * socket opens before the old one's close is seen still counts as one live tablet.
+     */
+    fun socketOpened(sessionId: String): Unit = synchronized(lock) {
+        sockets[sessionId] = (sockets[sessionId] ?: 0) + 1
+    }
+
+    fun socketClosed(sessionId: String): Unit = synchronized(lock) {
+        val n = (sockets[sessionId] ?: 0) - 1
+        if (n > 0) sockets[sessionId] = n else sockets.remove(sessionId)
+    }
+
+    /**
+     * The current session while its tablet is on the control socket. The lease alone outlives a
+     * disconnect by up to the TTL (so that tablet can come back first); the phone's "ready" card must not.
+     */
+    fun connected(): Session? = synchronized(lock) {
+        expireIfDue(clock.nanos())
+        current?.session?.takeIf { (sockets[it.sessionId] ?: 0) > 0 }
     }
 
     /** The live current session, if any. */

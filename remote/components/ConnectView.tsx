@@ -96,7 +96,11 @@ export function ConnectScreen({ t, client, onConnected }: { t: Translate; client
                   onClick={() => client.connectTo(r.cameraId)}
                 >
                   <Icon name="camera" />
-                  <span className="name">{t('connect.cameraName', { name: r.name })}</span>
+                  <span className="name">
+                    {t('connect.cameraName', { name: r.name })}
+                    {/* the address tells two phones with the same name apart */}
+                    <small className="where">{r.host}</small>
+                  </span>
                   <span className="state">{t(r.state === 'available' ? 'connect.use' : `connect.state.${r.state}`)}</span>
                 </button>
               </li>

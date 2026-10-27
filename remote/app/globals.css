@@ -118,7 +118,8 @@ button { min-height: 64px; }
 .cameras { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .camera { display: flex; align-items: center; gap: 16px; font-size: 24px; min-height: 72px; width: 100%; text-align: left; padding: 8px 16px; }
 .camera:disabled { opacity: 1; background: transparent; border-color: transparent; }
-.camera .name { flex: 1; }
+.camera .name { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.camera .where { color: var(--muted); font-size: 18px; }
 .camera .state { color: var(--muted); }
 .camera.available .state { color: #1a1205; background: var(--accent); border-radius: 12px; padding: 8px 20px; font-weight: 600; }
 .camera.online .state { color: #2e9e4f; }

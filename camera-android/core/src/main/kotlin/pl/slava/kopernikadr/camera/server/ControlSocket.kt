@@ -47,6 +47,7 @@ internal suspend fun DefaultWebSocketServerSession.controlSocket(hub: Hub) {
     val session = handshake(hub) ?: return
     val sid = session.sessionId
     hub.registerControl(sid, this)
+    hub.sessions.socketOpened(sid)
     val pushers = listOf(launch { pushControls(hub, sid) }, launch { pushStatus(hub, sid) })
     val inFlight: MutableSet<String> = ConcurrentHashMap.newKeySet()
     try {
@@ -72,6 +73,7 @@ internal suspend fun DefaultWebSocketServerSession.controlSocket(hub: Hub) {
     } finally {
         pushers.forEach(Job::cancel)
         hub.unregisterControl(sid, this)
+        hub.sessions.socketClosed(sid)
     }
 }
 

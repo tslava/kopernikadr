@@ -34,6 +34,7 @@ import pl.slava.kopernikadr.camera.net.AdvertisedServer
 import pl.slava.kopernikadr.camera.net.Advertisement
 import pl.slava.kopernikadr.camera.net.NsdAdvertiser
 import pl.slava.kopernikadr.camera.net.ServiceAdvertiser
+import pl.slava.kopernikadr.camera.net.cameraName
 import pl.slava.kopernikadr.camera.protocol.Capabilities
 import pl.slava.kopernikadr.camera.protocol.CaptureArgs
 import pl.slava.kopernikadr.camera.protocol.Controls
@@ -157,7 +158,7 @@ class ServerHost(
                     val session = sm.current()?.sessionId
                     if (session != null && session != lastSession) onActivity?.invoke()
                     lastSession = session
-                    val connected = session != null
+                    val connected = sm.connected() != null // a tablet on the socket, not just a lease
                     if (connected != last) {
                         Log.i(TAG, if (connected) "tablet connected" else "tablet disconnected")
                         last = connected
@@ -303,7 +304,8 @@ class ServerHost(
     companion object {
         const val TAG = "KopernikadrSrv"
         const val CAP_TAG = "KopernikadrCap"
-        const val NAME = "Kopernikadr Kamera"
+        /** The phone model ("moto g05"), so a tablet can tell two cameras apart. */
+        val NAME: String = cameraName(android.os.Build.MODEL)
         private const val POLL_MS = 500L
         private const val AGE_RECLAIM_MS = 60L * 60 * 1000
         private const val AGE_RECLAIM_MORE_MS = 10_000L // after a pass that hit the cap
