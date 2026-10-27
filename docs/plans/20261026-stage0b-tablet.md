@@ -584,7 +584,8 @@ Status: rev 2 (after the plan review; all critical and important findings applie
       pulled with `collect-diagnostics.sh`
 - [ ] the remote web build in Chrome against the real phone (non-native probes); native probes
       report "native only"
-- [ ] remote-lite regression on the phone (browser): capture, export
+- [x] remote-lite regression (2026-10-27, owner, tablet Chrome → Pixel 8 camera): capture, onion,
+      locks, playback, export all work, no noticeable lag
 - [ ] fix what's found (➕ tasks if larger)
 - [ ] run the full suite — must pass before Task 14
 
