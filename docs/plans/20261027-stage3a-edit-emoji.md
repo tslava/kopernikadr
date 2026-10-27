@@ -599,18 +599,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/ui/StatusScreen.kt` (the header hold becomes 3 s and is always on → the parent screen)
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/MainActivity.kt` (`onTitleHeld` → the parent screen; Diagnostics is reached from there)
 
-- [ ] write tests first:
+- [x] write tests first:
   - list (the `SpoolFiles` name rule incl. `.dupN`, `.tmp`, `.<uuid>.tmp`; sizes; newest first);
   - clear deletes only files directly in `spool/quarantine/` that match the name rule, and nothing else (a stray file and a subdirectory survive);
   - the cleared count equals what the list showed.
-- [ ] (no lock: `recover()` runs once per process before the server starts; record this in the KDoc.)
-- [ ] UI: count, size, ≤ 12 newest downsampled thumbnails; "Wyczyść" → a confirmation where the parent types the file count.
-- [ ] Pixel run:
+- [x] (no lock: `recover()` runs once per process before the server starts; record this in the KDoc.)
+- [x] UI: count, size, ≤ 12 newest downsampled thumbnails; "Wyczyść" → a confirmation where the parent types the file count.
+- [x] Pixel run (emulator-5584, debug build; never the g05):
   - put a test file into the probe build's quarantine via `run-as`;
   - open the screen with a 3 s hold (a 1.5 s hold opens nothing); "Diagnostyka" opens diagnostics;
   - clear it with the typed count and check that it's gone.
   - **Never on the g05.**
-- [ ] run tests — must pass before Task 14.
+  - Result: seeded `quarantine/` with 2 matching files (`<ULID>.full.jpg`, `<ULID>.full.jpg.dup1`), a `stray.txt` and a `subdir/` with a matching name inside. A 1.5 s hold on the header opened nothing; a 3.3 s hold opened "Dla rodzica" listing "Pliki: 2, 76 kB" with 2 thumbnails (stray and subdir not counted). "Diagnostyka" opened diagnostics (debug). Typing 3 left "Usuń" disabled; typing 2 cleared: "Usunięto: 2", and `run-as ls` shows only `stray.txt` and `subdir/` (with its file) left.
+- [x] run tests — must pass before Task 14. (core 446 tests incl. QuarantineStoreTest 8, app unit tests pass, `:app:assembleDebug` and `:app:compileReleaseKotlin` build)
 
 ### Task 14: E2E on the emulator — edit + sticker + export
 

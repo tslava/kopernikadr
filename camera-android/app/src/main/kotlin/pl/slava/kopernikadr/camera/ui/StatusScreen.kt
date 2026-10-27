@@ -54,8 +54,8 @@ import pl.slava.kopernikadr.camera.camera.CameraStatus
 import pl.slava.kopernikadr.camera.host.QrMatrix
 import pl.slava.kopernikadr.camera.host.ServerState
 
-/** Diagnostics open after holding the status title this long. */
-const val DIAGNOSTICS_HOLD_MS = 2_000L
+/** The parent screen opens after holding the status title this long. */
+const val PARENT_HOLD_MS = 3_000L
 
 /**
  * The phone's screen while the camera runs: the 4:3 viewfinder as large as the screen height
@@ -64,7 +64,7 @@ const val DIAGNOSTICS_HOLD_MS = 2_000L
  *
  * @param onPreviewView called with the [PreviewView] once it exists and with null when it is
  *   released; the caller hands its surface provider to the camera.
- * @param onTitleHeld opens diagnostics after [DIAGNOSTICS_HOLD_MS]; null = no long-press (release).
+ * @param onTitleHeld opens the parent screen after [PARENT_HOLD_MS] (all builds; diagnostics are reached from there).
  */
 @Composable
 fun StatusScreen(
@@ -72,7 +72,7 @@ fun StatusScreen(
     server: ServerState,
     camera: CameraStatus,
     onPreviewView: (PreviewView?) -> Unit,
-    onTitleHeld: (() -> Unit)?,
+    onTitleHeld: () -> Unit,
 ) {
     Surface(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize().safeDrawingPadding(), verticalAlignment = Alignment.CenterVertically) {
@@ -126,13 +126,13 @@ private val AMBER_BG = Color(0xFF3D3317)
 private val RED = Color(0xFFFF8A80)
 private val RED_BG = Color(0xFF3D1A1A)
 
-/** Logo, name and the "Kamera" chip; holding it opens diagnostics. */
+/** Logo, name and the "Kamera" chip; holding it opens the parent screen. */
 @Composable
-private fun Header(onTitleHeld: (() -> Unit)?) {
+private fun Header(onTitleHeld: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = if (onTitleHeld != null) Modifier.holdFor(DIAGNOSTICS_HOLD_MS, onTitleHeld) else Modifier,
+        modifier = Modifier.holdFor(PARENT_HOLD_MS, onTitleHeld),
     ) {
         Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(40.dp))
         Text(

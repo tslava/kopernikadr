@@ -30,17 +30,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.io.File
 import java.net.Inet4Address
 import java.net.InetAddress
 import pl.slava.kopernikadr.camera.camera.CameraController
 import pl.slava.kopernikadr.camera.host.ServerHost
 import pl.slava.kopernikadr.camera.screen.ScreenPolicy
+import pl.slava.kopernikadr.camera.spool.QuarantineStore
+import pl.slava.kopernikadr.camera.ui.ParentScreen
 import pl.slava.kopernikadr.camera.ui.PermissionScreen
 import pl.slava.kopernikadr.camera.ui.StatusScreen
 
 class MainActivity : ComponentActivity() {
     private var wifiIp by mutableStateOf<String?>(null)
     private var diagnosticsOpen by mutableStateOf(false)
+    private var parentOpen by mutableStateOf(false)
     private var cameraGranted by mutableStateOf(false)
 
     // ScreenPolicy: dims the window after 2 min without a touch or a remote command.
@@ -53,6 +57,8 @@ class MainActivity : ComponentActivity() {
             main.postDelayed(this, DIM_TICK_MS)
         }
     }
+
+    private val quarantineStore by lazy { QuarantineStore(File(filesDir, "spool")) }
 
     private val camera: CameraController get() = (application as App).camera
     private val server: ServerHost get() = (application as App).server
@@ -104,19 +110,27 @@ class MainActivity : ComponentActivity() {
                     if (cameraGranted) {
                         val status by camera.status.collectAsStateWithLifecycle()
                         val serverState by server.state.collectAsStateWithLifecycle()
-                        // No dim while the waiting card (with the QR) shows, nor while diagnostics run.
+                        // No dim while the waiting card (with the QR) shows, nor while the parent screen or diagnostics are open.
                         val waitingCard = wifiIp != null && serverState.error == null && serverState.port != null && !serverState.connected
-                        SideEffect { screenPolicy.setQrShown(waitingCard || diagnosticsOpen) }
+                        SideEffect { screenPolicy.setQrShown(waitingCard || diagnosticsOpen || parentOpen) }
                         StatusScreen(
                             wifiIp = wifiIp,
                             server = serverState,
                             camera = status,
                             onPreviewView = { view -> camera.setPreviewSurfaceProvider(view?.surfaceProvider) },
-                            // Release has no diagnostics screen, so its title gets no long-press at all.
-                            onTitleHeld = diagnosticsScreen?.let { { diagnosticsOpen = true } },
+                            onTitleHeld = { parentOpen = true },
                         )
                     } else {
                         PermissionScreen(onRetry = { permissionRequest.launch(Manifest.permission.CAMERA) })
+                    }
+                    if (parentOpen && !diagnosticsOpen) {
+                        BackHandler { parentOpen = false }
+                        ParentScreen(
+                            store = quarantineStore,
+                            onClose = { parentOpen = false },
+                            // Release has no diagnostics screen, so the button is absent there.
+                            onDiagnostics = diagnosticsScreen?.let { { parentOpen = false; diagnosticsOpen = true } },
+                        )
                     }
                     if (diagnosticsOpen && diagnosticsScreen != null) {
                         BackHandler { diagnosticsOpen = false }

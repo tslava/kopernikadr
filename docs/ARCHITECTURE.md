@@ -129,7 +129,7 @@ Consequences:
 
 | Component | Responsibility |
 |---|---|
-| `MainActivity` (Compose) | Status UI, IP:port + QR, permission screen, parent diagnostics screen (long-press). Owns lifecycle. |
+| `MainActivity` (Compose) | Status UI, IP:port + QR, permission screen, parent screen (3 s hold on the title: quarantine show/clear, diagnostics in debug/probe). Owns lifecycle. |
 | `CameraController` | Binds CameraX use cases in one `UseCaseGroup` with a `ViewPort`; applies controls via Camera2Interop; confirms control states from `CaptureResult` (§4.4). |
 | `FrameTransform` | Pure function: (`cropRect`, `rotationDegrees` of the buffer, project rotation) → matrix + output size. Unit-tested for all rotations. |
 | `CaptureService` | Single-threaded capture executor (§4.5). |

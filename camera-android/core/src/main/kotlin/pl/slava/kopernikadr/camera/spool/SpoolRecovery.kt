@@ -33,6 +33,12 @@ internal object SpoolFiles {
             "(\\.tmp|\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.tmp)?$",
     )
 
+    /**
+     * A name that [quarantine] can have produced: a [NAME] (tmp forms included) optionally followed by
+     * `.dupN`, the suffix that keeps an earlier quarantined file of the same name.
+     */
+    val QUARANTINED = Regex("^(${NAME.pattern.removePrefix("^").removeSuffix("$")})(\\.dup[0-9]+)?$")
+
     /** Moves [file] into `dir/quarantine/` without overwriting anything; false if it could not. */
     fun quarantine(dir: File, file: File): Boolean {
         val q = File(dir, QUARANTINE)
