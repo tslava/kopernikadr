@@ -115,3 +115,24 @@ button { min-height: 64px; }
 
 .play-canvas { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 16px; }
 .play-controls { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
+
+/* Capture view (kid UI) */
+.capture { gap: 16px; }
+.cap-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.counter { height: 64px; padding: 0 18px; display: inline-flex; align-items: center; gap: 10px; border-radius: 18px; background: var(--panel); font-size: 30px; color: var(--accent); }
+.counter b { color: var(--text); font-weight: 900; min-width: 1.2em; }
+.pending { display: inline-flex; gap: 8px; }
+.pending .ph { width: 40px; height: 30px; border-radius: 6px; background: var(--panel); border: 2px dashed var(--accent); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.onion-ctl { display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 16px 0 6px; border-radius: 18px; background: var(--panel); }
+.pill-btn { height: 52px; min-height: 52px; padding: 0 16px; border-radius: 14px; font-weight: 800; color: var(--muted); }
+.pill-btn.on { background: #e9e3ff; color: #3b2a8a; }
+.onion-ctl input { width: 150px; min-height: 0; padding: 0; }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.flash.go { animation: flash .22s ease-out; }
+@keyframes flash { 0%, 45% { opacity: .95; } 100% { opacity: 0; } }
+.cap-actions { display: flex; align-items: center; justify-content: center; gap: 48px; }
+.shutter { width: 128px; height: 128px; min-height: 128px; padding: 0; border-radius: 50%; background: #e9e3ff; border: 6px solid var(--text); display: grid; place-items: center; }
+.shutter-ring { width: 88px; height: 88px; border-radius: 50%; background: var(--accent); }
+.shutter:active:not(:disabled) .shutter-ring { transform: scale(.9); }
+.toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); max-width: 80vw; padding: 20px 32px; border-radius: 20px; background: var(--panel); border: 2px solid var(--accent); font-size: 26px; text-align: center; }
