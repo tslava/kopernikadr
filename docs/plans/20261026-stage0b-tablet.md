@@ -485,14 +485,40 @@ Status: rev 2 (after the plan review; all critical and important findings applie
 
 **Files:**
 - Create: `remote/lib/export/{codecPick.ts,mediabunnyExport.ts}` + tests, `remote/lib/probes/export.ts`
+- ➕ Create: `remote/lib/export/nativeWriter.ts` (the `ExportWriter` over `KopernikadrNative`,
+  1 MiB base64 calls) and `remote/lib/export/benchmark.ts` (`runExportBenchmark`, the probe's
+  entry point) + tests
 - Modify: `remote/package.json` (mediabunny pinned ≥14 days; verify the encoding-config field
   for a full codec string in that version), `remote/VERSIONS.md`
 
-- [ ] tests first, then `codecPick`: the `isConfigSupported` ladder avc High → Main → Baseline
-      → VP9-in-MP4; the result records the codec string
-- [ ] tests first, then the `mediabunnyExport` order with a fake encoder/target: chunked
+- [x] mediabunny **1.61.4** (2026-10-12; 1.61.5 is 2026-10-15) pinned exactly, in the root lock
+      and `remote/VERSIONS.md`. The full codec string goes in
+      `VideoEncodingConfig.fullCodecString`, next to a matching `codec` (`'avc'`/`'vp9'`)
+- [x] tests first, then `codecPick`: the `isConfigSupported` ladder avc High → Main → Baseline
+      → VP9-in-MP4; the result records the codec string (and which ones failed, with errors)
+  - ⚠️ deviation: VP9 is `vp09.00.40.08` (level 4.0), not `vp09.00.10.08`: the MP4 muxer copies
+    the codec string's level into `vpcC`, so level 1.0 would mislabel a 1440×1080 stream.
+    Mediabunny itself derives `vp09.00.40.08` / `avc1.640028` for 1440×1080
+  - the checked config mirrors the one Mediabunny configures (`bitrateMode: 'variable'`,
+    `alpha: 'discard'`, `avc: {format: 'avc'}`, `framerate`)
+- [x] tests first, then the `mediabunnyExport` order with a fake encoder/target: chunked
       `StreamTarget` writes carry `position`; finalize → close → publish; abort + cleanup on error
-- [ ] export probe:
+  - mirrors remote-lite `export-core.js`: optional `prepare` pass over every frame before the
+    file is opened; per-frame load retries (default 1) then `FRAME_LOAD_FAILED` with `index`;
+    load-ahead 1; every image closed on every path; cancel honoured only until `finalizing`
+  - ➕ an integration test runs the **real** Mediabunny muxer + `StreamTarget` in Node (a
+    registered `CustomVideoEncoder` emitting fake VP9 packets) and demuxes the output with
+    Mediabunny's `Input`: valid MP4, `vp09.00.40.08`, 20 packets, duration 20/fps, writes
+    ≤ `chunkSize` with a backwards (`mdat` patch) position; write failure and cancel abort
+- [x] ➕ `nativeWriter.ts`: `videoOpen` → `videoWriteAt` (≤1 MiB per call, sequential, base64
+      via `toBase64`) → `videoClose` → `videoPublish`; `abort` is a no-op before `open`
+- [x] ➕ `runExportBenchmark({frames, repeatTo, writer, fps?, width?, height?, bitrate?,
+      displayName?, signal?, onProgress?})` in `remote/lib/export/benchmark.ts`: codec pick →
+      `fetch(url)` + `createImageBitmap(resize 1440×1080)` of `frames[i % frames.length]` →
+      export → `{uri, codec, bytes, writes, frames, ms, perFrame, pick, summary{decodeMs,
+      waitMs, encodeMs: {mean,p50,p95,max}, msPerFrame, speed}}`; `NoEncoderError` (`NO_ENCODER`,
+      with `pick`) before anything is written
+- [ ] export probe (`remote/lib/probes/export.ts`, on the Task 10 runner; not written yet):
   - [ ] captures ~20 frames with the probe's own clientId, downloads their `full`, and cycles
         them to N (20 and 100);
   - [ ] measures per-frame decode/encode ms, total, bytes, URI, codec;
@@ -501,7 +527,8 @@ Status: rev 2 (after the plan review; all critical and important findings applie
       that AVC numbers come from the tablet
 - [ ] ➕ conditional (after Task 14): if AVC fails or is too slow on the T610, add a native
       MediaCodec+MediaMuxer `exportNative` task
-- [ ] run tests — must pass before Task 13
+- [ ] run tests — must pass before Task 13 (the export lib part passes: remote vitest 76 tests,
+      typecheck, build; remaining: the probe file and the emulator VP9 run)
 
 ### Task 13: Emulator end-to-end + Chrome dev run
 
@@ -579,6 +606,22 @@ Status: rev 2 (after the plan review; all critical and important findings applie
   - [ ] remote-lite as the interim remote + remote-core sharing;
   - [ ] the in-app native plugin;
   - [ ] the corrected §5.7 Mediabunny API (WritableStream `StreamTarget`, codec ladder);
+    - ➕ (from Task 12, checked in mediabunny 1.61.4) `StreamTarget` has no `onData(chunk,
+      position)`: it is `new StreamTarget(writable: WritableStream<{type: 'write', data,
+      position}>, {chunked: true, chunkSize})` (chunk default 16 MiB, min 1024; we use 1 MiB);
+      positions are not monotonic with `fastStart: false` (the `mdat` header is patched at
+      finalize). Mediabunny does not await each `write()`: backpressure is `writer.ready` (the
+      stream's queue), a failed write surfaces on the next flush or in `finalize()`, and
+      `finalize()` resolves only after every queued write
+    - ➕ the ladder is `VideoEncoder.isConfigSupported` with Mediabunny's own config, not
+      `canEncodeVideo('avc', …)`; codec strings are `avc1.640028` → `avc1.4d0028` →
+      `avc1.42e028` → `vp09.00.40.08`, passed as `VideoEncodingConfig.fullCodecString` with
+      `codec: 'avc' | 'vp9'`; bitrate as `quality: new Quality({bitrate})` (`bitrate` is
+      deprecated); frame rate via `addVideoTrack(source, {frameRate})`
+    - ➕ `output.cancel()` closes the stream (waits for queued writes) rather than aborting it;
+      the export then calls `videoAbort`. Cancel is honoured only in `encoding` (as §5.7 says)
+    - ➕ the writer side is `remote/lib/export/nativeWriter.ts`; each `videoWriteAt` carries
+      ≤1 MiB as base64
   - [ ] measured 0a/0b facts replacing [S0]; §9 decisions
 - [ ] README final; `docs/ROADMAP.md`: 0b done, next = stage 1 or the effects layer per the
       owner
