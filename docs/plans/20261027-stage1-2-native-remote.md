@@ -285,25 +285,25 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/lib/state/{store.ts,useStore.ts}`, `remote/components/{AppShell.tsx,ProjectsView.tsx,ConnectView.tsx,CaptureView.tsx,PlayView.tsx}` (stubs)
 - Modify: `remote/app/page.tsx`, `remote/components/Home.tsx`, `remote/lib/i18n/{pl,ru}.ts`, `remote/app/globals.css`
 
-- [ ] hash views `#/projects` (default), `#/connect`, `#/capture/<id>`, `#/play/<id>`,
+- [x] hash views `#/projects` (default), `#/connect`, `#/capture/<id>`, `#/play/<id>`,
       `#/diagnostics`; the Android back button through `@capacitor/app`
-- [ ] a tiny observable store + `useSyncExternalStore` hook (no new dependency)
-- [ ] the kid-facing layout baseline:
+- [x] a tiny observable store + `useSyncExternalStore` hook (no new dependency)
+- [x] the kid-facing layout baseline:
   - landscape 1920×1200;
   - touch targets of at least 64 px;
   - icons over text;
   - pl/ru strings;
   - parent-only things behind a long-press
-- [ ] write tests: router parsing, store subscribe/notify, i18n key parity
-- [ ] run tests — must pass before Task 5
+- [x] write tests: router parsing, store subscribe/notify, i18n key parity
+- [x] run tests — must pass before Task 5
 
 ### Task 5: ProjectStore: model + pure reducers (TDD)
 
 **Files:**
 - Create: `remote/lib/projects/{model.ts,reducers.ts,eligibility.ts}` + tests
 
-- [ ] tests first, then the types for `index.json`/`project.json` (version 1) and validation
-- [ ] reducers, all pure:
+- [x] tests first, then the types for `index.json`/`project.json` (version 1) and validation
+- [x] reducers, all pure:
   - create/rename project;
   - **`beginCapture`**: in one state change, add outstanding `{reqId, cameraId, sentAt}`, bind
     `cameraId` if null and freeze geometry/rotation;
@@ -314,9 +314,9 @@ Order: 1 → 2 → … → 23, one agent at a time.
   - mark/clear `unavailable`;
   - hide/unhide/expire project;
   - recovered project from `FrameInfo`
-- [ ] `ackEligible(frame, project, index)` per Technical Details, including "pendingProjectDeletes
+- [x] `ackEligible(frame, project, index)` per Technical Details, including "pendingProjectDeletes
       → not eligible" and "result for a deleted project → eligible, not merged"
-- [ ] write tests:
+- [x] write tests:
   - the monotonic-merge table (§5.5);
   - tombstones;
   - duplicate results via capture + reconcile;
@@ -324,7 +324,9 @@ Order: 1 → 2 → … → 23, one agent at a time.
     UI, then the result arrives → the original rotation holds);
   - a wrong-camera merge is refused;
   - the eligibility table
-- [ ] run tests — must pass before Task 6
+- [x] run tests — must pass before Task 6
+
+- ➕ Task 5 decisions (agent): a project in `pendingProjectDeletes` makes none of its frames eligible; geometry counts as frozen when the project has outstanding entries, frames or tombstones; `mergeFrame` refuses an unbound project; results for a project inside its Undo window are still merged
 
 ### Task 6: ProjectStore: persistence + mutation queue (TDD)
 
