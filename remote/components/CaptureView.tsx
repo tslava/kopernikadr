@@ -41,6 +41,8 @@ export interface CaptureViewProps {
   quality?: PreviewQuality;
   /** An export is running: no shooting. */
   exporting?: boolean;
+  /** The 3x3 composition grid over the preview (a parent setting). */
+  grid?: boolean;
   /** The parent drawer (Task 15). */
   drawer?: (ctx: DrawerContext) => ReactNode;
 }
@@ -81,7 +83,7 @@ function useKeepAwake(): void {
   }, []);
 }
 
-export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality = 'normal', exporting = false, drawer }: CaptureViewProps) {
+export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality = 'normal', exporting = false, grid = false, drawer }: CaptureViewProps) {
   const { store, client, capture } = app;
   const projects = useStore(store.state, (s) => s.projects);
   const snap = useStore(client.store);
@@ -178,6 +180,7 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
       </div>
       <Preview controller={controller} live={live} message={t(b.key)}>
         <OnionSkin
+          grid={grid}
           source={onion}
           enabled={onionOn}
           opacity={opacity}

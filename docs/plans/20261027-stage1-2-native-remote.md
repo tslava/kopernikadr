@@ -533,31 +533,33 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Modify: `remote/components/CaptureView.tsx`
 - Create: `remote/components/{ShutterButton.tsx,ConnectionBadge.tsx}` + component tests
 
-- [ ] preview + onion skin
-- [ ] a big shutter with sound and flash feedback (from remote-lite's `sound.js`)
-- [ ] the frame counter and pending-capture placeholders
-- [ ] a connection badge and error toasts
-- [ ] "play" and "back to movies" buttons
-- [ ] keep-awake while the view is open
-- [ ] write tests: the shutter is disabled while offline, at the outstanding limit, or during an
+- [x] preview + onion skin
+- [x] a big shutter with sound and flash feedback (from remote-lite's `sound.js`)
+- [x] the frame counter and pending-capture placeholders
+- [x] a connection badge and error toasts
+- [x] "play" and "back to movies" buttons
+- [x] keep-awake while the view is open
+- [x] write tests: the shutter is disabled while offline, at the outstanding limit, or during an
       export; toasts per error code
-- [ ] run tests — must pass before Task 15
+- [x] run tests — must pass before Task 15
+
+- ➕ Integration (orchestrator): `AppShell` owns the parent settings (preview quality, grid) in localStorage and hosts `CaptureDrawer` (long-press wrench → `ParentDrawer`); the capture view is a two-column grid (preview full height on the left, controls on the right). Emulator 2026-10-27 against the fake camera: new film → 3 shutter presses → counter 3
 
 ### Task 15: Parent drawer
 
 **Files:**
 - Create: `remote/components/ParentDrawer.tsx` + test
 
-- [ ] long-press opens it. It holds:
+- [x] long-press opens it. It holds:
   - exposure/WB/focus lock with `confirmed`/`settling`; "lock failed" via `isLockFailed`, only
     once `settling` is false;
   - exposure compensation, only when not frozen;
   - rotation 0/180 for empty projects only (no frames and no outstanding);
   - preview quality, fps, the grid toggle;
   - camera info, the transfer queue status, `unavailable` frames, storage
-- [ ] write tests: rotation locked after the first capture begins; compensation hidden when
+- [x] write tests: rotation locked after the first capture begins; compensation hidden when
       frozen; no "failed" while `settling`
-- [ ] run tests — must pass before Task 16
+- [x] run tests — must pass before Task 16
 
 ### Task 16: Projects view: create, rename, delete + Undo
 
@@ -565,18 +567,18 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Modify: `remote/components/ProjectsView.tsx`
 - Create: `remote/lib/projects/deletion.ts` + test
 
-- [ ] the movies list:
+- [x] the movies list:
   - big cards with a cover (the first local frame's `thumb`), name, frame count;
   - "Odzyskany" projects as ordinary cards;
   - a "new movie" card;
   - tap → capture or play
-- [ ] rename via a parent long-press or a simple dialog
-- [ ] delete:
+- [x] rename via a parent long-press or a simple dialog
+- [x] delete:
   - `pendingProjectDeletes` with a 5 s Undo (not ack-eligible in the window);
   - expiry → tombstone → commit → remove the dir → the immediate ack pass (Task 10)
-- [ ] write tests: Undo inside the window, expiry at startup, the ack pass after delete, nothing
+- [x] write tests: Undo inside the window, expiry at startup, the ack pass after delete, nothing
       acked inside the window
-- [ ] run tests — must pass before Task 17
+- [x] run tests — must pass before Task 17
 
 ### Task 17: Playback view
 

@@ -157,8 +157,15 @@ button { min-height: 64px; }
 .drawer dt { color: var(--muted); }
 .drawer dd { margin: 0; word-break: break-all; }
 /* Capture view (kid UI) */
-.capture { gap: 16px; }
+.preview-stage { position: relative; aspect-ratio: 4 / 3; width: 100%; background: #000; overflow: hidden; border-radius: 16px; }
+/* Landscape tablet: the 4:3 preview takes the full height on the left, the kid's controls sit on the right. */
+.capture { display: grid; height: 100vh; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 32px; }
+.capture > .bar { grid-column: 1 / -1; }
+.capture > .preview-stage { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; justify-self: center; align-self: start; }
+.capture > .cap-bar { grid-column: 2; grid-row: 2; }
+.capture > .cap-actions { grid-column: 2; grid-row: 3; flex-direction: column-reverse; justify-content: center; gap: 40px; }
 .cap-bar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.capture > .cap-bar { flex-direction: column; align-items: stretch; }
 .counter { height: 64px; padding: 0 18px; display: inline-flex; align-items: center; gap: 10px; border-radius: 18px; background: var(--panel); font-size: 30px; color: var(--accent); }
 .counter b { color: var(--text); font-weight: 900; min-width: 1.2em; }
 .pending { display: inline-flex; gap: 8px; }

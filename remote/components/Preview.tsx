@@ -3,7 +3,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import type { PreviewController } from '@/lib/camera/previewController';
 
-const stage = { position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', overflow: 'hidden' } as const;
 const fill = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' } as const;
 
 /**
@@ -27,7 +26,7 @@ export default function Preview({
     return () => controller.setCanvas(null);
   }, [controller]);
   return (
-    <div style={stage} data-live={live}>
+    <div className="preview-stage" data-live={live}>
       <canvas ref={ref} width={640} height={480} style={{ ...fill, filter: live ? undefined : 'brightness(.3) grayscale(.7)' }} />
       {children}
       {!live && message ? (

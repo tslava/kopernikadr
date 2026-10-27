@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { startApp, useApp } from '@/lib/app/app';
 import { useFrameUrls, type FrameUrls } from '@/lib/app/frames';
 import type { AppContext } from '@/lib/app/boot';
+import type { PreviewQuality } from '@/lib/camera/previewController';
 import { useStore } from '@/lib/state/useStore';
 import type { Translate } from '@/lib/i18n';
 import { back, navigate, useRoute } from '@/lib/nav';
 import { useTranslator } from '@/lib/i18n/useTranslator';
+import CaptureDrawer from './CaptureDrawer';
 import CaptureView from './CaptureView';
 import ConnectView from './ConnectView';
 import Diagnostics from './Diagnostics';
@@ -45,6 +47,9 @@ export default function AppShell() {
   }, []);
 
   const urls = useFrameUrls(app?.store);
+  // Parent settings shared by the capture view and its drawer; remembered on this tablet.
+  const [quality, setQuality] = useRemembered<PreviewQuality>('kopernikadr.previewQuality', 'normal');
+  const [grid, setGrid] = useRemembered<boolean>('kopernikadr.grid', false);
   const goBack = () => void back();
   switch (route.name) {
     case 'connect':
@@ -58,6 +63,19 @@ export default function AppShell() {
           urls={urls}
           onBack={goBack}
           onPlay={() => navigate({ name: 'play', id: route.id })}
+          quality={quality}
+          grid={grid}
+          drawer={({ project }) => (
+            <CaptureDrawer
+              t={t}
+              app={app}
+              projectId={project.id}
+              quality={quality}
+              onQuality={setQuality}
+              grid={grid}
+              onGrid={setGrid}
+            />
+          )}
         />
       ) : (
         <main className="screen"><p className="note">{t('capture.loading')}</p></main>
@@ -68,7 +86,12 @@ export default function AppShell() {
       return <Diagnostics t={t} onBack={goBack} />;
     default:
       return (
-        <ProjectsView t={t} onConnect={() => navigate({ name: 'connect' })} onDiagnostics={() => navigate({ name: 'diagnostics' })} />
+        <ProjectsView
+          t={t}
+          onConnect={() => navigate({ name: 'connect' })}
+          onDiagnostics={() => navigate({ name: 'diagnostics' })}
+          frameUrl={urls ? (p, f, kind) => urls.url(p, f, kind) : undefined}
+        />
       );
   }
 }
@@ -88,4 +111,25 @@ function PlayRoute({ t, id, app, urls, onBack }: { t: Translate; id: string; app
     [urls],
   );
   return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} />;
+}
+
+/** A small per-tablet setting in localStorage (try/catch: storage can be unavailable). */
+function useRemembered<T>(key: string, initial: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw === null ? initial : (JSON.parse(raw) as T);
+    } catch {
+      return initial;
+    }
+  });
+  const set = (v: T) => {
+    setValue(v);
+    try {
+      localStorage.setItem(key, JSON.stringify(v));
+    } catch {
+      /* not remembered, still applied */
+    }
+  };
+  return [value, set];
 }
