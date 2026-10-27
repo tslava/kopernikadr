@@ -1,0 +1,441 @@
+{
+  "kind": "kopernikadr-remote-diag",
+  "schema": 1,
+  "createdAt": "2026-10-27T09:46:50.513Z",
+  "startedAt": "2026-10-27T09:45:34.366Z",
+  "durationMs": 76146,
+  "cancelled": false,
+  "meta": {
+    "appVersion": "kopernikadr-remote/0b-probe",
+    "platform": "android",
+    "native": true,
+    "probeClientId": "24a294f0-3b35-46da-a1dd-8a2f57820410",
+    "manualAddress": "192.168.1.148:8765"
+  },
+  "keepAwake": {
+    "held": true
+  },
+  "summary": {
+    "total": 8,
+    "passed": 7,
+    "failed": 0,
+    "skipped": 1
+  },
+  "probes": {
+    "env": {
+      "name": "env",
+      "ok": true,
+      "ms": 1,
+      "data": {
+        "platform": "android",
+        "native": true,
+        "userAgent": "Mozilla/5.0 (Linux; Android 12; TB328FU Build/SP1A.210812.016; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/155.0.8059.43 Safari/537.36",
+        "webViewVersion": "155.0.8059.43",
+        "isSecureContext": true,
+        "cryptoSubtle": true,
+        "videoEncoder": true,
+        "videoDecoder": true,
+        "videoFrame": true,
+        "imageDecoder": true,
+        "createImageBitmap": true,
+        "webSocket": true,
+        "cores": 8,
+        "deviceMemoryGb": 4,
+        "screen": {
+          "w": 1280,
+          "h": 800,
+          "dpr": 1.5
+        },
+        "languages": [
+          "pl-PL",
+          "en-US"
+        ],
+        "missing": []
+      }
+    },
+    "storage": {
+      "name": "storage",
+      "ok": true,
+      "ms": 23,
+      "data": {
+        "freeBytes": 4674670592,
+        "freeGb": 4.67
+      }
+    },
+    "nsd": {
+      "name": "nsd",
+      "ok": true,
+      "ms": 5011,
+      "data": {
+        "services": [
+          {
+            "cameraId": "6bd38c9d-a0d2-45e0-b5c9-b2b399babf65",
+            "name": "Kopernikadr Kamera",
+            "protocolVersions": {
+              "min": 1,
+              "max": 1
+            },
+            "host": "192.168.1.148",
+            "port": 8765
+          }
+        ],
+        "firstFoundMs": 438,
+        "errors": [],
+        "durationMs": 5000,
+        "count": 1
+      }
+    },
+    "camera": {
+      "name": "camera",
+      "ok": true,
+      "ms": 35272,
+      "data": {
+        "target": {
+          "host": "192.168.1.148",
+          "port": 8765,
+          "source": "nsd"
+        },
+        "info": {
+          "ms": 983,
+          "cameraId": "6bd38c9d-a0d2-45e0-b5c9-b2b399babf65",
+          "name": "Kopernikadr Kamera",
+          "bootId": "ff78151a-2513-4cd3-a660-c0c4b0054a6f",
+          "protocolVersions": {
+            "min": 1,
+            "max": 1
+          }
+        },
+        "hello": {
+          "ms": 126,
+          "cameraId": "6bd38c9d-a0d2-45e0-b5c9-b2b399babf65",
+          "bootId": "ff78151a-2513-4cd3-a660-c0c4b0054a6f",
+          "sessionId": "bb1c24d1-e3aa-4289-adfd-4788edb2579b",
+          "name": "Kopernikadr Kamera",
+          "protocolVersion": 1,
+          "sessionTtlMs": 10000,
+          "rotation": 0,
+          "previewQuality": "normal"
+        },
+        "preview": {
+          "low": {
+            "seconds": 10,
+            "frames": 85,
+            "fps": 8.5,
+            "latencyMs": {
+              "p50": 95.6,
+              "p95": 150.1,
+              "max": 335.2
+            },
+            "decodeMs": {
+              "p50": 10.6,
+              "p95": 12.5,
+              "max": 28.8
+            },
+            "jpegBytes": {
+              "min": 32900,
+              "avg": 55280,
+              "max": 67444
+            },
+            "sizes": {
+              "640x480": 85
+            },
+            "stalls": 0,
+            "stallLog": [],
+            "mbPerS": 0.5
+          },
+          "normal": {
+            "seconds": 10,
+            "frames": 67,
+            "fps": 6.7,
+            "latencyMs": {
+              "p50": 125.5,
+              "p95": 193.7,
+              "max": 353.6
+            },
+            "decodeMs": {
+              "p50": 16.6,
+              "p95": 17.8,
+              "max": 20.2
+            },
+            "jpegBytes": {
+              "min": 129474,
+              "avg": 129727,
+              "max": 129914
+            },
+            "sizes": {
+              "960x720": 67
+            },
+            "stalls": 0,
+            "stallLog": [],
+            "mbPerS": 0.9
+          },
+          "high": {
+            "seconds": 10.2,
+            "frames": 57,
+            "fps": 5.6,
+            "latencyMs": {
+              "p50": 146.6,
+              "p95": 193,
+              "max": 220.2
+            },
+            "decodeMs": {
+              "p50": 23.6,
+              "p95": 25.8,
+              "max": 28.4
+            },
+            "jpegBytes": {
+              "min": 219070,
+              "avg": 219371,
+              "max": 219746
+            },
+            "sizes": {
+              "1280x960": 57
+            },
+            "stalls": 0,
+            "stallLog": [],
+            "mbPerS": 1.2
+          }
+        },
+        "captureWithPing": {
+          "roundTripMs": 387,
+          "viaGetOperation": false,
+          "notReadyRetries": 0,
+          "frameId": "01M5YC1NQAZX5MY76BQXQDKJTG",
+          "seq": 1,
+          "fullBytes": 1848003,
+          "pings": 4,
+          "pingsAnsweredDuringCapture": 3,
+          "pingRttMs": {
+            "p50": 19.4,
+            "p95": 30.7,
+            "max": 30.7
+          },
+          "pingErrors": []
+        },
+        "capture": {
+          "roundTripMs": 266,
+          "viaGetOperation": false,
+          "notReadyRetries": 0,
+          "frameId": "01M5YC1P39PP0GBMA5T6701ZNA",
+          "seq": 2,
+          "full": {
+            "w": 3264,
+            "h": 2448,
+            "bytes": 1847476,
+            "sha256": "ca3231007efdd0fc54efae580aac560d74ecd5d0020ddf87d23f72c1b4b59ef5"
+          }
+        },
+        "errors": []
+      }
+    },
+    "download": {
+      "name": "download",
+      "ok": true,
+      "ms": 1523,
+      "data": {
+        "mode": "native",
+        "target": {
+          "host": "192.168.1.148",
+          "port": 8765,
+          "source": "nsd"
+        },
+        "listed": 2,
+        "hasMore": false,
+        "frames": [
+          {
+            "frameId": "01M5YC1NQAZX5MY76BQXQDKJTG",
+            "seq": 1,
+            "expectedBytes": 1848003,
+            "bytes": 1848003,
+            "ms": 617,
+            "mbPerS": 3,
+            "sizeOk": true,
+            "sha256Ok": true,
+            "verified": true,
+            "install": "INSTALLED"
+          },
+          {
+            "frameId": "01M5YC1P39PP0GBMA5T6701ZNA",
+            "seq": 2,
+            "expectedBytes": 1847476,
+            "bytes": 1847476,
+            "ms": 423,
+            "mbPerS": 4.4,
+            "sizeOk": true,
+            "sha256Ok": true,
+            "verified": true,
+            "install": "INSTALLED"
+          }
+        ],
+        "totalBytes": 3695479,
+        "totalMs": 1040,
+        "mbPerS": 3.6,
+        "ack": {
+          "requested": 2,
+          "acked": 2,
+          "unknown": []
+        },
+        "errors": []
+      }
+    },
+    "videoFrame": {
+      "name": "videoFrame",
+      "ok": true,
+      "ms": 305,
+      "data": {
+        "frameId": "01M5YC1P39PP0GBMA5T6701ZNA",
+        "blobBytes": 1847476,
+        "readMs": 51,
+        "full": {
+          "bitmap": {
+            "w": 3264,
+            "h": 2448
+          },
+          "frame": {
+            "codedWidth": 3264,
+            "codedHeight": 2448,
+            "displayWidth": 3264,
+            "displayHeight": 2448,
+            "format": "RGBX"
+          },
+          "decodeMs": 104,
+          "frameMs": 1
+        },
+        "exportSize": {
+          "bitmap": {
+            "w": 1440,
+            "h": 1080
+          },
+          "frame": {
+            "codedWidth": 1440,
+            "codedHeight": 1080,
+            "displayWidth": 1440,
+            "displayHeight": 1080,
+            "format": "RGBA"
+          },
+          "decodeMs": 137,
+          "frameMs": 0
+        }
+      }
+    },
+    "export": {
+      "name": "export",
+      "ok": true,
+      "ms": 32196,
+      "data": {
+        "target": {
+          "host": "192.168.1.148",
+          "port": 8765,
+          "source": "nsd"
+        },
+        "sourceFrames": 20,
+        "runs": [
+          {
+            "n": 20,
+            "ok": true,
+            "uri": "content://media/external_primary/video/media/1000010968",
+            "codec": "avc1.640028",
+            "tried": [
+              {
+                "codecString": "avc1.640028",
+                "supported": true
+              }
+            ],
+            "failed": [],
+            "bytes": 2626351,
+            "ms": 3047.7000000029802,
+            "summary": {
+              "decodeMs": {
+                "mean": 218.87499999925495,
+                "p50": 217.70000000298023,
+                "p95": 254,
+                "max": 268.40000000596046
+              },
+              "waitMs": {
+                "mean": 117.25499999895692,
+                "p50": 106.29999999701977,
+                "p95": 238.1000000089407,
+                "max": 252.29999999701977
+              },
+              "encodeMs": {
+                "mean": 3.3350000008940697,
+                "p50": 0.5,
+                "p95": 1,
+                "max": 56.79999999701977
+              },
+              "msPerFrame": 152.385000000149,
+              "speed": 0.8202907110271862
+            }
+          },
+          {
+            "n": 100,
+            "ok": true,
+            "uri": "content://media/external_primary/video/media/1000010969",
+            "codec": "avc1.640028",
+            "tried": [
+              {
+                "codecString": "avc1.640028",
+                "supported": true
+              }
+            ],
+            "failed": [],
+            "bytes": 12572193,
+            "ms": 11813.90000000596,
+            "summary": {
+              "decodeMs": {
+                "mean": 219.51899999961256,
+                "p50": 218.30000001192093,
+                "p95": 258.5,
+                "max": 341.29999999701977
+              },
+              "waitMs": {
+                "mean": 110.98599999919534,
+                "p50": 138.79999999701977,
+                "p95": 212.5,
+                "max": 299
+              },
+              "encodeMs": {
+                "mean": 0.6840000006556511,
+                "p50": 0.30000001192092896,
+                "p95": 0.6000000089406967,
+                "max": 34
+              },
+              "msPerFrame": 118.13900000005961,
+              "speed": 1.0580756566412188
+            }
+          }
+        ],
+        "ack": {
+          "requested": 20,
+          "acked": 20,
+          "unknown": []
+        },
+        "cleanupErrors": [],
+        "errors": []
+      }
+    },
+    "reconnect": {
+      "name": "reconnect",
+      "ok": false,
+      "ms": 1789,
+      "data": {
+        "target": {
+          "host": "192.168.1.148",
+          "port": 8765,
+          "source": "nsd"
+        },
+        "initial": {
+          "ms": 124,
+          "bootId": "ff78151a-2513-4cd3-a660-c0c4b0054a6f"
+        },
+        "screenLock": {
+          "skipped": true
+        },
+        "cameraRestart": {
+          "skipped": true
+        }
+      },
+      "skipped": "user"
+    }
+  }
+}

@@ -566,8 +566,9 @@ Status: rev 2 (after the plan review; all critical and important findings applie
       (Main; High unsupported), not VP9 — its software encoder handles AVC. ffprobe on the 100-frame
       file: h264 Main 1440×1080, 8 fps, 100 frames, decodes clean. 14 ms/frame on the Mac emulator;
       the real AVC numbers come from the tablet
-- [ ] ➕ conditional (after Task 14): if AVC fails or is too slow on the T610, add a native
-      MediaCodec+MediaMuxer `exportNative` task
+- [x] ➕ conditional (after Task 14): if AVC fails or is too slow on the T610, add a native
+      MediaCodec+MediaMuxer `exportNative` task → **not needed**: hardware AVC High works on the
+      T610 (2026-10-27). ➕ stage 1: export from `play` (1440×1080) instead of `full`, ≈3× faster
 - [ ] run tests — must pass before Task 13 (the export lib part passes: remote vitest 148 tests,
       typecheck, build; remaining: the emulator VP9 run)
 
@@ -606,11 +607,13 @@ Status: rev 2 (after the plan review; all critical and important findings applie
   - [ ] `meminfo-sampler.sh` running
 - [ ] **manual APK install** via the Files app (unknown sources), then **an upgrade** over it
       with `install.sh --remote-only` (bumped `versionCode`); record the Family Link prompts
-- [ ] run all probes:
-  - [ ] env, NSD, manual address, camera (low/normal/high), reconnect (screen lock + camera
+- [x] run all probes (2026-10-27, debug build, camera = owner's Pixel 8 because the g05 was in
+      downtime; `docs/diagnostics/20261027-tablet.md`, 8/8 passed):
+  - [x] env, NSD, manual address, camera (low/normal/high), reconnect (screen lock + camera
         restart), download, VideoFrame;
-  - [ ] **export of 20 and 100 frames** (per-frame ms on the T610, total, peak memory from the
-        sampler, gallery playback + seek)
+  - [x] **export of 20 and 100 frames**: AVC High in hardware, 118 ms/frame for 8 MP sources
+        (decode-bound). ⚠️ peak memory (sampler) and gallery playback + seek not checked yet
+  - [ ] ➕ repeat against the g05
 - [ ] Family Link on **both** devices:
   - [ ] daily limit, app limit, downtime, the parent's manual lock, ordinary screen lock;
   - [ ] what "Always allowed" covers;
