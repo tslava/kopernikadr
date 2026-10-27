@@ -137,7 +137,7 @@ Consequences:
 | `Server` | Ktor CIO: `/info`, `/ws/control`, `/ws/preview`, `/frames/...`. Heartbeats are handled on the socket coroutine; captures run on `CaptureService`, so a long capture never delays a ping. |
 | `SessionManager` | Single controller: one live session (`sessionId`, `clientId`, last-seen on the monotonic clock); replacement, expiry, per-request validation (PROTOCOL §4). |
 | `Advertiser` | NsdManager registration of `_kopernikadr._tcp` with TXT `id`, `pv`, `name`. |
-| `ScreenPolicy` | `FLAG_KEEP_SCREEN_ON` while started. After 2 min without remote commands or touches it sets window brightness to ~5%; any activity restores it. |
+| `ScreenPolicy` | `FLAG_KEEP_SCREEN_ON` while started. After 2 min without remote commands (capture, controls, session open; the preview stream does not count) or touches it sets window brightness to ~5%; any activity restores it, and an Activity pause/resume resets it. It never dims while the waiting card with the QR (or diagnostics) is shown. The keep-screen-on flag stays, so the server and NSD keep running. |
 
 ### 4.2 Lifecycle
 

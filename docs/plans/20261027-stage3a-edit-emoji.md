@@ -577,18 +577,18 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/MainActivity.kt`
 - Modify: `camera-android/app/src/main/kotlin/pl/slava/kopernikadr/camera/host/ServerHost.kt` (an activity callback fed by the server/session events: capture, controls, session open)
 
-- [ ] write tests first (fake clock):
+- [x] write tests first (fake clock):
   - bright → dim after 2 min idle;
   - any activity → bright and the timer restarts;
   - the preview stream alone does not count;
   - an Activity pause/resume resets to bright;
   - no dim while the waiting card (QR) is shown.
-- [ ] wire it: `window.attributes.screenBrightness` 0.05 / `BRIGHTNESS_OVERRIDE_NONE`, touches through `dispatchTouchEvent`, commands from the server. `FLAG_KEEP_SCREEN_ON` stays.
-- [ ] Pixel run:
+- [x] wire it: `window.attributes.screenBrightness` 0.05 / `BRIGHTNESS_OVERRIDE_NONE`, touches through `dispatchTouchEvent`, commands from the server. `FLAG_KEEP_SCREEN_ON` stays.
+- [x] Pixel run (emulator-5584, debug-only `--ei idle_ms 15000` instead of waiting 2 min; logcat `KopernikadrScreen` dim/bright, no `dumpsys` brightness value read):
   - idle 2 min → dim (`dumpsys window` brightness / screencap);
   - a capture from the tablet → bright;
   - NSD still visible from the tablet while dim.
-- [ ] run tests — must pass before Task 13.
+- [x] run tests — must pass before Task 13.
 
 ### Task 13: Phone — quarantine show/clear (parent)
 
