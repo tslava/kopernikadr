@@ -45,7 +45,7 @@
 //                       never answers; `getOperation` keeps saying `pending`; one shot
 //   /fake/reclaim       the camera reclaims space: files of every acked frame are gone, so all its
 //                       variants -> 404 (PROTOCOL.md §9); returns the reclaimed frameIds
-//   /fake/state         JSON dump of frames / controls / session / frame requests
+//   /fake/state         JSON dump of bootId / cameraId / frames (each with `acked`) / controls / session / frame requests
 
 import { createServer } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
@@ -322,7 +322,7 @@ export async function startFakeCamera(opts = {}) {
     }
     if (p === '/fake/fail-lock') { state.failNextLock = true; return json(res, 200, { failNextLock: true }); }
     if (p === '/fake/state') {
-      return json(res, 200, { frames: [...state.frames.values()], controls: state.ctl, session: state.session, requests: state.requests.slice(-50),
+      return json(res, 200, { bootId, cameraId, frames: [...state.frames.values()].map((f) => ({ ...f, acked: state.acked.has(f.frameId) })), controls: state.ctl, session: state.session, requests: state.requests.slice(-50),
         frameRequests: state.frameRequests.slice(-200) });
     }
     if (opts.diag === false && p.startsWith('/diag/')) return json(res, 404, {});
