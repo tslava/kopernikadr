@@ -39,6 +39,8 @@ export interface Project {
   fps: number;
   geometry: { aspect: '4:3'; rotation: Rotation };
   cameraId: string | null;
+  /** Set once any capture was sent: geometry stays frozen even after the outstanding entry is dropped (additive, optional). */
+  geometryFrozen?: true;
   frames: FrameEntry[];
   deletedFrameIds: string[];
   outstanding: Outstanding[];
@@ -181,8 +183,9 @@ export function parseIndex(raw: unknown): ProjectIndex {
 export function parseProject(raw: unknown): Project {
   const o = obj(raw, 'project');
   version1(o, 'project');
-  const fps = int(o, 'fps', 'project', 1);
-  if (!(FPS_CHOICES as readonly number[]).includes(fps)) throw new ModelError('bad_type', 'project.fps');
+  // non-critical: an invalid fps or name must not make the whole project unreadable
+  const fpsRaw = o.fps;
+  const fps = typeof fpsRaw === 'number' && (FPS_CHOICES as readonly number[]).includes(fpsRaw) ? fpsRaw : DEFAULT_FPS;
   const g = obj(field(o, 'geometry', 'project'), 'project.geometry');
   if (str(g, 'aspect', 'project.geometry') !== '4:3') throw new ModelError('bad_type', 'project.geometry.aspect');
   const rot = field(g, 'rotation', 'project.geometry');
@@ -214,11 +217,12 @@ export function parseProject(raw: unknown): Project {
   return {
     version: 1,
     id: nonEmptyStr(o, 'id', 'project'),
-    name: str(o, 'name', 'project'),
+    name: typeof o.name === 'string' ? o.name : '',
     createdAt: nonEmptyStr(o, 'createdAt', 'project'),
     fps,
     geometry: { aspect: '4:3', rotation: rot },
     cameraId: strOrNull(o, 'cameraId', 'project'),
+    ...(o.geometryFrozen === true ? { geometryFrozen: true as const } : {}),
     frames,
     deletedFrameIds: strList(o, 'deletedFrameIds', 'project'),
     outstanding,

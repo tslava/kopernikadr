@@ -16,6 +16,7 @@ import {
   expireProjects,
   hideFrame,
   hideProject,
+  isGeometryFrozen,
   markUnavailable,
   mergeFrame,
   recoverProject,
@@ -445,7 +446,7 @@ describe('validation: index.json / project.json v1', () => {
       delete d[k];
       expect(code(() => parseIndex(d))).toBe(`missing_field index.${k}`);
     }
-    for (const k of ['id', 'name', 'createdAt', 'fps', 'geometry', 'cameraId', 'frames', 'deletedFrameIds', 'outstanding']) {
+    for (const k of ['id', 'createdAt', 'geometry', 'cameraId', 'frames', 'deletedFrameIds', 'outstanding']) {
       const d: Record<string, unknown> = goodProject();
       delete d[k];
       expect(code(() => parseProject(d))).toBe(`missing_field project.${k}`);
@@ -460,7 +461,6 @@ describe('validation: index.json / project.json v1', () => {
     expect(code(() => parseIndex({ ...goodIndex(), projects: {} }))).toBe('bad_type index.projects');
     expect(code(() => parseIndex({ ...goodIndex(), deletedProjects: [1] }))).toBe('bad_type index.deletedProjects[0]');
     expect(code(() => parseIndex({ ...goodIndex(), clientId: 5 }))).toBe('bad_type index.clientId');
-    expect(code(() => parseProject({ ...goodProject(), fps: 7 }))).toBe('bad_type project.fps');
     expect(code(() => parseProject({ ...goodProject(), geometry: { aspect: '4:3', rotation: 90 } }))).toBe('bad_type project.geometry.rotation');
     expect(code(() => parseProject({ ...goodProject(), geometry: { aspect: '16:9', rotation: 0 } }))).toBe('bad_type project.geometry.aspect');
     expect(code(() => parseProject({ ...goodProject(), cameraId: 3 }))).toBe('bad_type project.cameraId');
@@ -470,5 +470,39 @@ describe('validation: index.json / project.json v1', () => {
     const g = goodProject();
     (g.frames[1] as Record<string, unknown>).seq = 1.5;
     expect(code(() => parseProject(g))).toBe('bad_type project.frames[1].seq');
+  });
+});
+
+describe('review fixes: reducers/model', () => {
+  it('setLocal clears a stale unavailable flag', () => {
+    const p = markUnavailable(merged(boundProject(), 1), 'F001', 'http 404', T0);
+    expect(p.frames[0]!.unavailable).toBeDefined();
+    const l = setLocal(p, 'F001');
+    expect(l.frames[0]!.state).toBe('local');
+    expect(l.frames[0]!.unavailable).toBeUndefined();
+  });
+
+  it('beginCapture persists geometryFrozen; it survives dropping the outstanding entry', () => {
+    const b = beginCapture(newProject().project, { reqId: 'r1', cameraId: CAM, nowMs: T0 });
+    if (!b.ok) throw new Error('x');
+    expect(b.project.geometryFrozen).toBe(true);
+    const dropped = removeOutstanding(b.project, 'r1');
+    expect(dropped.outstanding).toEqual([]);
+    expect(isGeometryFrozen(dropped)).toBe(true);
+    expect(setRotation(dropped, 180)).toBe(dropped);
+    expect(parseProject(JSON.parse(JSON.stringify(dropped))).geometryFrozen).toBe(true);
+    expect(isGeometryFrozen(newProject().project)).toBe(false);
+    expect('geometryFrozen' in parseProject(JSON.parse(JSON.stringify(newProject().project)))).toBe(false);
+  });
+
+  it('parseProject is lenient for non-critical fields (fps, name) and strict for ids/frames/state', () => {
+    const raw = JSON.parse(JSON.stringify(newProject().project));
+    expect(parseProject({ ...raw, fps: 7 }).fps).toBe(8);
+    expect(parseProject({ ...raw, fps: 'fast' }).fps).toBe(8);
+    const { fps: _f, ...noFps } = raw;
+    expect(parseProject(noFps).fps).toBe(8);
+    expect(parseProject({ ...raw, name: 5 }).name).toBe('');
+    expect(() => parseProject({ ...raw, id: '' })).toThrow(ModelError);
+    expect(() => parseProject({ ...raw, frames: [{ frameId: 'a', seq: 1, bytes: 1, sha256: 'x', state: 'weird', hiddenUntil: null }] })).toThrow(ModelError);
   });
 });

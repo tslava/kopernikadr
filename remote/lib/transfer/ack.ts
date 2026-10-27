@@ -7,6 +7,9 @@
  *  - an id that is not eligible is never sent. In `pendingProjectDeletes` it is kept until the
  *    Undo window ends (restore -> eligible again, expiry -> `deletedProjects` -> eligible);
  *    otherwise it is forgotten (a later commit that makes it eligible re-adds it);
+ *  - only frames whose `project.cameraId` is the CONNECTED camera are sent (another camera's frames wait,
+ *    they are not dropped); ids the camera answers `unknown` for are dropped without being marked acked
+ *    (reconcile re-derives them on the camera that really has them);
  *  - a failed `ack` keeps the id and retries later (backoff, or `kick()` on a new session).
  *    The want-set is in memory: after a restart `reconcile()` (Task 11) re-derives it from `listFrames`.
  *
@@ -45,6 +48,8 @@ export interface AckerDeps {
   /** `client.request`; rejects while offline. */
   request: (op: string, args: object, opts?: { timeoutMs?: number }) => Promise<any>;
   clock?: Clock;
+  /** The connected camera's id (read lazily), or null while offline. Only frames of that camera are acked; the rest wait. */
+  cameraId: () => string | null;
   /** Called after the want-set changes (status UI). */
   onChange?: () => void;
 }
@@ -105,23 +110,29 @@ export function createAcker(deps: AckerDeps): Acker {
   async function passOnce(): Promise<void> {
     const ids = [...wants.keys()];
     let failed = false;
+    const connected = deps.cameraId();
     for (let i = 0; i < ids.length; i += ACK_CHUNK) {
       const s = store.state.get(); // fresh for every chunk; used synchronously below
       const send: string[] = [];
       for (const id of ids.slice(i, i + ACK_CHUNK)) {
         const pid = wants.get(id);
         if (pid === undefined) continue;
-        if (eligible(s, id, pid)) send.push(id);
-        else if (!s.index.pendingProjectDeletes.some((p) => p.id === pid)) wants.delete(id);
+        if (eligible(s, id, pid)) {
+          const proj = s.projects[pid];
+          // a project that is gone (deleted) has no camera binding: the camera answers `unknown` if it is not its frame
+          if (proj ? connected !== null && proj.cameraId === connected : connected !== null) send.push(id);
+        } else if (!s.index.pendingProjectDeletes.some((p) => p.id === pid)) wants.delete(id);
       }
       if (send.length === 0) continue;
       for (const id of send) inflight.add(id);
       try {
-        await deps.request('ack', { frameIds: send }, { timeoutMs: ACK_TIMEOUT_MS });
-        // `unknown` ids are ones the camera does not have (reclaimed): nothing left to ack either
+        const res = await deps.request('ack', { frameIds: send }, { timeoutMs: ACK_TIMEOUT_MS });
+        // `unknown`: this camera does not have the frame (reclaimed, or another camera's). Not acked: never
+        // marked done; dropped from the wants (reconcile re-derives it from `listFrames` on the right camera).
+        const unknown = new Set<string>(Array.isArray(res?.unknown) ? res.unknown.filter((x: unknown) => typeof x === 'string') : []);
         for (const id of send) {
           wants.delete(id);
-          acked.add(id);
+          if (!unknown.has(id)) acked.add(id);
         }
       } catch {
         failed = true;
@@ -202,6 +213,7 @@ export function createAcker(deps: AckerDeps): Acker {
       await pass();
     },
     kick() {
+      acked.clear(); // a new session: acks are idempotent on the camera, re-sending is safe
       retryCancel?.();
       retryCancel = null;
       attempt = 0;

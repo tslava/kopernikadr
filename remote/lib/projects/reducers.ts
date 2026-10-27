@@ -65,7 +65,7 @@ export function setFps(project: Project, fps: number): Project {
 
 /** Geometry is frozen once the project has any capture trace (outstanding, frame or tombstone). */
 export function isGeometryFrozen(project: Project): boolean {
-  return project.outstanding.length > 0 || project.frames.length > 0 || project.deletedFrameIds.length > 0;
+  return project.geometryFrozen === true || project.outstanding.length > 0 || project.frames.length > 0 || project.deletedFrameIds.length > 0;
 }
 
 /** UI rotation change. Ignored once the geometry is frozen. */
@@ -98,7 +98,7 @@ export function beginCapture(
   const outstanding = project.outstanding.some((o) => o.reqId === args.reqId)
     ? project.outstanding
     : [...project.outstanding, { reqId: args.reqId, cameraId: args.cameraId, sentAt: iso(args.nowMs) }];
-  return { ok: true, project: { ...project, cameraId: args.cameraId, outstanding }, rotation };
+  return { ok: true, project: { ...project, cameraId: args.cameraId, outstanding, geometryFrozen: true }, rotation };
 }
 
 /** Resolving an outstanding request only removes that request. */
@@ -160,7 +160,11 @@ export function routeResult(index: ProjectIndex, projectId: string): ResultRoute
 
 /** Install committed: `pending` -> `local`. A frame that is absent/tombstoned is left alone. */
 export function setLocal(project: Project, frameId: string): Project {
-  return updateFrame(project, frameId, (f) => (f.state === 'local' ? f : { ...f, state: 'local' }));
+  return updateFrame(project, frameId, (f) => {
+    if (f.state === 'local' && f.unavailable === undefined) return f;
+    const { unavailable: _u, ...rest } = f; // a stale give-up flag must not outlive the install
+    return { ...rest, state: 'local' };
+  });
 }
 
 /** The download gave up. Never acked. Only a `pending` frame can become unavailable. */

@@ -220,4 +220,25 @@ describe('reconcile', () => {
     await r.run();
     expect(r.proj().frames).toEqual([]);
   });
+
+  it('an empty unbound project (sweep-recreated) is bound to the camera with the rotation of the first FrameInfo, then merges', async () => {
+    const r = await rig({ camera: null });
+    expect(r.proj().cameraId).toBeNull();
+    r.listed.frames = [{ ...info(r.p.id, 'A', 1), rotation: 180 }, { ...info(r.p.id, 'B', 2), rotation: 180 }];
+    await r.run();
+    expect(r.proj().cameraId).toBe(CAM);
+    expect(r.proj().geometry.rotation).toBe(180);
+    expect(r.proj().frames.map((f) => f.frameId)).toEqual(['A', 'B']);
+    expect(r.transfer.enqueue.mock.calls.map((c) => c[0])).toEqual(['A', 'B']);
+    expect(r.acks).toEqual([]);
+  });
+
+  it('an unbound project that already has frozen geometry keeps its rotation', async () => {
+    const r = await rig({ camera: null });
+    await r.store.updateProject(r.p.id, (p) => ({ ...p, geometryFrozen: true }));
+    r.listed.frames = [{ ...info(r.p.id, 'A', 1), rotation: 180 }];
+    await r.run();
+    expect(r.proj().cameraId).toBe(CAM);
+    expect(r.proj().geometry.rotation).toBe(0);
+  });
 });

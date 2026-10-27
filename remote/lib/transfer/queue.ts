@@ -58,6 +58,8 @@ export interface TransferDeps {
   request: (op: string, args: object, opts?: { timeoutMs?: number }) => Promise<any>;
   /** The connected camera's address, or null while offline. */
   target: () => { host: string; port: number } | null;
+  /** The connected camera's id (read lazily), or null while offline. Only frames of that camera are downloaded/acked. */
+  cameraId: () => string | null;
   clock?: Clock;
   fullTimeoutMs?: number;
 }
@@ -94,7 +96,7 @@ const destOf = (pid: string, id: string, v: Variant) => `${dir(pid)}/${id}.${v}.
 export function createTransfer(deps: TransferDeps): TransferService {
   const { store, io } = deps;
   const clock = deps.clock ?? realClock;
-  const acker: Acker = createAcker({ store, request: deps.request, clock, onChange: () => refresh() });
+  const acker: Acker = createAcker({ store, request: deps.request, cameraId: deps.cameraId, clock, onChange: () => refresh() });
 
   const fulls: Job[] = [];
   const caches: Job[] = [];
@@ -106,6 +108,8 @@ export function createTransfer(deps: TransferDeps): TransferService {
   let wakeCancel: (() => void) | null = null;
   let tmpN = 0;
   const waiters: (() => void)[] = [];
+  /** `pause()` callers: resolved when the job running at that time settles (even if `resume()` came meanwhile). */
+  const pauseWaiters: (() => void)[] = [];
 
   const status = createStore<TransferStatus>({ queued: 0, current: null, paused: null, unavailable: 0, ackPending: 0 });
 
@@ -144,14 +148,24 @@ export function createTransfer(deps: TransferDeps): TransferService {
     });
   }
 
-  function pickReady(): Job | null {
-    const t = clock.now();
-    return fulls.find((j) => j.notBefore <= t) ?? (fulls.length === 0 ? (caches.find((j) => j.notBefore <= t) ?? null) : null);
+  /** A job is workable now only for the connected camera's project (others wait, queued, until that camera is back). */
+  function forConnected(job: Job): boolean {
+    const p = store.state.get().projects[job.projectId];
+    if (!p) return true; // gone: the job handler drops it
+    const c = deps.cameraId();
+    return c !== null && p.cameraId === c;
   }
 
-  /** Earliest `notBefore` among waiting jobs (so a timer can restart the loop). */
+  function pickReady(): Job | null {
+    const t = clock.now();
+    const f = fulls.filter(forConnected);
+    return f.find((j) => j.notBefore <= t) ?? (f.length === 0 ? (caches.filter(forConnected).find((j) => j.notBefore <= t) ?? null) : null);
+  }
+
+  /** Earliest `notBefore` among waiting jobs of the connected camera (so a timer can restart the loop). */
   function nextDue(): number | null {
-    const list = fulls.length > 0 ? fulls : caches;
+    const f = fulls.filter(forConnected);
+    const list = f.length > 0 ? f : caches.filter(forConnected);
     return list.length === 0 ? null : Math.min(...list.map((j) => j.notBefore));
   }
 
@@ -171,6 +185,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
         pumping = false;
         current = null;
         refresh();
+        for (const w of pauseWaiters.splice(0)) w();
         for (const w of waiters.splice(0)) w();
       }
     })();
@@ -197,6 +212,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
       } finally {
         current = null;
         refresh();
+        for (const w of pauseWaiters.splice(0)) w();
       }
     }
   }
@@ -383,7 +399,7 @@ export function createTransfer(deps: TransferDeps): TransferService {
     pause() {
       exportPaused = true;
       refresh();
-      return pumping ? new Promise<void>((r) => waiters.push(r)) : Promise.resolve();
+      return pumping ? new Promise<void>((r) => pauseWaiters.push(r)) : Promise.resolve();
     },
     resume() {
       exportPaused = false;

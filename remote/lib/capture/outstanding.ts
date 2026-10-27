@@ -104,6 +104,11 @@ export interface Resolver {
   drop(projectId: string, reqId: string): Promise<void>;
 }
 
+/** A failure of the link itself (socket closed / no answer): says nothing about the entry, so it is kept. */
+const isTransport = (e: any): boolean => e?.local === true || e?.code === 'CLOSED' || e?.code === 'TIMEOUT';
+/** Protocol errors / unexpected states tolerated per entry before it is dropped (a stuck entry would block every press). */
+export const MAX_BAD_ANSWERS = 3;
+
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function createResolver(env: CaptureEnv): Resolver {
@@ -112,6 +117,19 @@ export function createResolver(env: CaptureEnv): Resolver {
   const pollMs = env.pollMs ?? POLL_MS;
   const giveUpMs = env.giveUpMs ?? GIVE_UP_MS;
   const inflight = new Map<string, Promise<CaptureOutcome>>();
+  const badAnswers = new Map<string, number>(); // reqId -> protocol errors / unexpected states seen
+
+  /** Counts one bad answer for the entry; drops it on the third (generic "nie wyszło"), otherwise keeps it. */
+  async function badAnswer(projectId: string, reqId: string): Promise<CaptureOutcome> {
+    const n = (badAnswers.get(reqId) ?? 0) + 1;
+    if (n >= MAX_BAD_ANSWERS) {
+      badAnswers.delete(reqId);
+      await drop(projectId, reqId);
+      return failure('generic', { reqId });
+    }
+    badAnswers.set(reqId, n);
+    return failure('later', { reqId });
+  }
 
   async function drop(projectId: string, reqId: string): Promise<void> {
     await store.mutate((s) => {
@@ -142,15 +160,18 @@ export function createResolver(env: CaptureEnv): Resolver {
       let op: any;
       try {
         op = await camera.request('getOperation', { reqId }, { timeoutMs: OP_TIMEOUT_MS });
-      } catch {
+      } catch (e) {
         // not connected / no answer: the entry stays; the next session's hook resolves it
-        return failure('later', { reqId });
+        if (isTransport(e)) return failure('later', { reqId });
+        return badAnswer(projectId, reqId); // the camera answered with an error we cannot act on
       }
       switch (op?.state) {
         case 'done':
+          badAnswers.delete(reqId);
           return settleFrame(projectId, reqId, cameraId, op.result as FrameInfo);
         case 'failed':
         case 'unknown':
+          badAnswers.delete(reqId);
           await drop(projectId, reqId);
           return failure('generic', { reqId, ...(op.error?.code ? { code: String(op.error.code) } : {}) });
         case 'pending': {
@@ -165,7 +186,7 @@ export function createResolver(env: CaptureEnv): Resolver {
           break;
         }
         default:
-          return failure('later', { reqId });
+          return badAnswer(projectId, reqId);
       }
     }
   }

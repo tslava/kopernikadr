@@ -25,7 +25,7 @@
  *  6. Files in `frames/`, `tmp/` are not touched by this store at all (installs, downloads): the
  *     sweep promotes/deletes them per §5.8.
  */
-import { INDEX_PATH, projectDir, projectJsonPath, type FileAdapter } from './files';
+import { CLIENT_ID_PATH, INDEX_PATH, projectDir, projectJsonPath, type FileAdapter } from './files';
 import {
   ModelError,
   parseIndex,
@@ -265,9 +265,17 @@ export class ProjectStore {
       let readOnly = false;
       let index: ProjectIndex;
 
+      // the clientId is also kept in its own file (written once): the phone's unacked frames carry it
+      let idFile: string | null = null;
+      try {
+        const t = (await this.fs.readText(CLIENT_ID_PATH))?.trim();
+        idFile = t ? t : null;
+      } catch {
+        /* unreadable: treated as absent */
+      }
       const raw = await this.fs.readText(INDEX_PATH);
       if (raw === null) {
-        index = emptyIndex(this.newId());
+        index = emptyIndex(idFile ?? this.newId());
         await this.write(INDEX_PATH, index);
       } else {
         try {
@@ -281,9 +289,17 @@ export class ProjectStore {
           } else {
             const w = await this.keepCorrupt(INDEX_PATH, raw, 'index_corrupt', e);
             warnings.push(w);
-            index = emptyIndex(salvageClientId(raw) ?? this.newId());
+            index = emptyIndex(salvageClientId(raw) ?? idFile ?? this.newId());
             await this.write(INDEX_PATH, index);
           }
+        }
+      }
+
+      if (idFile === null && !readOnly) {
+        try {
+          await this.fs.writeTextAtomic(CLIENT_ID_PATH, index.clientId);
+        } catch {
+          /* best effort: index.json still has it */
         }
       }
 

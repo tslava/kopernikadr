@@ -16,7 +16,7 @@
  */
 import type { SessionContext } from '../camera/client';
 import type { FrameInfo, Project } from '../projects/model';
-import { createProject, markUnavailable, mergeFrame, recoverProject, routeResult } from '../projects/reducers';
+import { createProject, isGeometryFrozen, markUnavailable, mergeFrame, recoverProject, routeResult } from '../projects/reducers';
 import type { ProjectStore } from '../projects/store';
 
 export const LOST_REASON = 'lost on the phone';
@@ -158,7 +158,13 @@ export function createReconcile(deps: ReconcileDeps): Reconcile {
             const into = mismatchTo.get(info.projectId);
             let p = cur(into ?? info.projectId);
             if (!p) continue;
-            if (into === undefined && p.cameraId === null) p = { ...p, cameraId };
+            if (into === undefined && p.cameraId === null) {
+              // never bound (recreated by the sweep / interrupted recovery): bind, and an EMPTY project takes
+              // the rotation of the first FrameInfo (one mutation; the frames merge right below)
+              const empty = p.frames.length === 0 && p.outstanding.length === 0 && !isGeometryFrozen(p);
+              const rotation = info.rotation === 180 ? 180 : info.rotation === 0 ? 0 : p.geometry.rotation;
+              p = { ...p, cameraId, ...(empty ? { geometry: { ...p.geometry, rotation } } : {}) };
+            }
             if (p.cameraId === cameraId) {
               const m = mergeFrame(p, { ...info, projectId: p.id }, cameraId);
               if (m.status === 'inserted') {
