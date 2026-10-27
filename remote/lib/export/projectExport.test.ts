@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FrameEntry, Project } from '../projects/model';
 import type { FrameSource } from '../play/frameSource';
 import { createStore } from '../state/store';
@@ -119,7 +119,7 @@ interface Rig {
 
 function rig(
   initial: Project,
-  o: { hold?: Hold[]; pickNone?: boolean; failLoad?: string; failPublish?: Error; failPause?: Error } = {},
+  o: { hold?: Hold[]; pickNone?: boolean; failLoad?: string; failPublish?: Error; failPause?: Error; failResume?: Error } = {},
 ): Rig {
   const log: string[] = [];
   let current: Project | null = initial;
@@ -186,6 +186,7 @@ function rig(
       },
       resume() {
         log.push('resume');
+        if (o.failResume) throw o.failResume;
       },
     },
     exporting,
@@ -275,6 +276,47 @@ describe('export controller: the run', () => {
     expect(await r.ctl.start()).toEqual({ started: false, reason: 'busy' });
     r.holds.add!.resolve();
     await run;
+  });
+});
+
+describe('export controller: shared flag and resume failure', () => {
+  it('a second start is refused while the app-wide exporting flag is on (another controller exports)', async () => {
+    const r = rig(three());
+    r.deps.exporting.set(true);
+    expect(await r.ctl.start()).toEqual({ started: false, reason: 'busy' });
+    expect(r.log).toEqual([]);
+  });
+
+  it('transfer.resume() throwing does not swallow the final state or the flag', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = rig(three(), { failResume: new Error('resume boom') });
+    expect(await r.ctl.start()).toEqual({ started: true });
+    expect(r.ctl.state.get()).toMatchObject({ phase: 'done', frames: 3 });
+    expect(r.deps.exporting.get()).toBe(false);
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('exportGate with the camera link', () => {
+  const waiting = () => project([frame(1), frame(2, { state: 'pending' }), frame(3, { state: 'pending' })]);
+  it('still waits while the same camera is online', () => {
+    expect(exportGate(waiting(), false, { online: true, cameraId: 'cam' })).toEqual({ kind: 'waiting', downloading: 2 });
+  });
+  it('offline: the not-yet-local frames become a skip confirm, then ready', () => {
+    const link = { online: false, cameraId: null };
+    expect(exportGate(waiting(), false, link)).toEqual({ kind: 'confirm', unavailable: 2, frames: 1 });
+    expect(exportGate(waiting(), true, link)).toEqual({ kind: 'ready', frames: 1, skipped: 2 });
+  });
+  it('another camera is connected: same skip confirm', () => {
+    expect(exportGate(waiting(), false, { online: true, cameraId: 'other' })).toMatchObject({ kind: 'confirm', unavailable: 2 });
+  });
+  it('the controller starts after confirmation when the camera is gone', async () => {
+    const r = rig(waiting());
+    const ctl = createExportController({ ...r.deps, link: () => ({ online: false, cameraId: null }) });
+    expect(await ctl.start()).toEqual({ started: false, reason: 'confirm' });
+    expect(await ctl.start({ confirmedSkip: true })).toEqual({ started: true });
+    expect(ctl.state.get()).toMatchObject({ phase: 'done', frames: 1, skipped: 2 });
   });
 });
 

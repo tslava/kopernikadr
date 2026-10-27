@@ -306,6 +306,12 @@ describe('project hide / unhide / expire', () => {
     expect(hideProject(index, 'nope', T0)).toBe(index);
     expect(unhideProject(h, PID).pendingProjectDeletes).toEqual([]);
   });
+  it('unhide is refused once the deadline has passed (restart inside/after the window)', () => {
+    const h = hideProject(newProject().index, PID, T0);
+    expect(unhideProject(h, PID, T0 + 4999).pendingProjectDeletes).toEqual([]);
+    expect(unhideProject(h, PID, T0 + 5000)).toBe(h);
+    expect(unhideProject(h, PID, T0 + 60_000)).toBe(h);
+  });
   it('expire -> deletedProjects, removed from projects, idempotent, only past the deadline', () => {
     const h = hideProject(newProject().index, PID, T0);
     expect(expireProjects(h, T0 + 4999)).toEqual({ index: h, expired: [] });

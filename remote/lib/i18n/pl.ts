@@ -169,5 +169,8 @@ export const pl = {
   'capture.pending': 'Zdjęcie jest w drodze',
   'capture.noProject': 'Nie ma takiego filmu.',
   'capture.loading': 'Chwileczkę…',
+  'capture.arriving': 'Ostatnie zdjęcie jeszcze dociera…',
+  'boot.failed': 'Nie udało się uruchomić aplikacji.',
+  'boot.retry': 'Spróbuj ponownie',
   'capture.exporting': 'Film się zapisuje. Poczekaj.',
 } as const;

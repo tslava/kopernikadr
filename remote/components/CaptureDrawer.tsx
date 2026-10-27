@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AppContext } from '@/lib/app/boot';
 import type { PreviewQuality } from '@/lib/camera/previewController';
 import type { TransferStatusInfo } from '@/lib/app/drawerModel';
@@ -29,6 +29,7 @@ export default function CaptureDrawer({
   onGrid: (on: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => (open ? app.overlays.push(() => setOpen(false)) : undefined), [open, app]);
   const statusStore = (app.transfer as { status?: Store<QueueStatus> }).status ?? null;
   const status = useStore(statusStore ?? EMPTY);
   const transferStatus: TransferStatusInfo | undefined = statusStore ? { queued: status.queued, failed: status.unavailable } : undefined;

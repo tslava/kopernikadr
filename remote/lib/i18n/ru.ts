@@ -171,5 +171,8 @@ export const ru: Strings = {
   'capture.pending': 'Снимок в пути',
   'capture.noProject': 'Такого фильма нет.',
   'capture.loading': 'Секундочку…',
+  'capture.arriving': 'Последнее фото ещё загружается…',
+  'boot.failed': 'Не удалось запустить приложение.',
+  'boot.retry': 'Попробовать снова',
   'capture.exporting': 'Фильм сохраняется. Подожди.',
 };

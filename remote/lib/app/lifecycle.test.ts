@@ -193,7 +193,33 @@ describe('Diagnostics probes', () => {
     r.lc.setActive(false);
     r.log.length = 0;
     done();
-    expect(r.log).toEqual(['client.start']);
+    expect(r.log).toEqual([]); // no connection from the background
+    r.lc.setActive(true);
+    expect(r.log.slice(0, 1)).toEqual(['client.start']);
+    expect(r.log).not.toContain('client.resume');
+  });
+});
+
+describe('keep-awake retry', () => {
+  it('a rejected acquire resets the held flag so the next change retries', async () => {
+    let fail = true;
+    const calls: string[] = [];
+    const m = new KeepAwakeManager({
+      acquire: async () => {
+        calls.push('acquire');
+        if (fail) throw new Error('no');
+      },
+      release: async () => void calls.push('release'),
+    });
+    const rel = m.hold('view');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(m.held).toBe(false);
+    fail = false;
+    m.hold('view'); // another holder: apply() retries
+    expect(calls).toEqual(['acquire', 'acquire']);
+    expect(m.held).toBe(true);
+    rel();
   });
 });
 

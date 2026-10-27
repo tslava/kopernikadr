@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { Translate } from '@/lib/i18n';
-import type { CameraClient } from '@/lib/camera/client';
 import { useApp } from '@/lib/app/app';
 import type { AppContext } from '@/lib/app/boot';
 import { navigate } from '@/lib/nav';
@@ -10,8 +9,8 @@ import { ProjectDeletion } from '@/lib/projects/deletion';
 import { cardTarget, defaultProjectName, projectCards, type ProjectCard } from '@/lib/projects/cards';
 import { createAppFileAdapter, type FileAdapter } from '@/lib/projects/files';
 import { renameProject } from '@/lib/projects/reducers';
-import { badge } from '@/lib/app/connectModel';
 import { useStore } from '@/lib/state/useStore';
+import ConnectionBadge from './ConnectionBadge';
 import Icon from './Icon';
 import LongPressButton from './LongPressButton';
 
@@ -24,6 +23,7 @@ function deletionFor(app: AppContext, fs: FileAdapter): ProjectDeletion {
   if (!d) {
     d = new ProjectDeletion({ store: app.store, fs, transfer: app.transfer, onError: (e) => console.error('project delete', e) });
     deletions.set(app, d);
+    d.schedule(); // a deletion still pending after a restart expires at its deadline
   }
   return d;
 }
@@ -63,6 +63,7 @@ function Movies({ t, app, frameUrl }: { t: Translate; app: AppContext; frameUrl?
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [failed, setFailed] = useState(false);
   const deletion = useMemo(() => deletionFor(app, createAppFileAdapter()), [app]);
+  useEffect(() => (renaming ? app.overlays.push(() => setRenaming(null)) : undefined), [renaming, app]);
 
   const cards = useMemo(() => projectCards(state.index, state.projects), [state.index, state.projects]);
   const currentCamera = snap.hello?.cameraId ?? state.index.rememberedCamera?.cameraId ?? null;
@@ -164,7 +165,9 @@ function UndoToast({ t, app, deletion }: { t: Translate; app: AppContext; deleti
     const h = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(h);
   }, [pending]);
-  const last = pending[pending.length - 1];
+  // past its deadline the window is over (Undo would be refused): no toast
+  const live = pending.filter((p) => Date.parse(p.deadline) > now);
+  const last = live[live.length - 1];
   if (!last) return null;
   const secs = Math.max(0, Math.ceil((Date.parse(last.deadline) - now) / 1000));
   const name = names.find((p) => p.id === last.id)?.name ?? '';
@@ -173,15 +176,5 @@ function UndoToast({ t, app, deletion }: { t: Translate; app: AppContext; deleti
       <span>{t('projects.deleted', { name })}</span>
       <button type="button" className="primary" onClick={() => void deletion.undo(last.id)}>{t('projects.undo', { s: secs })}</button>
     </div>
-  );
-}
-
-function ConnectionBadge({ t, client }: { t: Translate; client: CameraClient }) {
-  const b = badge(useStore(client.store));
-  return (
-    <span className={`conn-badge ${b.tone}`} role="status">
-      <span className="dot" aria-hidden="true" />
-      {t(b.key)}
-    </span>
   );
 }

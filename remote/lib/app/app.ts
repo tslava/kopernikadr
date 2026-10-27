@@ -13,38 +13,36 @@ import { createAppTransferIO } from '../transfer/appIO';
 import { createTransfer, type TransferService } from '../transfer/queue';
 import { createReconcile, type Reconcile } from '../transfer/reconcile';
 import { boot, type AppContext } from './boot';
+import { createBootRunner } from './bootRunner';
 
 export type BootState = { phase: 'booting' } | { phase: 'ready'; app: AppContext } | { phase: 'failed'; error: string };
 
 export const bootState = createStore<BootState>({ phase: 'booting' });
 
-let started: Promise<void> | undefined;
+async function bootReal(): Promise<AppContext> {
+  const fs = createAppFileAdapter();
+  let hook: Reconcile | undefined;
+  return boot({
+    fs,
+    verify: createWebVerify(fs, createFetchBytes((u) => fetch(u), (u) => Capacitor.convertFileSrc(u))),
+    nsd: nativeNsdAdapter(),
+    keepAwake: { acquire: () => KeepAwake.keepAwake(), release: () => KeepAwake.allowSleep() },
+    createTransfer: ({ store, request, target, cameraId }) => {
+      const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target, cameraId });
+      hook = createReconcile({ store, transfer: service });
+      return service;
+    },
+    // runs after resolveOutstanding on every session; calls transfer.kick() itself (also when the listing fails)
+    reconcile: (ctx) => hook!(ctx),
+  });
+}
+
+const runner = createBootRunner<AppContext>(bootState, bootReal);
 
 /** Idempotent: the first call boots, later calls return the same promise. */
-export function startApp(): Promise<void> {
-  return (started ??= (async () => {
-    try {
-      const fs = createAppFileAdapter();
-      let hook: Reconcile | undefined;
-      const app = await boot({
-        fs,
-        verify: createWebVerify(fs, createFetchBytes((u) => fetch(u), (u) => Capacitor.convertFileSrc(u))),
-        nsd: nativeNsdAdapter(),
-        keepAwake: { acquire: () => KeepAwake.keepAwake(), release: () => KeepAwake.allowSleep() },
-        createTransfer: ({ store, request, target, cameraId }) => {
-          const service: TransferService = createTransfer({ store, io: createAppTransferIO(), request, target, cameraId });
-          hook = createReconcile({ store, transfer: service });
-          return service;
-        },
-        // runs after resolveOutstanding on every session; calls transfer.kick() itself (also when the listing fails)
-        reconcile: (ctx) => hook!(ctx),
-      });
-      bootState.set({ phase: 'ready', app });
-    } catch (e) {
-      bootState.set({ phase: 'failed', error: e instanceof Error ? e.message : String(e) });
-    }
-  })());
-}
+export const startApp = runner.start;
+/** After a failed boot: reset and boot again (the error screen's button). */
+export const retryApp = runner.retry;
 
 export function useBootState(): BootState {
   return useSyncExternalStore(bootState.subscribe, bootState.get, bootState.get);
