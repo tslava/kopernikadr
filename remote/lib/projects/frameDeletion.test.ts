@@ -3,7 +3,7 @@ import { ackEligible } from './eligibility';
 import { FrameDeletion } from './frameDeletion';
 import { FakeFs } from './fakeFs.testutil';
 import type { FrameInfo } from './model';
-import { duplicateEntry, setHold } from './edit';
+import { duplicateEntry, endHere, setHold, setOff, startHere } from './edit';
 import { hideFrame, mergeFrame, setLocal } from './reducers';
 import { ProjectStore } from './store';
 import { createStore } from '../state/store';
@@ -91,6 +91,21 @@ describe('FrameDeletion', () => {
     advance(5000);
     await d.expireDue();
     expect(store.state.get().projects.p1!.cut!.map((e) => e.id)).toEqual(['f1', 'f3']);
+  });
+
+  it('off and trim never tombstone, unlink or ack: the frames stay local and ack-eligible as before', async () => {
+    const { d, store, fs, log, acks, advance } = await setup();
+    await store.updateProject('p1', (p) => endHere(startHere(setOff(p, 'f2', true), 'f2'), 'f2'));
+    expect(store.state.get().projects.p1!.cut!.filter((e) => e.off).map((e) => e.id)).toEqual(['f1', 'f2', 'dup', 'f3']);
+    advance(60_000);
+    expect(await d.expireDue()).toEqual([]);
+    const s = store.state.get();
+    expect(s.projects.p1!.deletedFrameIds).toEqual([]);
+    expect(s.projects.p1!.frames.map((f) => f.frameId)).toEqual(['f1', 'f2', 'f3']);
+    expect(log).toEqual([]);
+    expect(acks).toEqual([]);
+    expect([...fs.files.keys()].filter((k) => k.includes('/frames/')).length).toBe(9);
+    for (const f of ['f1', 'f2', 'f3']) expect(ackEligible({ frameId: f, projectId: 'p1' }, s.projects.p1, s.index)).toBe(true);
   });
 
   it('Undo before the deadline cancels: nothing unlinked or acked, the timer is gone', async () => {

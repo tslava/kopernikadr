@@ -467,6 +467,11 @@ is kept renamed to `*.corrupt-<ts>`, and the project is rebuilt from the directo
   bridge. They are **downloaded** by `@capacitor/file-transfer` into `tmp/` and moved by
   `KopernikadrNative.move`. They are **read** by `convertFileSrc` → `fetch` → `createImageBitmap`:
   same origin, no bridge, safe for `VideoFrame`.
+- **Downgrade caveat (documented, not fixed).** The edit list (`cut`) and the stickers
+  (`stickers`) are extra tablet-only fields; `version` stays 1. An older app opens a project file
+  that has them, ignores them, and its first write drops them (the frames and files are not
+  touched, so the movie is back to shoot order with no stickers). Install the newer app again to
+  keep editing a movie, but the edits made before the downgrade are gone after that first write.
 
 ### 5.5 ProjectStore: serialized mutations
 

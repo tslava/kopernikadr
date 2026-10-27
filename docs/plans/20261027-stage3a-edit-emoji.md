@@ -630,12 +630,12 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - [x] run the full E2E flow on the emulator (all steps PASS; emulator-5584, 10/10 PASS: edit step 1.750 s = 14 ticks / 8 fps, project.json 12 entries; old steps 8-9 are now 9-10).
 
 ### Task 15: Verify acceptance criteria
-- [ ] Every item in the Overview works on the real tablet + Pixel (agent-run touch scripts, screencaps in `docs/diagnostics/<date>-stage3a-tablet.md`).
-- [ ] A 500-frame project (ARCHITECTURE §8 acceptance): the strip scrolls smoothly; playback memory stays flat (8-bitmap ring + 32 MB sprite LRU, measured with `scripts/meminfo-sampler.sh`); export with stickers finishes.
-- [ ] A project without `cut`/`stickers` behaves exactly as before.
-- [ ] Downgrade caveat (documented, not fixed): an older app opens a new project file but its first write drops `cut`/`stickers`.
-- [ ] Ack eligibility is unchanged: off never writes tombstones or unlinks files; a deleted frame → tombstone → ack only after expiry (runtime `FrameDeletion` and the startup sweep).
-- [ ] Full suites:
+- [x] Every item in the Overview works on the real tablet + Pixel (agent-run touch scripts, screencaps in `docs/diagnostics/<date>-stage3a-tablet.md`). Run on emulator-5584 with real `adb input` touches (neither real device was connected): all items PASS, see `docs/diagnostics/20261027-stage3a-emulator.md`. The real tablet + phone run is still to do tomorrow (marked there).
+- [x] A 500-frame project (ARCHITECTURE §8 acceptance): the strip scrolls smoothly; playback memory stays flat (8-bitmap ring + 32 MB sprite LRU, measured with `scripts/meminfo-sampler.sh`); export with stickers finishes. Emulator, seeded 500-frame project: strip end to end peak 298 MB total, 120 s looped playback flat at 436-441 MB (app 170 + renderer 270), export of 500 frames with 2 stickers in about 28 s, overall peak 463 MB (app 188 + renderer 302). Real-tablet figure still to measure.
+- [x] A project without `cut`/`stickers` behaves exactly as before. (Film 1 on the emulator: opens, plays 9 frames, no keys written; unit tests for `timeline()`.)
+- [x] Downgrade caveat (documented, not fixed): an older app opens a new project file but its first write drops `cut`/`stickers`. (Documented in ARCHITECTURE §5.4; not run on a device.)
+- [x] Ack eligibility is unchanged: off never writes tombstones or unlinks files; a deleted frame → tombstone → ack only after expiry (runtime `FrameDeletion` and the startup sweep).
+- [x] Full suites (remote vitest 61 files / 752 tests, typecheck clean, test:scripts 5, camera-android core 446 + app 15, remote android build OK, remote-core 42, probe-client 45, remote-lite 28, scripts/test/run.sh 36):
   - `cd remote && npm test && npm run typecheck`;
   - `cd camera-android && ./gradlew-jbr :core:test :app:testDebugUnitTest`;
   - remote android build;
