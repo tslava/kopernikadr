@@ -112,3 +112,6 @@ button { min-height: 64px; }
 .manual label { display: flex; flex-direction: column; gap: 8px; font-size: 22px; flex: 1; min-width: 320px; }
 .manual input { min-height: 64px; font-size: 24px; padding: 0 16px; }
 .manual .error { flex-basis: 100%; margin: 0; color: #c93c3c; font-size: 22px; }
+
+.play-canvas { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 16px; }
+.play-controls { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
