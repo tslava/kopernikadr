@@ -61,6 +61,8 @@ data class ServerState(
     val port: Int? = null,
     /** A tablet holds the control session. */
     val connected: Boolean = false,
+    /** Committed frames not yet acked by a tablet (the spool's `unackedCount`); read while connected. */
+    val frames: Int? = null,
     val error: String? = null,
 )
 
@@ -92,7 +94,7 @@ class ServerHost(
     private var sessions: SessionManager? = null
     private var poll: Job? = null
 
-    private class Stack(val cameraId: String, val ports: (bootId: String) -> CameraPorts)
+    private class Stack(val cameraId: String, val spool: Spool, val ports: (bootId: String) -> CameraPorts)
 
     fun start() {
         scope.launch(serial) { startNow() }
@@ -131,7 +133,8 @@ class ServerHost(
                         Log.i(TAG, if (connected) "tablet connected" else "tablet disconnected")
                         last = connected
                     }
-                    _state.update { if (it.port == port) it.copy(connected = connected) else it }
+                    val frames = if (connected) runCatching { s.spool.stats().unackedCount }.getOrNull() else null
+                    _state.update { if (it.port == port) it.copy(connected = connected, frames = frames) else it }
                     delay(POLL_MS)
                 }
             }
@@ -200,7 +203,7 @@ class ServerHost(
         val status = StatusPort { status(spool) }
         val loggedCapture = LoggingCapture(capture)
         Log.i(TAG, "stack ready: spool ${spool.dir}, ${spool.stats()}")
-        return Stack(cameraId) { bootId ->
+        return Stack(cameraId, spool) { bootId ->
             val identity = object : IdentityPort {
                 override val cameraId: String = cameraId
                 override val bootId: String = bootId

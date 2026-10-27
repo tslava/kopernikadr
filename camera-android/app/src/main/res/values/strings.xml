@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Kopernikadr Kamera</string>
-    <string name="status_title">Kopernikadr Kamera</string>
+    <string name="status_title">Kopernikadr</string>
     <string name="status_no_wifi">Brak połączenia Wi-Fi</string>
     <string name="permission_text">Poproś rodzica o zgodę na aparat</string>
     <string name="permission_retry">Spróbuj ponownie</string>
@@ -12,4 +12,15 @@
     <string name="server_waiting">Czekam na tablet</string>
     <string name="server_connected">Połączono z tabletem</string>
     <string name="server_error">Błąd serwera: %1$s</string>
+    <string name="status_chip">Kamera</string>
+    <string name="status_ready">Gotowe do zdjęć</string>
+    <string name="status_tablet_connected">Tablet połączony</string>
+    <string name="status_hint_open_tablet">Otwórz Kopernikadr na tablecie — kamera znajdzie się sama.</string>
+    <string name="status_qr_caption">albo zeskanuj w przeglądarce</string>
+    <string name="status_no_wifi_title">Brak Wi-Fi</string>
+    <string name="status_no_wifi_hint">Połącz telefon z domowym Wi-Fi.</string>
+    <string name="status_starting">Uruchamianie…</string>
+    <string name="status_error_title">Błąd</string>
+    <string name="status_frames">Kadry: %1$d</string>
+    <string name="status_battery">Bateria: %1$d%%</string>
 </resources>
