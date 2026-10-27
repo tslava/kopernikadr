@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { Key, Translate } from '@/lib/i18n';
 import { canCancel, exportGate, isActive, type CameraLink, type ExportController, type ExportFailure } from '@/lib/export/projectExport';
 import type { Project } from '@/lib/projects/model';
+import { KopernikadrNative } from '@/lib/native';
 import { useStore } from '@/lib/state/useStore';
 
 const ERROR_KEY: Record<ExportFailure, Key> = {
@@ -98,10 +99,19 @@ export default function ExportDialog({ t, project, controller, link, onClose }: 
     body = (
       <>
         <p role="status">{t('export.done')}</p>
+        <p className="note">{t('export.where')}</p>
         {state.skipped > 0 && <p className="note">{t('export.doneSkipped', { n: state.skipped })}</p>}
       </>
     );
-    actions = <button type="button" className="primary" onClick={close}>{t('export.close')}</button>;
+    const uri = state.uri;
+    actions = (
+      <>
+        <button type="button" className="primary" onClick={() => void KopernikadrNative.videoView({ uri }).catch(() => {})}>
+          {t('export.watch')}
+        </button>
+        <button type="button" onClick={close}>{t('export.close')}</button>
+      </>
+    );
   } else if (state.phase === 'cancelled') {
     body = <p role="status">{t('export.cancelled')}</p>;
     actions = <button type="button" onClick={close}>{t('export.close')}</button>;

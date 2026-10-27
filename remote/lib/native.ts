@@ -67,6 +67,9 @@ export interface KopernikadrNativePlugin {
    */
   videoPublish(options: { handle: string; displayName: string }): Promise<{ uri: string }>;
 
+  /** Opens a published gallery video (`content://` uri) in the system player. `NOT_FOUND`: no player. */
+  videoView(options: { uri: string }): Promise<void>;
+
   /** Closes and deletes the temp file. Idempotent. */
   videoAbort(options: { handle: string }): Promise<void>;
 

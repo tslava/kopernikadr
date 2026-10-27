@@ -8,6 +8,7 @@ import { PREVIEW_QUALITIES } from '@/lib/app/drawerModel';
 import { useFrameUrls, type FrameUrls } from '@/lib/app/frames';
 import type { AppContext } from '@/lib/app/boot';
 import type { PreviewQuality } from '@/lib/camera/previewController';
+import { setFps } from '@/lib/projects/reducers';
 import { createStore } from '@/lib/state/store';
 import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
@@ -149,7 +150,8 @@ function PlayRoute({ t, id, app, urls, onBack }: { t: Translate; id: string; app
   );
   const snap = useStore(app.client.store);
   const link = useMemo(() => ({ online: snap.status === 'online' && snap.hello !== null, cameraId: snap.hello?.cameraId ?? null }), [snap.status, snap.hello]);
-  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} exportEnv={exportEnv} link={link} />;
+  const onFps = (fps: number) => void app.store.updateProject(id, (p) => setFps(p, fps)).catch(() => {});
+  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} exportEnv={exportEnv} link={link} onFps={onFps} />;
 }
 
 /** A small per-tablet setting in localStorage (try/catch: storage can be unavailable). */

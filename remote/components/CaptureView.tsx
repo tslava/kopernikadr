@@ -159,13 +159,6 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
           <Icon name="film" />
           <b data-testid="frame-count">{count}</b>
         </span>
-        {pending > 0 && (
-          <span className="pending" aria-label={t('capture.pending')} title={t('capture.pending')}>
-            {Array.from({ length: Math.min(pending, 5) }, (_, i) => (
-              <i key={i} className="ph" />
-            ))}
-          </span>
-        )}
         <OnionControls
           source={onion}
           enabled={onionOn}
@@ -189,6 +182,13 @@ export default function CaptureView({ t, id, app, urls, onBack, onPlay, quality 
           }}
         />
         {flashN > 0 && <div key={flashN} className="flash go" aria-hidden="true" />}
+        {pending > 0 && (
+          <span className="pending" aria-label={t('capture.pending')} title={t('capture.pending')}>
+            {Array.from({ length: Math.min(pending, 5) }, (_, i) => (
+              <i key={i} className="ph" />
+            ))}
+          </span>
+        )}
       </Preview>
       <div className="cap-actions">
         <button type="button" className="icon-btn" aria-label={t('capture.play')} title={t('capture.play')} onClick={onPlay} disabled={count === 0}>

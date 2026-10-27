@@ -5,7 +5,8 @@
 
 export type Rotation = 0 | 180;
 export type FrameState = 'pending' | 'local';
-export const FPS_CHOICES = [5, 8, 12] as const;
+/** Frame rates a movie can play at (the play view's speed slider steps through these). */
+export const FPS_CHOICES = [2, 3, 4, 5, 6, 8, 10, 12, 15] as const;
 export const DEFAULT_FPS = 8;
 export const UNDO_WINDOW_MS = 5_000;
 

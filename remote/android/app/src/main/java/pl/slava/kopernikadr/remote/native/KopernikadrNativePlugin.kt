@@ -1,6 +1,9 @@
 package pl.slava.kopernikadr.remote.native
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import com.getcapacitor.JSObject
@@ -84,6 +87,25 @@ class KopernikadrNativePlugin : Plugin() {
 
     @PluginMethod
     fun videoCleanupAbandoned(call: PluginCall) = run(call, api::videoCleanupAbandoned)
+
+    /** Opens a published gallery video (`content://` uri from `videoPublish`) in the system player. */
+    @PluginMethod
+    fun videoView(call: PluginCall) {
+        val uri = call.getString("uri")
+        if (uri.isNullOrBlank() || !uri.startsWith("content://")) {
+            call.reject("uri must be a content:// uri", NativeErrorCode.BAD_ARGUMENT.name)
+            return
+        }
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(Uri.parse(uri), "video/mp4")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(intent)
+            call.resolve()
+        } catch (e: ActivityNotFoundException) {
+            call.reject("no video player", NativeErrorCode.NOT_FOUND.name)
+        }
+    }
 
     /** Debug builds only: inserts a pending gallery row, for the emulator cleanup check. */
     @PluginMethod

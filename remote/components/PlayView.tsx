@@ -15,6 +15,7 @@ import { useStore } from '@/lib/state/useStore';
 import type { TransferPause } from '@/lib/transfer/types';
 import ExportDialog from './ExportDialog';
 import Icon from './Icon';
+import { FPS_CHOICES } from '@/lib/projects/model';
 
 /** For export (Task 18): closes the ring buffer and pauses. Playing again reloads it. */
 export interface PlayViewHandle {
@@ -32,6 +33,8 @@ export interface PlayViewProps {
   /** The project id from the route. */
   id: string;
   onBack: () => void;
+  /** Changes the movie's frame rate (playback and export use it). */
+  onFps?: (fps: number) => void;
   /** The loaded project; null while the store is not ready. */
   project?: Project | null;
   /** `(projectId, frameId, kind) => Capacitor.convertFileSrc(...)`. */
@@ -47,7 +50,7 @@ const NOT_ACTIVE: Store<{ phase: 'idle' }> = { get: () => ({ phase: 'idle' }), s
 
 const IDLE: PlayerStatus = { playing: false, downloading: 0, playable: 0, shown: null };
 
-export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, link, ref }: PlayViewProps) {
+export default function PlayView({ t, id, onBack, project = null, frameUrl, exportEnv, link, onFps, ref }: PlayViewProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const player = useRef<Player | null>(null);
   const [status, setStatus] = useState<PlayerStatus>(IDLE);
@@ -97,6 +100,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
       ring,
       clock: browserClock,
       fps: 8,
+      loop: false,
       draw: (bmp) => canvas.current?.getContext('2d')?.drawImage(bmp, 0, 0, PLAY_WIDTH, PLAY_HEIGHT),
       onChange: setStatus,
     });
@@ -107,6 +111,12 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
     };
   }, [id, frameUrl]);
 
+  // Looping is off by default (the movie plays once); the kid can switch it on.
+  const [loop, setLoop] = useState(false);
+  useEffect(() => player.current?.setLoop(loop), [loop]);
+  const fps = project?.fps ?? 8;
+  const fpsIndex = Math.max(0, FPS_CHOICES.indexOf(fps as (typeof FPS_CHOICES)[number]));
+
   useEffect(() => {
     if (exportBusy) return; // the ring is released for the export: do not reload it meanwhile
     player.current?.setFps(project?.fps ?? 8);
@@ -114,7 +124,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
   }, [project, frameUrl, id, exportBusy]);
 
   return (
-    <main className="screen" data-project={id}>
+    <main className="screen play" data-project={id}>
       <header className="bar">
         <button type="button" className="icon-btn" aria-label={t('nav.back')} title={t('nav.back')} onClick={onBack} disabled={exportBusy}>
           <Icon name="back" />
@@ -124,7 +134,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
       <canvas ref={canvas} className="play-canvas" width={PLAY_WIDTH} height={PLAY_HEIGHT} />
       <div className="play-controls">
         <button type="button" className="icon-btn" aria-label={t('play.restart')} title={t('play.restart')} onClick={() => player.current?.seekToStart()} disabled={status.playable === 0}>
-          <Icon name="back" />
+          <Icon name="restart" />
         </button>
         <button
           type="button"
@@ -136,6 +146,28 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, expo
         >
           <Icon name={status.playing ? 'pause' : 'play'} />
         </button>
+        <button
+          type="button"
+          className={`icon-btn${loop ? ' on' : ''}`}
+          aria-label={t('play.loop')}
+          title={t('play.loop')}
+          aria-pressed={loop}
+          onClick={() => setLoop((v) => !v)}
+        >
+          <Icon name="repeat" />
+        </button>
+        <label className="speed">
+          <span>{t('play.speed', { n: fps })}</span>
+          <input
+            type="range"
+            min={0}
+            max={FPS_CHOICES.length - 1}
+            step={1}
+            value={fpsIndex}
+            disabled={!project || !onFps}
+            onChange={(e) => onFps?.(FPS_CHOICES[Number(e.target.value)])}
+          />
+        </label>
         {exporter && (
           <button
             type="button"

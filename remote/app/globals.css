@@ -18,7 +18,7 @@ body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
-.screen { min-height: 100vh; padding: 32px 48px; display: flex; flex-direction: column; gap: 24px; }
+.screen { min-height: 100dvh; padding: 32px 48px; display: flex; flex-direction: column; gap: 24px; }
 .home { align-items: center; justify-content: center; text-align: center; }
 .home h1 { font-size: 56px; margin: 0; letter-spacing: 0.02em; }
 .subtitle { color: var(--muted); margin: 0; }
@@ -115,6 +115,12 @@ button { min-height: 64px; }
 
 .play-canvas { width: 100%; max-height: 70vh; aspect-ratio: 4 / 3; object-fit: contain; background: #000; border-radius: 16px; }
 .play-controls { display: flex; justify-content: center; gap: 24px; margin: 16px 0; }
+/* Landscape tablet: the movie takes the full height on the left, the buttons sit on the right (like capture). */
+.play { display: grid; height: 100dvh; overflow: hidden; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 16px 32px; }
+.play > .bar { grid-column: 1 / -1; }
+.play > .play-canvas { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; max-height: none; justify-self: center; }
+.play > .play-controls { grid-column: 2; grid-row: 2; flex-direction: column; justify-content: center; align-items: center; margin: 0; }
+.play > .note { grid-column: 2; grid-row: 3; max-width: 260px; }
 
 /* Projects list */
 .card.movie { padding: 0; overflow: hidden; position: relative; align-items: stretch; justify-content: flex-start; text-align: left; }
@@ -123,9 +129,10 @@ button { min-height: 64px; }
 .card.movie .meta { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
 .card.movie .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card.movie .count { color: var(--muted); font-size: 18px; }
-.movie-wrap { position: relative; }
+.movie-wrap { position: relative; display: flex; }
+.movie-wrap > .card { flex: 1; width: 100%; }
 .movie-wrap .tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 8px; }
-.movie-wrap .tools .icon-btn { background: rgba(20, 22, 26, 0.8); }
+.movie-wrap .tools .icon-btn { width: 56px; height: 56px; min-height: 56px; background: rgba(20, 22, 26, 0.75); backdrop-filter: blur(4px); }
 .undo-toast {
   position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 20;
   display: flex; align-items: center; gap: 24px; padding: 12px 12px 12px 28px; font-size: 22px;
@@ -159,7 +166,7 @@ button { min-height: 64px; }
 /* Capture view (kid UI) */
 .preview-stage { position: relative; aspect-ratio: 4 / 3; width: 100%; background: #000; overflow: hidden; border-radius: 16px; }
 /* Landscape tablet: the 4:3 preview takes the full height on the left, the kid's controls sit on the right. */
-.capture { display: grid; height: 100vh; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 32px; }
+.capture { display: grid; height: 100dvh; overflow: hidden; min-height: 0; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 32px; }
 .capture > .bar { grid-column: 1 / -1; }
 .capture > .preview-stage { grid-column: 1; grid-row: 2 / 4; width: auto; height: 100%; max-width: 100%; justify-self: center; align-self: start; }
 .capture > .cap-bar { grid-column: 2; grid-row: 2; }
@@ -168,7 +175,7 @@ button { min-height: 64px; }
 .capture > .cap-bar { flex-direction: column; align-items: stretch; }
 .counter { height: 64px; padding: 0 18px; display: inline-flex; align-items: center; gap: 10px; border-radius: 18px; background: var(--panel); font-size: 30px; color: var(--accent); }
 .counter b { color: var(--text); font-weight: 900; min-width: 1.2em; }
-.pending { display: inline-flex; gap: 8px; }
+.pending { position: absolute; left: 16px; bottom: 16px; display: inline-flex; gap: 8px; pointer-events: none; }
 .pending .ph { width: 40px; height: 30px; border-radius: 6px; background: var(--panel); border: 2px dashed var(--accent); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 .onion-ctl { display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 16px 0 6px; border-radius: 18px; background: var(--panel); }
@@ -184,3 +191,7 @@ button { min-height: 64px; }
 .shutter:active:not(:disabled) .shutter-ring { transform: scale(.9); }
 .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); max-width: 80vw; padding: 20px 32px; border-radius: 20px; background: var(--panel); border: 2px solid var(--accent); font-size: 26px; text-align: center; }
 .dialog progress { width: 100%; height: 16px; accent-color: var(--accent); }
+
+.icon-btn.on { background: #e9e3ff; color: #3b2a8a; }
+.speed { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 18px; color: var(--muted); }
+.speed input { width: 200px; min-height: 0; }

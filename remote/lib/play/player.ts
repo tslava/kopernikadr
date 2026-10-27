@@ -31,6 +31,8 @@ export interface PlayerOptions {
 export interface Player {
   setFrames(frames: readonly FrameEntry[]): void;
   setFps(fps: number): void;
+  /** Loop back to the first frame at the end, or stop there. */
+  setLoop(on: boolean): void;
   play(): void;
   pause(): void;
   toggle(): void;
@@ -49,7 +51,7 @@ export function playableFrames(frames: readonly FrameEntry[]): FrameEntry[] {
 
 export function createPlayer(o: PlayerOptions): Player {
   let fps = o.fps;
-  const loop = o.loop ?? true;
+  let loop = o.loop ?? true;
   let ids: string[] = [];
   let downloading = 0;
   let cursor = 0; // index of the next frame to show
@@ -135,6 +137,10 @@ export function createPlayer(o: PlayerOptions): Player {
     },
     setFps(v) {
       fps = v;
+    },
+    setLoop(v) {
+      loop = v;
+      refill();
     },
     play() {
       if (playing || dead) return;

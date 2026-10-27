@@ -47,7 +47,9 @@ class NsdPlugin : Plugin() {
     private var session: Session? = null
 
     /** API 34+: one info callback per found instance name. */
-    private val infoCallbacks = HashMap<String, NsdManager.ServiceInfoCallback>()
+    // Values are NsdManager.ServiceInfoCallback (API 34+). Typed as Any: a typed map makes ART
+    // resolve that class (checkcast) on older Androids too, which crashes on API < 34.
+    private val infoCallbacks = HashMap<String, Any>()
 
     private var testRegistration: NsdManager.RegistrationListener? = null
 
@@ -222,10 +224,14 @@ class NsdPlugin : Plugin() {
     }
 
     private fun unwatch(name: String) {
-        val cb = infoCallbacks.remove(name) ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            runCatching { nsd.unregisterServiceInfoCallback(cb) }
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        unwatch34(name)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun unwatch34(name: String) {
+        val cb = infoCallbacks.remove(name) as? NsdManager.ServiceInfoCallback ?: return
+        runCatching { nsd.unregisterServiceInfoCallback(cb) }
     }
 
     @Suppress("DEPRECATION")
