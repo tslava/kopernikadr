@@ -342,20 +342,20 @@ Order: 1 → 2 → … → 23, one agent at a time.
 **Files:**
 - Create: `remote/lib/projects/{store.ts,files.ts}` + tests, `remote/lib/projects/fakeFs.testutil.ts`
 
-- [ ] tests first, then one async mutation queue:
+- [x] tests first, then one async mutation queue:
   - load → reducer → `writeTextAtomic`;
   - the reducer result is applied in memory only after the write succeeds;
   - the mutation's promise resolves after the write;
   - mutations are strictly serialized
-- [ ] file access through an injected adapter: `KopernikadrNative` + `Filesystem` (listing,
+- [x] file access through an injected adapter: `KopernikadrNative` + `Filesystem` (listing,
       `getUri`, delete, mkdir) in the app, an in-memory fake with crash points in tests
-- [ ] creating a project writes the index entry and creates `projects/{id}/` in the same flow
+- [x] creating a project writes the index entry and creates `projects/{id}/` in the same flow
       (the sweep handles a crash in between)
-- [ ] write tests:
+- [x] write tests:
   - a failed write (`NO_SPACE`) keeps memory and disk consistent;
   - a failed merge after a capture result keeps the outstanding entry, so it is retried later;
   - serialization under concurrent callers
-- [ ] run tests — must pass before Task 7
+- [x] run tests — must pass before Task 7
 
 ### Task 7: ProjectStore: startup sweep + corruption recovery (TDD)
 
