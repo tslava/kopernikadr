@@ -7,6 +7,7 @@ const PATHS = {
   play: 'M8 5l11 7-11 7z',
   pause: 'M8 5v14M16 5v14',
   film: 'M4 5h16v14H4zM8 5v14M16 5v14M4 9h4M4 15h4M16 9h4M16 15h4',
+  save: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   pencil: 'M4 20l1-5L16 4l4 4L9 19zM14 6l4 4',
   trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13M10 11v6M14 11v6',
 } as const;

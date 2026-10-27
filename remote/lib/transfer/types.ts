@@ -12,3 +12,10 @@ export interface Transfer {
    */
   ackNow(frameIds: string[], projectOf?: Readonly<Record<string, string>>): void | Promise<void>;
 }
+
+/** The export (plan Task 18) pauses downloads while it writes the file. `TransferService` has both. */
+export interface TransferPause {
+  /** Stops starting new jobs; resolves when the current one has finished. */
+  pause(): Promise<void>;
+  resume(): void;
+}

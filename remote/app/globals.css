@@ -183,3 +183,4 @@ button { min-height: 64px; }
 .shutter-ring { width: 88px; height: 88px; border-radius: 50%; background: var(--accent); }
 .shutter:active:not(:disabled) .shutter-ring { transform: scale(.9); }
 .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); max-width: 80vw; padding: 20px 32px; border-radius: 20px; background: var(--panel); border: 2px solid var(--accent); font-size: 26px; text-align: center; }
+.dialog progress { width: 100%; height: 16px; accent-color: var(--accent); }

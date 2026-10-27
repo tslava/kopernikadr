@@ -7,7 +7,9 @@ import { startApp, useApp } from '@/lib/app/app';
 import { useFrameUrls, type FrameUrls } from '@/lib/app/frames';
 import type { AppContext } from '@/lib/app/boot';
 import type { PreviewQuality } from '@/lib/camera/previewController';
+import { createStore } from '@/lib/state/store';
 import { useStore } from '@/lib/state/useStore';
+import type { TransferPause } from '@/lib/transfer/types';
 import type { Translate } from '@/lib/i18n';
 import { back, navigate, useRoute } from '@/lib/nav';
 import { useTranslator } from '@/lib/i18n/useTranslator';
@@ -17,6 +19,8 @@ import ConnectView from './ConnectView';
 import Diagnostics from './Diagnostics';
 import PlayView from './PlayView';
 import ProjectsView from './ProjectsView';
+
+const NOT_EXPORTING = createStore(false);
 
 export default function AppShell() {
   const { t } = useTranslator();
@@ -47,6 +51,7 @@ export default function AppShell() {
   }, []);
 
   const urls = useFrameUrls(app?.store);
+  const exporting = useStore(app?.exporting ?? NOT_EXPORTING);
   // Parent settings shared by the capture view and its drawer; remembered on this tablet.
   const [quality, setQuality] = useRemembered<PreviewQuality>('kopernikadr.previewQuality', 'normal');
   const [grid, setGrid] = useRemembered<boolean>('kopernikadr.grid', false);
@@ -64,6 +69,7 @@ export default function AppShell() {
           onBack={goBack}
           onPlay={() => navigate({ name: 'play', id: route.id })}
           quality={quality}
+          exporting={exporting}
           grid={grid}
           drawer={({ project }) => (
             <CaptureDrawer
@@ -110,7 +116,11 @@ function PlayRoute({ t, id, app, urls, onBack }: { t: Translate; id: string; app
         : undefined,
     [urls],
   );
-  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} />;
+  const exportEnv = useMemo(
+    () => (app.transfer.pause && app.transfer.resume ? { transfer: app.transfer as TransferPause, exporting: app.exporting } : undefined),
+    [app],
+  );
+  return <PlayView t={t} id={id} onBack={onBack} project={project} frameUrl={frameUrl} exportEnv={exportEnv} />;
 }
 
 /** A small per-tablet setting in localStorage (try/catch: storage can be unavailable). */
