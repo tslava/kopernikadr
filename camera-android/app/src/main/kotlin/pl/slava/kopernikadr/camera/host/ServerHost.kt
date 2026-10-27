@@ -93,8 +93,9 @@ class ServerHost(
     @Volatile
     private var sessions: SessionManager? = null
     private var poll: Job? = null
+    private var ageReclaim: Job? = null
 
-    private class Stack(val cameraId: String, val spool: Spool, val ports: (bootId: String) -> CameraPorts)
+    private class Stack(val cameraId: String, val spool: Spool, val reclaimer: SpoolReclaimer, val ports: (bootId: String) -> CameraPorts)
 
     fun start() {
         scope.launch(serial) { startNow() }
@@ -125,6 +126,18 @@ class ServerHost(
             server = srv
             sessions = sm
             _state.value = ServerState(port = port)
+            // 7-day reclaim of acked frames: only now, after build() ran spool.recover(); the first pass is
+            // immediate (the upgrade reclaims what is already old), then hourly.
+            ageReclaim = scope.launch {
+                while (isActive) {
+                    try {
+                        s.reclaimer.reclaimAged()
+                    } catch (e: Exception) {
+                        Log.w(CAP_TAG, "age reclaim failed", e)
+                    }
+                    delay(AGE_RECLAIM_MS)
+                }
+            }
             poll = scope.launch {
                 var last = false
                 while (isActive) {
@@ -148,6 +161,8 @@ class ServerHost(
         val srv = server ?: return
         poll?.cancel()
         poll = null
+        ageReclaim?.cancel()
+        ageReclaim = null
         server = null
         sessions = null
         val t0 = SystemClock.elapsedRealtime()
@@ -203,7 +218,7 @@ class ServerHost(
         val status = StatusPort { status(spool) }
         val loggedCapture = LoggingCapture(capture)
         Log.i(TAG, "stack ready: spool ${spool.dir}, ${spool.stats()}")
-        return Stack(cameraId, spool) { bootId ->
+        return Stack(cameraId, spool, reclaimer) { bootId ->
             val identity = object : IdentityPort {
                 override val cameraId: String = cameraId
                 override val bootId: String = bootId
@@ -258,5 +273,6 @@ class ServerHost(
         const val CAP_TAG = "KopernikadrCap"
         const val NAME = "Kopernikadr Kamera"
         private const val POLL_MS = 500L
+        private const val AGE_RECLAIM_MS = 60L * 60 * 1000
     }
 }

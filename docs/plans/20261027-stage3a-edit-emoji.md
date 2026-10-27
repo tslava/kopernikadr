@@ -555,18 +555,19 @@ The sticker transform math is pure and tested in `stickerGeometry.ts`: normalize
 - Modify: `camera-android/core/src/test/kotlin/pl/slava/kopernikadr/camera/spool/SpoolReclaimTest.kt`
 - Modify: `README.md`, `docs/ARCHITECTURE.md` §4.6 (the first-launch warning)
 
-- [ ] write tests first:
+- [x] write tests first:
   - only frames acked ≥ 7 days ago (injected clock) are reclaimed;
   - unacked frames, frames acked < 7 days ago, and already reclaimed frames are never touched;
   - `reclaimedAt` is committed before the delete;
   - the low-space path is unchanged;
   - a clock earlier than `ackedAt` reclaims nothing;
   - an age pass and a low-space pass running at the same time are serialized (no lost or false `failedDeletes`).
-- [ ] implement the age pass, the reclaimer-level mutex, and the schedule in `ServerHost`. Log a summary line with the count.
-- [ ] Pixel run (probe build, never the g05):
+- [x] implement the age pass, the reclaimer-level mutex, and the schedule in `ServerHost`. Log a summary line with the count. (`reclaimAged()`, `Spool.nextReclaimable(ackedAtMax)`, lock in `SpoolReclaimer`; first pass right after start, then hourly)
+- [x] Pixel run (done on emulator-5584 with the camera debug app; no Pixel today, never the g05):
   - backdate `ackedAt` of 2 acked test frames via `run-as` + sqlite;
   - restart the app and check the log count, that the files are gone, and that unacked frames are untouched.
-- [ ] run the camera tests — must pass before Task 12.
+  - Result: 3 frames shot with probe-client, 2 acked via the protocol; frame 1 backdated 8 days (`sqlite3` via `run-as` while force-stopped). After restart the log shows `reclaimed <id> (71880 B)` and `age reclaim: 1 frame(s)`; frame 1 has `reclaimedAt` set, its 3 files are gone and `GET full.jpg` is 404. Frame 2 (acked, recent) and frame 3 (unacked) keep rows and files and answer 200 with their original sizes. The earlier start of the same build logged `age reclaim: 0 frame(s)`.
+- [x] run the camera tests — must pass before Task 12. (core 428 tests, SpoolReclaimTest 20 of them; app 15; all pass)
 
 ### Task 12: Phone — ScreenPolicy dim
 

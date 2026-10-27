@@ -305,11 +305,18 @@ stage 3 UI, same on the tablet).
 
 **Retention.**
 - Unacked frames are never deleted.
-- Acked frames are reclaimed **under low space only**, oldest `ackedAt` first. **As built:**
-  capture admission step 2 asks `SpoolReclaimer` to free space when `free − 500 MB` is below
-  2 × the expected `full` size (the maximum of the last 8 `full` sizes, 5 MB with no history);
-  with nothing acked left it answers `STORAGE_LOW`. There is no timer: the 7-day expiry is
-  **deferred to stage 3** and `clearAcked` is not built.
+- Acked frames are reclaimed oldest `ackedAt` first, on two triggers; `clearAcked` is not built.
+  - **Low space.** Capture admission step 2 asks `SpoolReclaimer` to free space when
+    `free − 500 MB` is below 2 × the expected `full` size (the maximum of the last 8 `full`
+    sizes, 5 MB with no history); with nothing acked left it answers `STORAGE_LOW`.
+  - **Age (7 days).** `ServerHost` starts a pass once `recover()` has run (on every server
+    start), then hourly, and cancels it in `stop()`. It reclaims every acked frame, of any
+    `clientId`, whose `ackedAt` is at or before now − 7 days, and logs the count
+    (`age reclaim: N frame(s)`). A clock earlier than `ackedAt` reclaims nothing.
+  - Both go through one reclaimer-level lock, because `Spool.failedDeletes` is shared state.
+  - **First launch after the upgrade:** the first age pass reclaims every frame acked more than
+    7 days ago in one go, including frames acked by an earlier install. Back up the spool
+    first (README, Known limitations).
 - Reclaim writes `reclaimedAt` **first**, then deletes files under the frame's exclusive lock
   (`DerivedFiles`, striped per frame), so it never races a `play`/`thumb` generation of the same
   frame. A crash in between is finished by `recover()`. A reclaimed frame's files answer 404.
@@ -705,6 +712,6 @@ the frame's camera differs from `project.cameraId` and when the project is unbou
 13. **No zustand**: a small own store with `useSyncExternalStore` (§5.1).
 14. **Quarantine instead of delete** for any `full` file that can't be accounted for, on the phone
     and on the tablet (§4.6, §5.6, §5.8). Nothing cleans it automatically.
-15. The phone reclaims acked frames **under low space only**; the 7-day timer is deferred to
-    stage 3 (§4.6).
+15. The phone reclaims acked frames under low space and 7 days after the ack, hourly (§4.6).
+    Unacked frames are never reclaimed.
 16. Minimal playback and export are built in stages 1+2, not stage 3 (§8).

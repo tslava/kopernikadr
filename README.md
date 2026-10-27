@@ -324,9 +324,12 @@ devices. Never try to bypass supervision.
 
 ## Known limitations (today)
 
-- The phone reclaims frames the tablet app already acknowledged only when it runs low on space
-  (there is no 7-day timer yet, stage 3). Frames shot with remote-lite are never acknowledged
-  and never deleted: that spool grows.
+- The phone deletes the files of a frame the tablet app already acknowledged 7 days after the
+  acknowledgement (checked hourly), or earlier when it runs low on space. **The first launch
+  after upgrading the camera app deletes, in one go, every frame acknowledged more than 7 days
+  ago, including ones acknowledged by an earlier install. Back up the phone's spool before
+  that install.** Frames shot with remote-lite are never acknowledged and never deleted: that
+  spool grows.
 - remote-lite's projects live in the browser that created them (its local storage). Another
   browser or device sees an empty list; clearing site data deletes them.
 - The tablet app has no frame strip or frame editing yet (stage 3).
