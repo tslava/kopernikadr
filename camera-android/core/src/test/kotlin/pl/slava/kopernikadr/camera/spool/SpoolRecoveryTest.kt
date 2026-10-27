@@ -114,7 +114,7 @@ class SpoolRecoveryTest {
         val a = spool.insertPending("c1", "ra", "h", "p1", 0)
         val b = spool.insertPending("c1", "rb", "h", "p1", 0)
         val c = spool.insertPending("c1", "rc", "h", "p1", 0)
-        val tmpA = write(fileOf(a.frameId, FrameVariant.FULL).name + ".6f1c2a9e-0b1d-4c5e-8f3a-123456789abc.tmp")
+        val tmpA = write(fileOf(a.frameId, FrameVariant.FULL).name + ".6f1c2a9e-0b1d-4c5e-8f3a-123456789abc.tmp", byteArrayOf(1))
         write(fileOf(b.frameId, FrameVariant.FULL).name, jpeg.copyOf(jpeg.size - 2)) // no EOI
         write(fileOf(c.frameId, FrameVariant.FULL).name, byteArrayOf(1, 2, 3))
         val report = spool.recover()
