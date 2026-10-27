@@ -7,11 +7,15 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import java.io.Closeable
 import java.io.File
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.Json
 import pl.slava.kopernikadr.camera.core.Ulid
 import pl.slava.kopernikadr.camera.core.UlidGenerator
 import pl.slava.kopernikadr.camera.image.StillPipeline
 import pl.slava.kopernikadr.camera.protocol.DerivedImages
+import pl.slava.kopernikadr.camera.protocol.ErrorCodes
 import pl.slava.kopernikadr.camera.protocol.ExposureInfo
 import pl.slava.kopernikadr.camera.protocol.FrameInfo
 import pl.slava.kopernikadr.camera.protocol.FullImage
@@ -39,6 +43,9 @@ data class PendingFrame(val frameId: String, val seq: Long)
 /** [Spool.stats]: committed, not reclaimed frames. */
 data class SpoolStats(val unackedCount: Int, val fullBytes: Long)
 
+/** An acked frame whose files may be reclaimed. */
+data class Reclaimable(val frameId: String, val bytes: Long)
+
 /** What [Spool.commit] stores about the durable `full` file. */
 data class CommitMeta(
     val w: Int,
@@ -53,8 +60,8 @@ data class CommitMeta(
 /**
  * The capture spool 0a (ARCHITECTURE §4.5, plan "Spool 0a"): one SQLite table of operations /
  * frames in `dir/spool.db` (WAL, synchronous=FULL) and the JPEGs next to it as
- * `{frameId}.{full|play|thumb}.jpg`. Rows are kept forever. No recovery in 0a: a `pending` row
- * left by a crash stays `pending`.
+ * `{frameId}.{full|play|thumb}.jpg`. Rows are kept forever. [recover] settles what a dead process
+ * left behind (ARCHITECTURE §4.6); [markReclaimed] + [SpoolReclaimer] free the space of acked frames.
  *
  * One connection guarded by a lock; every call blocks (call it off the main thread).
  */
@@ -212,6 +219,157 @@ class Spool private constructor(
         }
     }
 
+    /** Unacked committed frames of every client except [clientId] ("frames of other remotes"). */
+    fun orphanCount(clientId: String): Int = synchronized(lock) {
+        conn.prepare(
+            "SELECT COUNT(*) FROM frames WHERE state = '$STATE_COMMITTED' AND ackedAt IS NULL AND reclaimedAt IS NULL AND clientId <> ?",
+        ).use { st ->
+            st.bindText(1, clientId)
+            st.step()
+            st.getLong(0).toInt()
+        }
+    }
+
+    /** `lost` rows plus the files in `quarantine/`. */
+    fun integrityErrors(): Int = synchronized(lock) {
+        val lost = conn.prepare("SELECT COUNT(*) FROM frames WHERE state = '$STATE_LOST'").use { st ->
+            st.step()
+            st.getLong(0).toInt()
+        }
+        lost + (File(dir, SpoolFiles.QUARANTINE).listFiles()?.count { it.isFile } ?: 0)
+    }
+
+    /** A guess of the next `full` size: the largest of the last few, or [DEFAULT_EXPECTED_FULL_BYTES]. */
+    fun expectedFullBytes(): Long = synchronized(lock) {
+        conn.prepare(
+            "SELECT COALESCE(MAX(bytes), 0) FROM (SELECT bytes FROM frames WHERE state = '$STATE_COMMITTED' " +
+                "AND bytes IS NOT NULL ORDER BY seq DESC LIMIT 8)",
+        ).use { st ->
+            st.step()
+            st.getLong(0).takeIf { it > 0 } ?: DEFAULT_EXPECTED_FULL_BYTES
+        }
+    }
+
+    /** The acked, not yet reclaimed frame with the oldest `ackedAt` (any client), or null. */
+    fun nextReclaimable(): Reclaimable? = synchronized(lock) {
+        conn.prepare(
+            "SELECT frameId, COALESCE(bytes, 0) FROM frames WHERE state = '$STATE_COMMITTED' AND ackedAt IS NOT NULL " +
+                "AND reclaimedAt IS NULL ORDER BY ackedAt, seq LIMIT 1",
+        ).use { st -> if (st.step()) Reclaimable(st.getText(0), st.getLong(1)) else null }
+    }
+
+    /**
+     * Commits `reclaimedAt` for an acked frame (the record comes before any file is deleted).
+     * False if the frame is not committed + acked + not yet reclaimed: nothing else is ever marked.
+     */
+    fun markReclaimed(frameId: String): Boolean = synchronized(lock) {
+        conn.prepare(
+            "UPDATE frames SET reclaimedAt = ? WHERE frameId = ? AND state = '$STATE_COMMITTED' " +
+                "AND ackedAt IS NOT NULL AND reclaimedAt IS NULL",
+        ).use { st ->
+            st.bindLong(1, clock())
+            st.bindText(2, frameId)
+            st.step()
+        }
+        changes() == 1L
+    }
+
+    /** True if the frame's `reclaimedAt` is set (its files are, or are about to be, gone). */
+    fun isReclaimed(frameId: String): Boolean = synchronized(lock) {
+        conn.prepare("SELECT reclaimedAt IS NOT NULL FROM frames WHERE frameId = ?").use { st ->
+            st.bindText(1, frameId)
+            st.step() && st.getLong(0) == 1L
+        }
+    }
+
+    /** Deletes the three files of [frameId] (none of its other rows' data). Call it for a reclaimed frame only. */
+    internal fun deleteFiles(frameId: String) {
+        for (v in FrameVariant.entries) file(frameId, v).delete()
+    }
+
+    /**
+     * ARCHITECTURE §4.6. Run once per process, before the server accepts commands, and nothing else
+     * may use the spool meanwhile. [isDecodable] is the codec's check of a `full` that already passed
+     * the JPEG structure check. Safety: a `full` is never deleted: one without a row, or a bad one of
+     * a `pending` row, is moved to `quarantine/`; only the names of [SpoolFiles.NAME] are touched
+     * (`spool.db*` and unknown names never); a committed unacked frame's files are never deleted.
+     */
+    fun recover(isDecodable: (ByteArray) -> Boolean = { true }): RecoveryReport = synchronized(lock) {
+        class R(val frameId: String, val state: String, val acked: Boolean, val reclaimed: Boolean)
+
+        val rows = ArrayList<R>()
+        conn.prepare("SELECT frameId, state, ackedAt IS NOT NULL, reclaimedAt IS NOT NULL FROM frames").use { st ->
+            while (st.step()) rows += R(st.getText(0), st.getText(1), st.getLong(2) == 1L, st.getLong(3) == 1L)
+        }
+        var committed = 0
+        var interrupted = 0
+        var lost = 0
+        var reclaimFinished = 0
+        var deleted = 0
+        var quarantined = 0
+
+        for (r in rows) {
+            val full = file(r.frameId, FrameVariant.FULL)
+            when {
+                r.state == STATE_PENDING -> {
+                    val bytes = if (full.isFile) runCatching { full.readBytes() }.getOrNull() else null
+                    val dims = bytes?.let { JpegCheck.dimensions(it) }
+                    if (bytes != null && dims != null && runCatching { isDecodable(bytes) }.getOrDefault(false)) {
+                        commit(
+                            r.frameId,
+                            CommitMeta(
+                                dims.first, dims.second, bytes.size.toLong(), sha256Hex(bytes),
+                                ISO.format(Instant.ofEpochMilli(full.lastModified().takeIf { it > 0 } ?: clock())),
+                            ),
+                        )
+                        committed++
+                    } else {
+                        // an invalid full is not deleted: it may still be the only trace of a photo
+                        if (full.isFile && SpoolFiles.quarantine(dir, full)) quarantined++
+                        fail(r.frameId, ErrorCodes.INTERRUPTED, "interrupted by an app restart")
+                        interrupted++
+                    }
+                }
+                r.state == STATE_COMMITTED && r.reclaimed -> {
+                    // only an acked frame can be reclaimed; reclaimedAt on an unacked one is an anomaly: keep the files
+                    if (r.acked && FrameVariant.entries.any { file(r.frameId, it).exists() }) {
+                        deleteFiles(r.frameId)
+                        reclaimFinished++
+                    }
+                }
+                r.state == STATE_COMMITTED && !r.acked && !full.exists() -> {
+                    markLost(r.frameId)
+                    lost++
+                }
+            }
+        }
+
+        val known = rows.mapTo(HashSet()) { it.frameId }
+        for (f in dir.listFiles().orEmpty().sortedBy { it.name }) {
+            if (!f.isFile) continue
+            val m = SpoolFiles.NAME.matchEntire(f.name) ?: continue
+            val isTmp = m.groupValues[3].isNotEmpty()
+            when {
+                isTmp -> if (f.delete()) deleted++
+                m.groupValues[1] in known -> Unit
+                m.groupValues[2] == "full" -> if (SpoolFiles.quarantine(dir, f)) quarantined++
+                else -> if (f.delete()) deleted++
+            }
+        }
+        RecoveryReport(committed, interrupted, lost, reclaimFinished, deleted, quarantined)
+    }
+
+    private fun markLost(frameId: String) {
+        conn.prepare(
+            "UPDATE frames SET state = '$STATE_LOST', failCode = ?, errorMessage = ? WHERE frameId = ? AND state = '$STATE_COMMITTED'",
+        ).use { st ->
+            st.bindText(1, ErrorCodes.INTERNAL)
+            st.bindText(2, "the frame's file is lost")
+            st.bindText(3, frameId)
+            st.step()
+        }
+    }
+
     override fun close() = synchronized(lock) { conn.close() }
 
     private fun row(frameId: String): Row? =
@@ -287,6 +445,11 @@ class Spool private constructor(
                 "w, h, bytes, sha256, exposureJson"
 
         private val JSON = Json { ignoreUnknownKeys = true }
+        private val ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+        private fun sha256Hex(b: ByteArray) = DurableFiles.sha256(b)
+
+        /** Size guess for admission when the spool has no frame yet (a 3264x2448 JPEG is ~2-3 MB). */
+        const val DEFAULT_EXPECTED_FULL_BYTES = 5_000_000L
 
         val DERIVED = DerivedImages(
             WireSize(StillPipeline.PLAY.width, StillPipeline.PLAY.height),
