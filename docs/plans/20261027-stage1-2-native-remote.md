@@ -672,7 +672,7 @@ Order: 1 → 2 → … → 23, one agent at a time.
 
 ### Task 21: Tablet + phone install and smoke (orchestrator + owner)
 
-- [ ] **back up the kid's spool before the first camera upgrade on the g05.** The release/probe
+- [x] ⚠️ waived by the owner on 2026-10-27 ("не надо старое бэкапить"); the read-only `probe-client backup` command exists and was dry-run on the g05. **back up the kid's spool before the first camera upgrade on the g05.** The release/probe
       build is not debuggable, so use the HTTP API read-only:
   1. take remote-lite's `clientId` from the tablet browser (localStorage) or the camera
      diagnostics;
@@ -680,10 +680,10 @@ Order: 1 → 2 → … → 23, one agent at a time.
   3. download every `full` to the Mac;
   4. verify the sha256 values;
   5. **no ack**
-- [ ] list the spool counts before/after the upgrade via `getStatus` and compare
-- [ ] install the camera build (`install -r`) and the remote debug build on the tablet
-- [ ] smoke: a short movie end to end; remote-lite still works on the same phone
-- [ ] record the results in `docs/diagnostics/<date>-stage1-2-tablet.md`
+- [x] list the spool counts before/after the upgrade via `getStatus` and compare (34/34 unacked, same bytes, 0 integrity errors)
+- [x] install the camera build (`install -r`) and the remote debug build on the tablet
+- [ ] smoke: a short movie end to end; remote-lite still works on the same phone (remote-lite + probe-client smoke on the g05 done; the native tablet + g05 run is still open)
+- [ ] record the results in `docs/diagnostics/<date>-stage1-2-tablet.md` (g05 part: `docs/diagnostics/20261027-stage1-2-g05.md`)
 
 ### Task 22: Verify acceptance criteria
 - [x] every Overview bullet works on the emulator (E2E 9/9, three runs); ⚠️ the tablet part is Task 21 (owner)
