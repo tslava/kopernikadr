@@ -640,16 +640,16 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/lib/app/lifecycle.ts` + test
 - Modify: `remote/lib/app/boot.ts`
 
-- [ ] pause/resume:
+- [x] pause/resume:
   - preview stops on pause;
   - `reconnectNow()` on resume;
   - transfers only in the foreground;
   - keep-awake only in the capture view and during an export
-- [ ] background/foreground while a capture is writing: the outstanding entry resolves after
+- [x] background/foreground while a capture is writing: the outstanding entry resolves after
       resume (a §7 crash point)
-- [ ] the Diagnostics view stays reachable for the parent; probes keep working
-- [ ] write tests for resume during a capture, during a download, during an export
-- [ ] run tests — must pass before Task 20
+- [x] the Diagnostics view stays reachable for the parent; probes keep working
+- [x] write tests for resume during a capture, during a download, during an export
+- [x] run tests — must pass before Task 20
 
 ### Task 20: Emulator E2E script
 
@@ -657,7 +657,7 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - Create: `remote/e2e/flow.cdp.mjs`, `docs/diagnostics/<date>-stage1-2-emulator.md`
 - Modify: `remote/android/app/build.gradle` (`versionCode`/`versionName` bump)
 
-- [ ] a CDP-driven script against `fake-camera.mjs`. Each step passes or fails:
+- [x] a CDP-driven script against `fake-camera.mjs`. Each step passes or fails:
   1. create a movie;
   2. connect;
   3. shoot 10 frames → 10 local;
@@ -667,8 +667,8 @@ Order: 1 → 2 → … → 23, one agent at a time.
   7. export → in the gallery (ffprobe: frames = local count);
   8. delete + Undo → still there;
   9. delete → the frames are acked on the fake camera
-- [ ] fix what's found (➕ tasks if larger)
-- [ ] run the full suite — must pass before Task 21
+- [x] fix what's found (➕ tasks if larger)
+- [x] run the full suite — must pass before Task 21
 
 ### Task 21: Tablet + phone install and smoke (orchestrator + owner)
 
