@@ -36,7 +36,7 @@ export default function AppShell() {
   useEffect(() => {
     if (!app || !Capacitor.isNativePlatform()) return;
     const sub = App.addListener('appStateChange', (s) => {
-      if (s.isActive) app.client.resume();
+      app.lifecycle.setActive(s.isActive); // client.resume() + preview + transfers: lib/app/lifecycle.ts
     });
     return () => void sub.then((h) => h.remove());
   }, [app]);
@@ -89,7 +89,7 @@ export default function AppShell() {
     case 'play':
       return app ? <PlayRoute t={t} id={route.id} app={app} urls={urls} onBack={goBack} /> : <PlayView t={t} id={route.id} onBack={goBack} />;
     case 'diagnostics':
-      return <Diagnostics t={t} onBack={goBack} />;
+      return <Diagnostics t={t} onBack={goBack} yieldClient={app?.lifecycle.yieldToProbes} />;
     default:
       return (
         <ProjectsView

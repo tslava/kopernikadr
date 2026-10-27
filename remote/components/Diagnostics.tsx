@@ -25,7 +25,7 @@ function statusText(t: Translate, s: Status): string {
   return r.ok ? t('diag.pass', { ms: r.ms }) : `${t('diag.fail')}: ${r.error ?? ''}`;
 }
 
-export default function Diagnostics({ t, onBack }: { t: Translate; onBack: () => void }) {
+export default function Diagnostics({ t, onBack, yieldClient }: { t: Translate; onBack: () => void; yieldClient?: () => () => void }) {
   const [address, setAddress] = useState('');
   const [statuses, setStatuses] = useState(idle);
   const [busy, setBusy] = useState(false);
@@ -52,6 +52,7 @@ export default function Diagnostics({ t, onBack }: { t: Translate; onBack: () =>
     setStatuses(idle());
     const ac = new AbortController();
     abort.current = ac;
+    const releaseClient = yieldClient?.(); // the app's client yields while the probes use their own sessions
     try {
       // Capacitor plugins and the probes load only now, never during the static prerender.
       const { runDiagnostics } = await import('@/lib/probes/app');
@@ -71,6 +72,7 @@ export default function Diagnostics({ t, onBack }: { t: Translate; onBack: () =>
       setFatal(String((e as Error)?.message ?? e));
     } finally {
       abort.current = null;
+      releaseClient?.();
       setBusy(false);
     }
   };
