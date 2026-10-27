@@ -23,23 +23,30 @@ export interface FrameUrlDeps {
   /** The file uri of `kopernikadr/` (resolved once by the caller). Frame uris are `${base}/${path}`. */
   baseUri: string;
   convertFileSrc?: (uri: string) => string;
+  now?: () => number;
 }
+
+/** How long a failed file load hides that file before it is tried again. */
+export const ABSENT_TTL_MS = 10_000;
 
 /** Pure part: the store gives the frame state, `baseUri` the root. */
 export function createFrameUrls(store: Pick<ProjectStore, 'state'>, deps: FrameUrlDeps): FrameUrls {
   const convert = deps.convertFileSrc ?? ((u) => Capacitor.convertFileSrc(u));
   const base = deps.baseUri.replace(/\/+$/, '');
-  const absent = new Set<string>();
+  // A cache file (play/thumb) arrives after its `full`, so "absent" is only remembered for a while.
+  const absent = new Map<string, number>();
+  const now = deps.now ?? (() => Date.now());
   const key = (p: string, f: string, k: FrameFileKind) => `${p}/${f}.${k}`;
   return {
     url(projectId, frameId, kind) {
       const frame = store.state.get().projects[projectId]?.frames.find((x) => x.frameId === frameId);
       if (!frame || frame.state !== 'local') return null;
-      if (absent.has(key(projectId, frameId, kind))) return null;
+      const since = absent.get(key(projectId, frameId, kind));
+      if (since !== undefined && now() - since < ABSENT_TTL_MS) return null;
       return convert(`${base}/${framePath(projectId, frameId, kind)}`);
     },
     markAbsent(projectId, frameId, kind) {
-      absent.add(key(projectId, frameId, kind));
+      absent.set(key(projectId, frameId, kind), now());
     },
   };
 }

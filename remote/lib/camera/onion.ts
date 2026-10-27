@@ -1,7 +1,7 @@
 // Onion skin source selection (plan Task 13). Pure: the caller injects the file lookup.
 import type { FrameEntry } from '../projects/model';
 
-export type OnionKind = 'play' | 'thumb';
+export type OnionKind = 'play' | 'thumb' | 'full';
 export type OnionSource = { kind: OnionKind; frameId: string; url: string } | null;
 
 /** URL of a LOCAL file of a frame variant, or null when that file does not exist. */
@@ -22,7 +22,8 @@ export function lastLocalFrame(frames: readonly FrameEntry[], now: number = Date
 export function selectOnionSource(projectId: string, frames: readonly FrameEntry[], frameUrl: FrameUrl, now?: number): OnionSource {
   const f = lastLocalFrame(frames, now);
   if (!f) return null;
-  for (const kind of ['play', 'thumb'] as const) {
+  // `full` last: a local frame always has it, while play/thumb may still be downloading.
+  for (const kind of ['play', 'thumb', 'full'] as const) {
     const url = frameUrl(projectId, f.frameId, kind);
     if (url) return { kind, frameId: f.frameId, url };
   }
