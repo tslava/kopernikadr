@@ -700,24 +700,25 @@ Order: 1 → 2 → … → 23, one agent at a time.
 - [ ] a Codex review of the batch; fix the material findings
 
 ### Task 23: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
+- [x] `docs/ARCHITECTURE.md` (rev 4, 2026-10-27):
   - §5 matches what was built: own store, hash views, export from `play` with a `full` fallback,
     no JS sha pass, no local cache regeneration, no deep link;
   - §4.6 reclaim under low space only;
   - §9 decision 2 (export source);
   - §8 stages 1–2 done;
   - line 40 `src/schema.ts` removed
-- [ ] `README.md`:
+- [x] `README.md` (a "Using it: the tablet app" section; "frames of other remotes" is a `getStatus` count, the phone's screen doesn't show it):
   - how the kid uses the tablet app;
   - the parent drawer;
   - where movies are;
   - "uninstalling the remote deletes movies";
   - remote-lite as the fallback;
   - "frames of other remotes" on the phone
-- [ ] `docs/ROADMAP.md`:
+- [x] `docs/ROADMAP.md`:
   - stages 1+2 done;
   - next = stage 3 (strip + editing, the 7-day reclaim, `ScreenPolicy`) and the effects layer
 - [ ] move this plan to `docs/plans/completed/`
+  - ➕ not moved (2026-10-27): Tasks 21 (tablet + phone install, spool backup) and 22 (acceptance on the tablet, full suite, review) are still open
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — no checkboxes, informational only*
