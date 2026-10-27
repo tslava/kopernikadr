@@ -22,6 +22,7 @@ locked registry packages checked: none is newer than the cutoff).
 | vite (vitest peer) | 8.3.4 | 2026-10-08 | yes (8.3.5 is 2026-10-21) |
 | @types/react, @types/react-dom | 19.3.0 | 2026-09-09 | yes |
 | @types/node | 22.20.5 | 2026-10-01 | newest 22.x (matches Node 22) |
+| mediabunny | 1.61.4 | 2026-10-12 | yes (1.61.5 is 2026-10-15); deps `@types/dom-webcodecs` 0.1.13 (exact), `@types/dom-mediacapture-transform` 0.1.12 (2026-07-08) |
 
 Notes:
 - **TypeScript 7** (native compiler) has no classic JS API. Next 16.4 type-checks through the
@@ -31,6 +32,10 @@ Notes:
   version) has open advisories (image optimizer SVG RCE, server-actions DoS, `use cache` typed arrays)
   and makes `next build` stop once under a coding agent. None of those features ship in a static
   export, but the owner chose the patched release over the cooldown.
+- **mediabunny 1.61.4** (MPL-2.0) was added later (Task 12) with `npm install mediabunny@1.61.4
+  --save-exact -w remote --before=2026-10-12T23:59:59Z`. A full codec string goes in
+  `VideoEncodingConfig.fullCodecString` (next to a matching `codec`), not in `codec`; see
+  `lib/export/mediabunnyExport.ts`.
 - `npm audit` also flags `uuid` < 11.1.1 via `@capacitor/cli` → `xcode` (iOS tooling only, a
   dev dependency; not in the app).
 
