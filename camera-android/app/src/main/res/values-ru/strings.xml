@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="status_title">Kopernikadr Kamera</string>
+    <string name="status_title">Kopernikadr</string>
     <string name="status_no_wifi">Нет подключения к Wi-Fi</string>
     <string name="permission_text">Попроси родителя разрешить камеру</string>
     <string name="permission_retry">Попробовать снова</string>
@@ -11,4 +11,15 @@
     <string name="server_waiting">Жду планшет</string>
     <string name="server_connected">Планшет подключён</string>
     <string name="server_error">Ошибка сервера: %1$s</string>
+    <string name="status_chip">Камера</string>
+    <string name="status_ready">Готово к съёмке</string>
+    <string name="status_tablet_connected">Планшет подключён</string>
+    <string name="status_hint_open_tablet">Открой Kopernikadr на планшете — камера найдётся сама.</string>
+    <string name="status_qr_caption">или отсканируй в браузере</string>
+    <string name="status_no_wifi_title">Нет Wi-Fi</string>
+    <string name="status_no_wifi_hint">Подключи телефон к домашнему Wi-Fi.</string>
+    <string name="status_starting">Запуск…</string>
+    <string name="status_error_title">Ошибка</string>
+    <string name="status_frames">Кадры: %1$d</string>
+    <string name="status_battery">Батарея: %1$d%%</string>
 </resources>

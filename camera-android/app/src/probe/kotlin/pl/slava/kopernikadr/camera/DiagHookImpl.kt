@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
+import pl.slava.kopernikadr.camera.camera.CameraController
 import pl.slava.kopernikadr.camera.diag.DebugActions
 import pl.slava.kopernikadr.camera.diag.DiagnosticsScreen
 import pl.slava.kopernikadr.camera.diag.ProbeRunner
@@ -27,9 +28,11 @@ internal object DiagnosticsHook : DiagHook {
         private set
 
     private lateinit var actions: DebugActions
+    private lateinit var camera: CameraController
 
     override fun onAppCreate(app: App) {
         runner = ProbeRunner(app)
+        camera = app.camera
         actions = DebugActions(app.camera, runner.rootDir, app::ensureControls)
     }
 
@@ -60,6 +63,6 @@ internal object DiagnosticsHook : DiagHook {
     }
 
     override val diagnosticsScreen: @Composable (onClose: () -> Unit) -> Unit = { onClose ->
-        DiagnosticsScreen(runner, onClose)
+        DiagnosticsScreen(runner, camera, onClose)
     }
 }

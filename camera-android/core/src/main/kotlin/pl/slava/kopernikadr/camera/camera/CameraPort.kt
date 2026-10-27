@@ -193,3 +193,12 @@ class AnalysisFrame(
         "AnalysisFrame($format $size crop=$cropRect rot=$rotationDegrees ts=$timestampNs " +
             "planes=${planes.joinToString { "${it.buffer.remaining()}B/${it.rowStride}/${it.pixelStride}" }})"
 }
+
+/** One line for diagnostics: variant, strict/fallback and the resolved P/A/C sizes. */
+fun BindInfo.summary(): String = buildString {
+    append(variant)
+    append(if (strict.ok) " · strict ok" else " · fallback")
+    preview?.resolved?.let { append(" · P ").append(it) }
+    analysis.resolved?.let { append(" · A ").append(it) }
+    capture.resolved?.let { append(" · C ").append(it) }
+}

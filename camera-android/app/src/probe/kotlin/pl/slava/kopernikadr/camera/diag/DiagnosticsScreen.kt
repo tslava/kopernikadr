@@ -23,13 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import pl.slava.kopernikadr.camera.camera.CameraController
+import pl.slava.kopernikadr.camera.camera.summary
 
 /**
  * Bare diagnostics screen (debug/probe only): a button per probe, the active or last run, the last
  * report's summary, and a full-screen prompt with a big Continue button while a run waits.
  */
 @Composable
-fun DiagnosticsScreen(runner: ProbeRunner, onClose: () -> Unit) {
+fun DiagnosticsScreen(runner: ProbeRunner, camera: CameraController, onClose: () -> Unit) {
+    val cameraStatus by camera.status.collectAsStateWithLifecycle()
     val status by runner.core.status.collectAsStateWithLifecycle()
     val report by runner.core.lastReport.collectAsStateWithLifecycle()
     val current = status
@@ -46,6 +49,9 @@ fun DiagnosticsScreen(runner: ProbeRunner, onClose: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Diagnostics", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = onClose) { Text("Close") }
+            }
+            cameraStatus.bind?.let {
+                Text(it.summary(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val idle = current == null || current.state.isTerminal
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
