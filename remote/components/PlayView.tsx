@@ -14,7 +14,7 @@ import { createFrameSource, PLAY_HEIGHT, PLAY_WIDTH, type FrameUrl } from '@/lib
 import { createPlayer, timelineOf, type Clock, type Player, type PlayerStatus } from '@/lib/play/player';
 import { createRing } from '@/lib/play/ring';
 import { drawFrame, drawStickers } from '@/lib/render/compose';
-import { bucketFor, SpriteCache } from '@/lib/render/sprites';
+import { bucketFor, needsNewSpriteCache, SpriteCache } from '@/lib/render/sprites';
 import { openmojiUrlOf } from '@/lib/render/catalog';
 import { appStickerLibrary } from '@/lib/stickers/appLibrary';
 import { StickerCopyError } from '@/lib/app/stickerController';
@@ -79,7 +79,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const canvas = useRef<HTMLCanvasElement>(null);
   const stickerCanvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<SpriteCache | null>(null);
-  const spritesFor = useRef<FrameUrls | null | undefined>(undefined);
+  const spritesFor = useRef<{ id: string; urls: FrameUrls | null | undefined } | null>(null);
   const player = useRef<Player | null>(null);
   const [status, setStatus] = useState<PlayerStatus>(IDLE);
 
@@ -101,10 +101,10 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
     if (!el || !ctx) return;
     ctx.clearRect(0, 0, el.width, el.height);
     // the cache is per project and per url resolver: a custom sticker resolves to the movie's own copy
-    if (!sprites.current || spritesFor.current !== urls) {
+    if (!sprites.current || needsNewSpriteCache(spritesFor.current, id, urls)) {
       sprites.current?.clear();
       sprites.current = new SpriteCache(undefined, undefined, urls ? urls.spriteUrlOf(id) : openmojiUrlOf);
-      spritesFor.current = urls;
+      spritesFor.current = { id, urls };
     }
     const cache = sprites.current;
     const list = stickersRef.current.filter((st) => entryId !== null && st.on.includes(entryId));

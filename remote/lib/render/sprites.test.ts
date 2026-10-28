@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bmp, asBitmap, type FakeBitmap } from '../play/play.testutil';
 import { customStickerPath, loadCatalog, openmojiUrlOf, parseCatalog, projectSpriteUrlOf, resetCatalogCache, spriteUrl } from './catalog';
-import { SpriteCache, bucketFor, type Rasterize, type SpriteBucket } from './sprites';
+import { SpriteCache, bucketFor, needsNewSpriteCache, type Rasterize, type SpriteBucket } from './sprites';
 
 function fakeRaster(failing: string[] = []) {
   const calls: { url: string; size: number }[] = [];
@@ -243,5 +243,16 @@ describe('sprite urls (urlOf)', () => {
     expect((err as Error).message).toContain(ID);
     expect((err as { failed: string[] }).failed).toEqual([ID]);
     expect(f.made.every((b) => b.closed)).toBe(true);
+  });
+});
+
+describe('needsNewSpriteCache', () => {
+  const urls = { a: 1 };
+  it('rebuilds on first use, project change or resolver change only', () => {
+    expect(needsNewSpriteCache(null, 'A', urls)).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'A', urls)).toBe(false);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'B', urls)).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'A', { a: 1 })).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls: undefined }, 'A', undefined)).toBe(false);
   });
 });

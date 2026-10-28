@@ -88,6 +88,18 @@ export function pointInRect(rect, nx, ny) {
   return { x: rect.left + rect.width * nx, y: rect.top + rect.height * ny };
 }
 
+/**
+ * The rectangle an image of natW x natH occupies inside `box` under `object-fit: contain`
+ * (centered, scaled to fit, the rest is letterboxing).
+ */
+export function containRect(box, natW, natH) {
+  if (!(natW > 0) || !(natH > 0)) return { left: box.left, top: box.top, width: box.width, height: box.height };
+  const k = Math.min(box.width / natW, box.height / natH);
+  const width = natW * k;
+  const height = natH * k;
+  return { left: box.left + (box.width - width) / 2, top: box.top + (box.height - height) / 2, width, height };
+}
+
 /** Path of a movie's copy of a library sticker, relative to the app's data dir (for `run-as`). */
 export const movieStickerFile = (projectId, uuid) => `files/kopernikadr/projects/${projectId}/stickers/${uuid}.webp`;
 

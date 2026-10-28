@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile, newStickerId, parseLibraryIndex, singleNewIndexId, ownTileUnique } from './lib.mjs';
+import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, containRect, movieStickerFile, newStickerId, parseLibraryIndex, singleNewIndexId, ownTileUnique } from './lib.mjs';
 
 test('parseArgs', () => {
   const a = parseArgs(['--devtools', '9222', '--adb-restart', 'adb x', '--camera', 'http://h:1/']);
@@ -112,4 +112,11 @@ test('ownTileUnique: only an exact, single id match is deletable', () => {
   assert.equal(ownTileUnique([{ id: 'n1' }], 'n'), false);
   assert.equal(ownTileUnique([{ id: 'n' }], null), false);
   assert.equal(ownTileUnique([], ''), false);
+});
+
+test('containRect letterboxes portrait and landscape images', () => {
+  const box = { left: 10, top: 20, width: 200, height: 100 };
+  assert.deepEqual(containRect(box, 100, 200), { left: 85, top: 20, width: 50, height: 100 });
+  assert.deepEqual(containRect(box, 400, 100), { left: 10, top: 45, width: 200, height: 50 });
+  assert.deepEqual(containRect(box, 0, 0), box);
 });

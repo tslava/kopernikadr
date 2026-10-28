@@ -168,3 +168,8 @@ export class SpriteCache {
     }
   }
 }
+
+/** A sprite cache is bound to one project and one url resolver: rebuild it when either changes. */
+export function needsNewSpriteCache<U>(built: { id: string; urls: U } | null, id: string, urls: U): boolean {
+  return built === null || built.id !== id || built.urls !== urls;
+}

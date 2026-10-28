@@ -16,7 +16,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { assertTestProject, movieStickerFile, myStickers, newStickerId, ownTileUnique, parseLibraryIndex, parseStickerArgs, pickPage, pointInRect, singleNewIndexId } from './lib.mjs';
+import { assertTestProject, movieStickerFile, myStickers, newStickerId, ownTileUnique, parseLibraryIndex, parseStickerArgs, pickPage, pointInRect, containRect, singleNewIndexId } from './lib.mjs';
 
 const sh = promisify(exec);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -128,7 +128,7 @@ async function redirectPicker(path) {
 
 const tile = (n) => `[...document.querySelectorAll('button.strip-tile')].find((b) => b.getAttribute('aria-label') === ${J(T.tile(n))})`;
 const busy = `!!document.querySelector('.cut-msg.busy')`;
-const stageRect = () => ev(`(() => { const r = document.querySelector('[data-testid=cut-stage] canvas').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })()`);
+const stageRect = () => ev(`(() => { const c = document.querySelector('[data-testid=cut-stage] canvas'); const r = c.getBoundingClientRect(); return { box: { left: r.left, top: r.top, width: r.width, height: r.height }, natW: c.width, natH: c.height }; })()`).then((x) => containRect(x.box, x.natW, x.natH));
 
 /** Frame 1 selected, picker open on the "Moje" tab, "Zrób naklejkę" tapped: the maker is open. */
 async function openMaker() {
