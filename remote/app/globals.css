@@ -255,3 +255,29 @@ button { min-height: 64px; }
 .icon-btn.on { background: #e9e3ff; color: #3b2a8a; }
 .speed { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 18px; color: var(--muted); }
 .speed input { width: 200px; min-height: 0; }
+
+/* Sticker maker ("Zrób naklejkę") and the "Moje" tab: big plain-tap targets (>= 56 px) */
+.picker-grid.mine { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.picker-grid.mine .picker-item { min-height: 128px; width: 100%; }
+.picker-grid.mine .picker-item img { width: 96px; height: 96px; }
+.picker-item.make { flex-direction: column; gap: 6px; border: 3px dashed var(--accent); color: var(--accent); font-size: 18px; line-height: 1.15; }
+.mine-wrap { position: relative; display: flex; }
+.mine-del { position: absolute; top: 4px; right: 4px; width: 56px; height: 56px; min-height: 56px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(20, 22, 26, 0.8); }
+.maker { position: fixed; inset: 0; z-index: 35; background: var(--bg); padding: 16px 32px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.maker-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 32px; }
+.maker-sources { display: flex; gap: 32px; }
+.maker-source { width: 280px; min-height: 200px; flex-direction: column; display: flex; align-items: center; justify-content: center; gap: 16px; border-radius: 24px; font-size: 28px; }
+.maker-source .ic { width: 64px; height: 64px; }
+.maker-wait { flex: 1; display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 28px; margin: 0; }
+.spinner { width: 40px; height: 40px; border-radius: 50%; border: 5px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.maker-body.style { align-items: stretch; }
+.maker-preview { flex: 1; min-width: 0; min-height: 0; border-radius: 20px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.maker-preview canvas { max-width: 100%; max-height: 100%; aspect-ratio: 1; object-fit: contain; }
+.checker { background: conic-gradient(#3a3f47 25%, #2a2e34 0 50%, #3a3f47 0 75%, #2a2e34 0) 0 0 / 32px 32px; }
+.maker-side { width: 320px; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+.maker-styles { display: flex; flex-direction: column; gap: 12px; }
+.maker-style { min-height: 80px; font-size: 26px; border-radius: 20px; }
+.maker-style.sel { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+.maker-save { min-height: 88px; font-size: 28px; border-radius: 20px; }
+.maker-notice { margin: 0; text-align: center; font-size: 24px; color: var(--accent); }

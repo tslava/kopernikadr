@@ -16,6 +16,7 @@ import { createRing } from '@/lib/play/ring';
 import { drawFrame, drawStickers } from '@/lib/render/compose';
 import { bucketFor, SpriteCache } from '@/lib/render/sprites';
 import { openmojiUrlOf } from '@/lib/render/catalog';
+import { appStickerLibrary } from '@/lib/stickers/appLibrary';
 import { StickerCopyError } from '@/lib/app/stickerController';
 import { createNativeWriter } from '@/lib/export/nativeWriter';
 import { isActive, type CameraLink } from '@/lib/export/projectExport';
@@ -394,7 +395,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
           {t('sticker.addFailed')}
         </div>
       )}
-      {pickerOpen && <EmojiPicker t={t} lang={lang} onPick={onPick} onClose={() => setPickerOpen(false)} />}
+      {pickerOpen && <EmojiPicker t={t} lang={lang} onPick={onPick} onClose={() => setPickerOpen(false)} library={edit ? appStickerLibrary() : undefined} overlays={overlays} />}
       {exporter && exportOpen && project && (
         <ExportDialog t={t} project={project} controller={exporter} link={link} onClose={() => setExportOpen(false)} />
       )}

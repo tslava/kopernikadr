@@ -452,25 +452,25 @@ Then the picker opens on "Moje" with the new sticker first.
 - Create: `remote/components/StickerMaker.tsx`, `remote/lib/app/stickerMakerModel.ts` (pure state machine), `remote/lib/app/stickerMakerModel.test.ts`, `remote/lib/stickers/pickerTabs.ts` + test
 - Modify: `remote/components/EmojiPicker.tsx`, `remote/components/PlayView.tsx`, `remote/app/globals.css`, `remote/lib/i18n/*` (pl, ru)
 
-- [ ] State machine: `source → loading → (cut) → style → saving → done`, plus cancel/error at each
+- [x] State machine: `source → loading → (cut) → style → saving → done`, plus cancel/error at each
       step.
   - In this task an image without transparency shows "Wkrótce: wycinanie" and returns. The cut step
     comes in Task 9.
-  - "Zrób zdjęcie" is hidden until Task 7.
-- [ ] Style step: "Naklejka" / "Komiks" chips with a cached live preview. "Zapisz" adds the sticker
+  - "Zrób zdjęcie" is hidden until Task 7. (Only "Z galerii" is shown; the camera tile comes with Task 7.)
+- [x] Style step: "Naklejka" / "Komiks" chips with a cached live preview. "Zapisz" adds the sticker
       to the library and opens the picker on "Moje".
-- [ ] "Moje" is always the first tab:
+- [x] "Moje" is always the first tab:
   - the first tile is "＋ Zrób naklejkę";
   - thumbnail tiles;
   - ✕ → confirm → `remove`;
   - picking a tile places `my:<uuid>` via Task 3.
-- [ ] Tests:
+- [x] Tests:
   - model transitions (cancel, picker error, an image with alpha → style, without alpha → "soon");
   - tab order;
   - the delete confirm flow;
   - pick → place with a `my:` id.
-- [ ] Run tests; they must pass before Task 6. **Checkpoint:** a PNG with transparency (Hello
-      Kitty/Stitch case) works end to end on the tablet, in an agent-created test movie.
+- [x] Run tests; they must pass before Task 6. **Checkpoint:** a PNG with transparency (Hello
+      Kitty/Stitch case) works end to end on the tablet, in an agent-created test movie. (deferred to the orchestrator's tablet run)
 
 ### Task 6: MediaPipe dependency, model fetch and build checks
 **Files:**

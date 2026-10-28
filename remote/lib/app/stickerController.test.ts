@@ -7,6 +7,7 @@ import { mergeFrame, setLocal } from '../projects/reducers';
 import { ProjectStore } from '../projects/store';
 import { moveEntry } from '../projects/edit';
 import { handlePoint } from '../render/stickerGeometry';
+import { customEmoji } from '../stickers/pickerTabs';
 import { pickSticker, reconcileSticker, StickerController, StickerCopyError, stickersOn, withLivePose } from './stickerController';
 
 const info = (projectId: string, frameId: string, seq: number): FrameInfo => ({
@@ -187,6 +188,14 @@ describe('StickerController: custom stickers (copy-on-place)', () => {
     expect(calls).toEqual([`p1/${UUID}`]);
     expect(sticker().emoji).toBe(MY);
     expect(project().stickers).toHaveLength(1);
+  });
+
+  it('a tile picked in "Moje" is placed by its library id (customEmoji)', async () => {
+    const calls: string[] = [];
+    const { c, sticker } = await setup(5, async (id, pid) => void calls.push(`${pid}/${id}`));
+    expect(await c.add('p1', 'f2', customEmoji(UUID))).toBe('s1');
+    expect(calls).toEqual([`p1/${UUID}`]);
+    expect(sticker().emoji).toBe(MY);
   });
 
   it('a failed copy places nothing, writes nothing and throws StickerCopyError', async () => {
