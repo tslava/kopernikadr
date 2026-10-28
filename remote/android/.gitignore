@@ -95,6 +95,9 @@ capacitor-cordova-android-plugins
 # Copied web assets
 app/src/main/assets/public
 
+# MediaPipe segmenter model (remote/scripts/fetch-models.mjs)
+app/src/main/assets/mediapipe/
+
 # Generated Config files
 app/src/main/assets/capacitor.config.json
 app/src/main/assets/capacitor.plugins.json

@@ -5,6 +5,9 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { EditController } from '@/lib/app/editController';
 import { StickerController } from '@/lib/app/stickerController';
+import { createStickerCopier } from '@/lib/stickers/library';
+import { createAppBinaryFiles } from '@/lib/stickers/binaryFiles';
+import { createAppFileAdapter } from '@/lib/projects/files';
 import { retryApp, startApp, useApp, useBootState } from '@/lib/app/app';
 import { PREVIEW_QUALITIES } from '@/lib/app/drawerModel';
 import { useFrameUrls, type FrameUrls } from '@/lib/app/frames';
@@ -137,7 +140,7 @@ function editorFor(app: AppContext) {
   if (!e) {
     const controller = new EditController({ store: app.store, frameDeletion: app.frameDeletion, exporting: app.exporting });
     // stickers share the frame edits' Cofnij history
-    e = { controller, stickers: new StickerController({ store: app.store, exporting: app.exporting, history: controller.history }) };
+    e = { controller, stickers: new StickerController({ store: app.store, exporting: app.exporting, history: controller.history, copySticker: createStickerCopier(createAppBinaryFiles(createAppFileAdapter())) }) };
     editors.set(app, e);
   }
   return e;

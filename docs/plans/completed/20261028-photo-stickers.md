@@ -37,7 +37,7 @@ skips the cut-out step and goes straight to the style step.
 - **Sources in this plan.** The tablet camera (system camera app) and the tablet gallery (photos and
   PNG/WebP). Picking a frame of the movie comes later.
 - **Storage.** A sticker library on the tablet, `stickers/`. When a sticker is placed in a movie, its
-  PNG is **copied into the movie folder**. Deleting a sticker from "Moje" never breaks a movie.
+  WebP is **copied into the movie folder**. Deleting a sticker from "Moje" never breaks a movie.
 - **Not in the repo.** Custom stickers stay only on the tablet. Character art (Sanrio, Disney) is
   never committed.
 
@@ -182,19 +182,19 @@ These go to `docs/ROADMAP.md`.
    - trims to the bounding box;
    - pads to a square;
    - draws the outline, shadow or comic style;
-   - encodes the PNG.
-3. **Custom stickers are square transparent PNGs** (≤ 1024 px). The renderer keeps drawing square
+   - encodes the WebP (PNG encode took 4 s on the tablet).
+3. **Custom stickers are square transparent WebPs** (≤ 1024 px; WebP, PNG encode took 4 s on the tablet). The renderer keeps drawing square
    sprites, so `drawStickers` geometry does not change. `SpriteCache` gets an injected
    `urlOf(emoji)`, bound per project. The key stays `emoji@bucket`, because `my:` images are
    immutable and each `SpriteCache` instance is per project already.
 4. **Reference.**
    - A custom sticker in a project is `emoji: "my:<uuid>"`. The id is validated by a strict regex
      wherever a path is built.
-   - On place, the library PNG is copied to `projects/{pid}/stickers/<uuid>.png`.
-   - Deleting from the library deletes only `stickers/<uuid>.png`, its thumbnail and its index row.
+   - On place, the library WebP is copied to `projects/{pid}/stickers/<uuid>.webp`.
+   - Deleting from the library deletes only `stickers/<uuid>.webp`, its thumbnail and its index row.
    - Movie copies are never garbage-collected. They go away with the movie.
 5. **Binary files go through `tmp/` + `installFile`.**
-   - The new PNG goes to `tmp/` (base64 via `Filesystem.writeFile`, ≤ ~1 MB; a documented exception to
+   - The new WebP goes to `tmp/` (base64 via `Filesystem.writeFile`, ≤ ~1 MB; a documented exception to
      §5.4, like `videoWriteAt`), then `installFile(tmp, dest, bytes, sha256)` moves it into place
      atomically and verifies it.
    - Copy-on-place is `Filesystem.copy` → `tmp/`, then `installFile` into the movie. Its
@@ -212,8 +212,8 @@ checked by `PathGuard`.
     while copying, with a 40 MB cap (`TOO_LARGE`).
   - Mime jpeg / png / webp / heic / heif. Anything else is `UNSUPPORTED`.
 - `takePhoto()` → `{path}`.
-  - Uses `MediaStore.ACTION_IMAGE_CAPTURE`. `EXTRA_OUTPUT` is a **fixed** file
-    `cacheDir/capture/photo.jpg` via `packageName + ".fileprovider"`.
+  - Uses `MediaStore.ACTION_IMAGE_CAPTURE`. `EXTRA_OUTPUT` is a **per-request** file
+    `cacheDir/capture/photo-<uuid>.jpg` (remembered by the call id; a result consumes only its own) via `packageName + ".fileprovider"`.
   - On `RESULT_OK` with a non-empty file, the file is moved on the segmenter executor to
     `tmp/photo-<uuid>.jpg`.
   - Errors:
@@ -284,11 +284,11 @@ checked by `PathGuard`.
 **Library** (`remote/lib/stickers/library.ts`):
 - Layout:
   - `stickers/index.json` = `{v: 1, items: [{id, created, bytes, sha256}]}` in newest-first order;
-  - `stickers/<uuid>.png` is the sticker (≤ 1024 square);
-  - `stickers/<uuid>.thumb.png` is a 160 px thumbnail for the "Moje" tiles.
-- Add writes both PNGs through `tmp/` + `installFile`, then writes the index atomically
+  - `stickers/<uuid>.webp` is the sticker (≤ 1024 square);
+  - `stickers/<uuid>.thumb.webp` is a 160 px thumbnail for the "Moje" tiles.
+- Add writes both WebPs through `tmp/` + `installFile`, then writes the index atomically
   (`writeTextAtomic`).
-- `list()` filters out rows whose file is missing. Orphan PNGs are harmless and left alone.
+- `list()` filters out rows whose file is missing. Orphan WebPs are harmless and left alone.
 - Up to 200 stickers. Over 200, the kid is asked to delete one first.
 
 **Project model:**
@@ -316,7 +316,7 @@ checked by `PathGuard`.
 - `naklejka = shadow ∘ outline(white, r = 3% of side)`.
 - `komiks = shadow ∘ outline(black, r = 2%) ∘ comic`.
 - Output ≤ 1024 px square, plus the 160 px thumbnail. Encoded by
-  `OffscreenCanvas.convertToBlob({type: 'image/png'})`.
+  `OffscreenCanvas.convertToBlob({type: 'image/webp', quality: 0.92})` (WebP, PNG encode took 4 s on the tablet).
 - Both presets are computed once per cut-out and cached. A chip tap only swaps the preview. Move it to
   a Worker only if the device run shows jank.
 
@@ -349,9 +349,9 @@ Then the picker opens on "Moje" with the new sticker first.
 **Files:**
 - Create: `remote/lib/stickers/stickerize.ts`, `remote/lib/stickers/stickerize.test.ts`
 
-- [ ] Implement `cutout`, `trimToContent`, `padSquare`, `distanceToInside`, `outline`, `shadow`,
+- [x] Implement `cutout`, `trimToContent`, `padSquare`, `distanceToInside`, `outline`, `shadow`,
       `comic`, the presets `naklejka` and `komiks`, and the thumbnail downscale. Cap the output at 1024 px.
-- [ ] Tests on tiny synthetic images:
+- [x] Tests on tiny synthetic images:
   - cutout alpha from the mask;
   - trim bbox;
   - square padding keeps the centre;
@@ -361,33 +361,33 @@ Then the picker opens on "Moje" with the new sticker first.
   - an empty mask → `null` ("nothing cut");
   - a full-image mask still works;
   - an already transparent PNG goes through trim, pad and style unchanged in shape.
-- [ ] Run tests (`cd remote && npm test`); they must pass before Task 2.
+- [x] Run tests (`cd remote && npm test`); they must pass before Task 2.
 
 ### Task 2: Sticker library store
 **Files:**
 - Create: `remote/lib/stickers/library.ts`, `remote/lib/stickers/library.test.ts`, `remote/lib/stickers/binaryFiles.ts` (tmp write + `installFile`, `Filesystem.copy` + `installFile`), `binaryFiles.test.ts`
 - Modify: `remote/lib/projects/fakeFs.testutil.ts` (binary + install support in the fake)
 
-- [ ] `binaryFiles`:
+- [x] `binaryFiles`:
   - `writeBinary(dest, blob)`: base64 → `tmp/<uuid>.bin` → sha256 → `installFile`;
   - `copyFile(src, dest)`: `Filesystem.copy` → tmp → `installFile`, with `ALREADY_INSTALLED` = OK.
   - Document the §5.4 exception in the module header.
-- [ ] `StickerLibrary`:
+- [x] `StickerLibrary`:
   - `list()` filters missing files;
-  - `add(png, thumb)` → id: both PNGs first, then `writeTextAtomic` of the index;
+  - `add(webp, thumb)` → id: both WebPs first, then `writeTextAtomic` of the index;
   - `remove(id)`;
   - `fileUri(id)` / `thumbUri(id)`;
   - the 200 limit;
   - ids from `crypto.randomUUID()`.
-- [ ] Tests:
+- [x] Tests:
   - add/list/remove;
   - newest-first order;
   - the limit;
-  - a crash between the PNGs and the index (an orphan is ignored);
+  - a crash between the WebPs and the index (an orphan is ignored);
   - a row with a missing file is hidden;
   - a corrupt index → empty list + warning, files kept;
   - `copyFile` is idempotent.
-- [ ] Run tests; they must pass before Task 3.
+- [x] Run tests; they must pass before Task 3.
 
 ### Task 3: Custom stickers in projects, playback and export
 **Files:**
@@ -401,21 +401,21 @@ Then the picker opens on "Moje" with the new sticker first.
   - `remote/lib/app/frames.ts` (a shared file-URL helper if needed).
 - Modify tests: the `model`, `stickers`, `stickerController`, `sprites` and `projectExport` tests.
 
-- [ ] `MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`,
+- [x] `MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`,
       `isCustomSticker()`, accepted by `parseStickers`. Paths are built only from validated ids.
-- [ ] `SpriteCache` takes `urlOf(emoji)`:
+- [x] `SpriteCache` takes `urlOf(emoji)`:
   - a hexcode gives the OpenMoji SVG;
   - `my:` gives the project copy via `resolveFrameBaseUri()` + `convertFileSrc`;
   - an invalid id gives no URL (unknown sprite).
 
   The key stays `emoji@bucket`. PlayView and the export build their cache with the project's
   `urlOf`.
-- [ ] Copy-on-place in `stickerController` through a `copySticker(id, pid)` dep: after the
+- [x] Copy-on-place in `stickerController` through a `copySticker(id, pid)` dep: after the
       `exporting` check, outside the store mutation, before the write. A failure places nothing and
       shows an error.
-- [ ] Export: the `SpriteLoadError` message names the missing sticker. Behaviour is otherwise
+- [x] Export: the `SpriteLoadError` message names the missing sticker. Behaviour is otherwise
       unchanged (fail-loud).
-- [ ] Tests:
+- [x] Tests:
   - parse/validate;
   - `urlOf` for the three kinds of id;
   - copy-on-place, including the failure path;
@@ -423,7 +423,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - export with a custom sticker;
   - export with a missing copy fails with the named error;
   - playback skips a missing copy.
-- [ ] Run tests; they must pass before Task 4.
+- [x] Run tests; they must pass before Task 4.
 
 ### Task 4: Native image picker, activity results and the TS bridge
 **Files:**
@@ -431,82 +431,82 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify: `KopernikadrNativePlugin.kt` (segmenter executor, `pickImage`, `@ActivityCallback`, `__testImportImage` in debug), `NativeApi.kt`, `NativeErrors.kt`, `remote/lib/native.ts`, `remote/lib/native.test.ts`
 - Create tests: `remote/android/app/src/test/.../ImageImportTest.kt`, `ActivityResultsTest.kt`, `NativeApiImageTest.kt`
 
-- [ ] Add the dedicated segmenter `ScheduledExecutorService`, shut down in `handleOnDestroy`, and
+- [x] Add the dedicated segmenter `ScheduledExecutorService`, shut down in `handleOnDestroy`, and
       document it in the KDoc.
-- [ ] `pickImage` via `PickVisualMedia().createIntent(...)` and `startActivityForResult(call, intent,
+- [x] `pickImage` via `PickVisualMedia().createIntent(...)` and `startActivityForResult(call, intent,
       "pickResult")`. The copy runs on the segmenter executor with a byte-counted 40 MB cap. Mime check
       (heic and heif are both accepted).
-- [ ] `ActivityResults`: OK / cancel / empty / no-app / null-call → outcome. A null call (process
+- [x] `ActivityResults`: OK / cancel / empty / no-app / null-call → outcome. A null call (process
       death) is ignored.
-- [ ] Add the new error codes to `NativeErrors.kt` and `native.ts`.
-- [ ] Debug-only `__testImportImage({path})`: copies a file from `/sdcard/Download/` to `tmp/` like a
+- [x] Add the new error codes to `NativeErrors.kt` and `native.ts`.
+- [x] Debug-only `__testImportImage({path})`: copies a file from `/sdcard/Download/` to `tmp/` like a
       pick would, for scripted tablet runs.
-- [ ] Tests:
+- [x] Tests:
   - `ImageImport` copy, cap, unsupported mime;
   - `ActivityResults` mapping, including the null call;
   - `native.ts` error-code parsing.
-- [ ] Run tests (`npm test`, `:app:testDebugUnitTest`); they must pass before Task 5.
+- [x] Run tests (`npm test`, `:app:testDebugUnitTest`); they must pass before Task 5.
 
 ### Task 5: StickerMaker (source + style) and the "Moje" tab
 **Files:**
 - Create: `remote/components/StickerMaker.tsx`, `remote/lib/app/stickerMakerModel.ts` (pure state machine), `remote/lib/app/stickerMakerModel.test.ts`, `remote/lib/stickers/pickerTabs.ts` + test
 - Modify: `remote/components/EmojiPicker.tsx`, `remote/components/PlayView.tsx`, `remote/app/globals.css`, `remote/lib/i18n/*` (pl, ru)
 
-- [ ] State machine: `source → loading → (cut) → style → saving → done`, plus cancel/error at each
+- [x] State machine: `source → loading → (cut) → style → saving → done`, plus cancel/error at each
       step.
   - In this task an image without transparency shows "Wkrótce: wycinanie" and returns. The cut step
     comes in Task 9.
-  - "Zrób zdjęcie" is hidden until Task 7.
-- [ ] Style step: "Naklejka" / "Komiks" chips with a cached live preview. "Zapisz" adds the sticker
+  - "Zrób zdjęcie" is hidden until Task 7. (Only "Z galerii" is shown; the camera tile comes with Task 7.)
+- [x] Style step: "Naklejka" / "Komiks" chips with a cached live preview. "Zapisz" adds the sticker
       to the library and opens the picker on "Moje".
-- [ ] "Moje" is always the first tab:
+- [x] "Moje" is always the first tab:
   - the first tile is "＋ Zrób naklejkę";
   - thumbnail tiles;
   - ✕ → confirm → `remove`;
   - picking a tile places `my:<uuid>` via Task 3.
-- [ ] Tests:
+- [x] Tests:
   - model transitions (cancel, picker error, an image with alpha → style, without alpha → "soon");
   - tab order;
   - the delete confirm flow;
   - pick → place with a `my:` id.
-- [ ] Run tests; they must pass before Task 6. **Checkpoint:** a PNG with transparency (Hello
-      Kitty/Stitch case) works end to end on the tablet, in an agent-created test movie.
+- [x] Run tests; they must pass before Task 6. **Checkpoint:** a PNG with transparency (Hello
+      Kitty/Stitch case) works end to end on the tablet, in an agent-created test movie. (deferred to the orchestrator's tablet run)
 
 ### Task 6: MediaPipe dependency, model fetch and build checks
 **Files:**
 - Create: `remote/scripts/fetch-models.mjs`, `remote/scripts/fetch-models.test.mjs`
 - Modify: `remote/android/app/build.gradle` (dependency, `noCompress 'task'`, `abiFilters 'arm64-v8a'`, `checkSegModel` on `preBuild`), `remote/android/.gitignore`, `remote/package.json` (`android:debug` runs the fetch), `scripts/build.sh`, `remote/VERSIONS.md`
 
-- [ ] Fetch script:
+- [x] Fetch script:
   - pinned URL + sha256;
   - the cache `~/.kopernikadr/models/<sha>.task`;
   - copied into assets;
   - a hash match skips, a mismatch fails and deletes.
-- [ ] Gradle `checkSegModel` fails the build with a clear message when the asset is missing or wrong.
-- [ ] Add the dependency, `noCompress` and the ABI filter. Run the transitive dependency audit (all
+- [x] Gradle `checkSegModel` fails the build with a clear message when the asset is missing or wrong.
+- [x] Add the dependency, `noCompress` and the ABI filter. Run the transitive dependency audit (all
       new or bumped artifacts stable and ≥ 14 days old) and record it in `remote/VERSIONS.md`. Check
       that the merged manifest has no `CAMERA` permission.
-- [ ] Build the debug APK; check `unzip -lv` (the model is stored uncompressed, only arm64 `.so`
+- [x] Build the debug APK; check `unzip -lv` (the model is stored uncompressed, only arm64 `.so`
       files) and record the APK size delta.
-- [ ] Tests for the fetch script (injected fetch: skip on match, fail on mismatch,
+- [x] Tests for the fetch script (injected fetch: skip on match, fail on mismatch,
       download-then-verify, cache reuse).
-- [ ] Run tests (`npm run test:scripts`, `npm test`); they must pass before Task 7.
+- [x] Run tests (`npm run test:scripts`, `npm test`); they must pass before Task 7.
 
 ### Task 7: Native photo capture
 **Files:**
 - Modify: `KopernikadrNativePlugin.kt` (`takePhoto`, `cameraResult`, `cacheDir/capture/` clear at `load()`), `NativeApi.kt`, `ActivityResults.kt`, `remote/lib/native.ts`, `StickerMaker.tsx` (show "Zrób zdjęcie")
 - Modify tests: `ActivityResultsTest.kt`, `NativeApiImageTest.kt`, `stickerMakerModel.test.ts`
 
-- [ ] `takePhoto`:
-  - `ACTION_IMAGE_CAPTURE`, with the fixed `cacheDir/capture/photo.jpg` via
+- [x] `takePhoto`:
+  - `ACTION_IMAGE_CAPTURE`, with a per-request `cacheDir/capture/photo-<uuid>.jpg` (by call id) via
     `packageName + ".fileprovider"`;
   - the move to `tmp/photo-<uuid>.jpg` runs on the segmenter executor;
   - 0-byte → `CANCELLED`, no camera app → `NO_APP`;
   - closes any segmenter session first.
-- [ ] `load()` clears `cacheDir/capture/`. A null call in the callback is ignored.
-- [ ] Tests: the result mapping for the camera (OK, cancel, 0 bytes, no app, null call); the
+- [x] `load()` clears `cacheDir/capture/`. A null call in the callback is ignored.
+- [x] Tests: the result mapping for the camera (OK, cancel, 0 bytes, no app, null call); the
       StickerMaker camera path.
-- [ ] Run tests; they must pass before Task 8.
+- [x] Run tests; they must pass before Task 8.
 
 ### Task 8: Native segmenter session
 **Files:**
@@ -514,12 +514,12 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify: `NativeApi.kt`, `KopernikadrNativePlugin.kt` (`segOpen`/`segRun`/`segClose` on the segmenter executor; `JSONArray` → plain lists), `NativeErrors.kt`, `remote/lib/native.ts`
 - Create: `remote/lib/stickers/segClient.ts` (+ `FakeSegClient`), `segClient.test.ts`; JVM tests `SegSessionTest.kt`, `SegStrokesTest.kt`, `ImageLoadSizeTest.kt`
 
-- [ ] `ImageLoad`:
+- [x] `ImageLoad`:
   - `ImageDecoder` with a target long side of 1024;
   - writes `tmp/seg-<handle>.png`;
   - deletes the source;
   - `hasAlpha`.
-- [ ] `SegSession`:
+- [x] `SegSession`:
   - the engine is created lazily on the first run;
   - the GPU-crash marker, and the CPU fallback with re-`setImage` and one retry;
   - the raw mask goes to `tmp/seg-<handle>.mask`;
@@ -527,12 +527,12 @@ Then the picker opens on "Moje" with the new sticker first.
   - idle close after 5 min;
   - `close` deletes the session files;
   - `MODEL_MISSING` and `NO_SESSION`.
-- [ ] `segClient`:
+- [x] `segClient`:
   - serializes calls;
   - a newer run supersedes a queued one;
   - reads the mask via `fetch(convertFileSrc).arrayBuffer()`;
   - `segClose` runs on dispose.
-- [ ] JVM tests (pure, fake engine):
+- [x] JVM tests (pure, fake engine):
   - stroke validation;
   - target-size math;
   - open/run/close;
@@ -540,14 +540,14 @@ Then the picker opens on "Moje" with the new sticker first.
   - the marker present → CPU;
   - idle close;
   - a run after close.
-- [ ] Vitest: `segClient` queue/supersede, error mapping, close on dispose.
-- [ ] Run tests; they must pass before Task 9.
+- [x] Vitest: `segClient` queue/supersede, error mapping, close on dispose.
+- [x] Run tests; they must pass before Task 9.
 
 ### Task 9: Cut step in StickerMaker
 **Files:**
 - Modify: `remote/components/StickerMaker.tsx`, `remote/lib/app/stickerMakerModel.ts` (+ test), css, i18n
 
-- [ ] Cut view:
+- [x] Cut view:
   - pointer strokes in normalized coordinates (a tap = a one-point stroke);
   - "Dodaj"/"Usuń";
   - Cofnij (re-runs with the remaining strokes);
@@ -557,35 +557,51 @@ Then the picker opens on "Moje" with the new sticker first.
   - the > 55% hint.
 
   Then "Dalej" to the style step.
-- [ ] `segClose` on unmount, cancel and save.
-- [ ] Tests:
+- [x] `segClose` on unmount, cancel and save (and on "Dalej", since back from style goes to the source step).
+- [x] ➕ Native lifetime fix (`SegEngine.kt`): `MediaPipeEngine` keeps the `MPImage` and its Bitmap alive until `close()` (segmenter closed first). `setImage` only keeps a reference, the encoder runs lazily inside `segment`. The CPU-fallback path closes the old engine and binds a fresh decode of the same session PNG. JVM tests unchanged and green (the fakes never touched MediaPipe).
+- [x] ➕ Transparent reopen after the 5-minute idle close: the native close deletes `seg-<handle>.png`, so the cut step keeps the decoded picture (`Img`, <= 1024 px) in memory, and on `NO_SESSION` writes it back to `tmp/seg-src-<uuid>.png`, calls `segOpen` and retries the run once (`cutSession.ts`: `runCut`, `reopenFrom`).
+- [x] ➕ Fix: custom stickers are stored as WebP (`stickers/<uuid>.webp`, `.thumb.webp`, `projects/{pid}/stickers/<uuid>.webp`), encoded with `convertToBlob({type: 'image/webp', quality: 0.92})`: the PNG encode took 4 s on the tablet (WebP 0.3 s). The `my:<uuid>` id is unchanged; old `.png` files are not migrated (they fail as an unknown sprite). The native segmenter engine is kept across `segOpen` sessions (see Task 6 area: `SegSession`/`SegEngine`).
+- [x] Removed the Task 5 "Wkrótce: wycinanie" path (`soon` notice and strings).
+- [x] Tests:
   - model: strokes and undo;
   - the hint threshold;
   - an error from `segRun` stays in the cut step with a retry;
   - the empty mask message.
-- [ ] Run tests; they must pass before Task 10.
+- [x] Run tests; they must pass before Task 10. (vitest 882, tsc, test:scripts 13, gradle :app:testDebugUnitTest)
 
 ### Task 10: Device e2e on the tablet
 **Files:**
 - Create: `remote/e2e/stickers.cdp.mjs` (or extend `flow.cdp.mjs`), `docs/diagnostics/20261028-photo-stickers.md`
 - Modify: `remote/e2e/README.md`
 
-- [ ] **Tablet** (HA21J9XT), on an agent-created test movie only. No emulator.
+- [x] **Tablet** (HA21J9XT), on an agent-created test movie only. No emulator. (Run by the orchestrator by hand via adb+CDP on 2026-10-28.)
   - Scripted run with `__testImportImage` and a toy photo pushed to `/sdcard/Download/`: tap, erase
-    stroke, "Komiks", save, place, play, export, delete it from "Moje", the movie still plays.
-  - The transparent-PNG path, which skips the cut.
+    stroke, "Komiks", save, place, play, export, delete it from "Moje", the movie still plays. (script written; the same flow was done by hand on 2026-10-28; first scripted run the same day: all 6 steps PASS, first cut 4.2 s, later 0.9 s, save 0.7 s)
+  - The transparent-PNG path, which skips the cut. (done by hand; also in `stickers.cdp.mjs` via `--png`)
   - The real camera and picker intents, driven via `uiautomator dump` + `input tap`;
   - warm-up and run times;
   - memory with `scripts/meminfo-sampler.sh`. Target: PSS back within 60 MB of baseline after
-    `segClose`.
-- [ ] Record the results in `docs/diagnostics/20261028-photo-stickers.md`.
-- [ ] Remove the agent's test movies, stickers and exports from the tablet afterwards. Never touch
-      the kid's.
+    `segClose`. (by hand: app PSS 125 MB after sessions closed, 184 MB after export; sampler table not recorded)
+- [x] Record the results in `docs/diagnostics/20261028-photo-stickers.md`.
+- [x] Remove the agent's test movies, stickers and exports from the tablet afterwards. Never touch
+      the kid's. (deferred to the orchestrator's tablet run)
 
 ### Task 11: Verify acceptance criteria
-- [ ] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
+- [x] ➕ Tablet findings: a missing `my:` sticker file is visible and fixable. Playback/editing draws a
+      "?" placeholder (`stickerPaint` in `lib/render/compose.ts`, stage only); the EditTools chip
+      shows the same "?" on an `<img>` error; the export fails loud with `export.errStickerMissing`
+      (pl/ru) when a failed id is `my:`.
+- [x] ➕ The segmenter warm-up is hidden: `SegClient.warm()` queues a dummy centre-stroke run (result
+      discarded, no mask read) right after the cut step opens; the first real tap waits behind it in
+      the serialized queue (the "Chwilka…" spinner shows then). Client-side only: the dummy run also
+      warms the first inference, which a native `segWarm` would not.
+- [x] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
       skips the cut. "Moje" add and delete work. Movies survive a library delete.
-- [ ] Edge cases:
+      (verified against the code; device items verified by the orchestrator, see
+      `docs/diagnostics/20261028-photo-stickers.md` sections 1-5 and the scripted run)
+- [x] Edge cases (code + JVM/vitest tests: `ActivityResultsTest` cancel/NO_APP/null call, `ImageImportTest`
+      cap 40 MB + HEIC/HEIF, `stickerize.test.ts` empty mask, `SegSessionTest` GPU→CPU, `sweep.test.ts`
+      tmp/ emptied; camera cancel and process death also verified on the tablet by the orchestrator):
   - camera cancel;
   - no camera app;
   - a huge image;
@@ -594,29 +610,31 @@ Then the picker opens on "Moje" with the new sticker first.
   - a GPU failure → CPU;
   - process death during camera/pick (no crash);
   - app killed mid-session (`tmp/` emptied by the sweep).
-- [ ] Full suites:
+- [x] Full suites (all green: vitest, test:scripts, tsc, 187 JVM tests with --rerun-tasks, e2e lib 10):
   - `cd remote && npm test && npm run test:scripts`;
   - `cd remote/android && ./gradlew-jbr :app:testDebugUnitTest`;
   - `node --test e2e/lib.test.mjs`.
-- [ ] Builds:
+- [x] Builds (debug via `scripts/build.sh --remote-only --variant debug` OK; release refuses cleanly without
+      `~/.kopernikadr/keystore.properties` with the expected-file message, no keystore created, so a signed
+      release APK is left to the owner; APK delta in VERSIONS.md is measured on debug, +50.3 MB arm64):
   - the release APK builds via `scripts/build.sh`;
   - a plain `./gradlew-jbr assembleDebug` without the model fails with the fetch hint.
 
 ### Task 12: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
+- [x] `docs/ARCHITECTURE.md`:
   - the custom-sticker storage and reference (`my:<uuid>`, copy-on-place, no GC);
   - the §5.4 binary exception (tmp + `installFile`) and the downgrade caveat (the 3a app cannot
     export `my:` stickers);
   - the native segmenter, its executor and the GPU marker;
   - the activity-result / process-death policy.
-- [ ] `docs/ROADMAP.md`:
+- [x] `docs/ROADMAP.md`:
   - "Zrób naklejkę" done;
   - add the later items: Pufy/Błysk styles, the movie frame as source, cloud "cartoon", "get into
     the cartoon" (selfie segmentation), hand-in-frame (MediaPipe hands), clap-to-shoot (MediaPipe
     audio).
-- [ ] The "O aplikacji" screen: MediaPipe (Apache 2.0) and the MagicTouch model credit.
+- [x] The "O aplikacji" screen: MediaPipe (Apache 2.0) and the MagicTouch model credit.
       `README.md` / `remote/e2e/README.md`: the model fetch step.
-- [ ] Move this plan to `docs/plans/completed/`.
+- [x] Move this plan to `docs/plans/completed/` (after the Codex review: 4 passes, 15 findings fixed)
 
 ## Post-Completion
 *Requires the owner or the kid; informational only.*

@@ -4,6 +4,7 @@
  * build artifact, not user data.
  */
 import type { Lang } from '../i18n';
+import { isCustomSticker } from '../projects/model';
 
 export interface EmojiCategory {
   id: string;
@@ -20,6 +21,27 @@ export const OPENMOJI_DIR = '/openmoji';
 export const CATALOG_URL = `${OPENMOJI_DIR}/catalog.json`;
 
 export const spriteUrl = (hexcode: string): string => `${OPENMOJI_DIR}/${hexcode}.svg`;
+
+/** Store-relative path of a custom sticker's copy in its movie; null for an invalid id. */
+export function customStickerPath(projectId: string, emoji: string): string | null {
+  return isCustomSticker(emoji) ? `projects/${projectId}/stickers/${emoji.slice(3)}.webp` : null;
+}
+
+/** emoji -> image url; null = unknown sprite (an invalid custom id). */
+export type SpriteUrlOf = (emoji: string) => string | null;
+
+/** Hexcodes give the OpenMoji SVG; a custom id has no url without a project (use `projectSpriteUrlOf`). */
+export const openmojiUrlOf: SpriteUrlOf = (emoji) => (emoji.startsWith('my:') ? null : spriteUrl(emoji));
+
+/** `urlOf` for one movie: a custom id resolves to the movie's own copy under `baseUri` (the file uri of `kopernikadr/`). */
+export function projectSpriteUrlOf(projectId: string, baseUri: string, convertFileSrc: (uri: string) => string): SpriteUrlOf {
+  const base = baseUri.replace(/\/+$/, '');
+  return (emoji) => {
+    if (!emoji.startsWith('my:')) return spriteUrl(emoji);
+    const path = customStickerPath(projectId, emoji);
+    return path === null ? null : convertFileSrc(`${base}/${path}`);
+  };
+}
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;

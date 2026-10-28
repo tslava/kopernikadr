@@ -29,6 +29,12 @@ class BridgeArgs(private val get: (String) -> Any?) {
         else -> bad("'$name' must be a number")
     }
 
+    /** The value as given (plain lists and maps for JSON arrays and objects), or null if missing. */
+    fun raw(name: String): Any? = get(name)
+
+    /** Like [long], null if the argument is missing. */
+    fun optLong(name: String): Long? = if (get(name) == null) null else long(name)
+
     /** Standard (RFC 4648, padded or not) base64; an empty string is an empty array. */
     fun base64(name: String): ByteArray {
         val s = string(name)

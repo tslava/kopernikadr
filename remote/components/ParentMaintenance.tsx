@@ -111,6 +111,7 @@ export default function ParentMaintenance() {
         <p>{t('about.version', { v: process.env.NEXT_PUBLIC_APP_VERSION ?? '' })}</p>
         <p>{t('about.openmoji')}</p>
         <p className="note">{t('about.license')}</p>
+        <p>{t('about.mediapipe')}</p>
       </section>
 
       {question && sum && (

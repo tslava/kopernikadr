@@ -4,8 +4,11 @@
  * drawn onto a canvas at the bucket size and the bitmap is made from that canvas.
  * The cache is an LRU capped by bytes; evicted bitmaps are closed. The export `preload`s every
  * sprite it needs into a pinned set that the LRU never touches.
+ * `urlOf(emoji)` maps a sprite id to its image: a hexcode to the OpenMoji SVG, a custom `my:<uuid>`
+ * to the movie's own WebP copy (bound per project); null means an unknown sprite (it fails like a
+ * broken image).
  */
-import { spriteUrl } from './catalog';
+import { openmojiUrlOf, type SpriteUrlOf } from './catalog';
 
 export const SPRITE_BUCKETS = [128, 256, 512, 1024] as const;
 export type SpriteBucket = (typeof SPRITE_BUCKETS)[number];
@@ -53,7 +56,13 @@ export class SpriteCache {
   constructor(
     private readonly raster: Rasterize = rasterizeSvg,
     private readonly maxBytes: number = SPRITE_CACHE_BYTES,
+    private readonly urlOf: SpriteUrlOf = openmojiUrlOf,
   ) {}
+
+  private rasterOf(emoji: string, bucket: number): Promise<ImageBitmap> {
+    const url = this.urlOf(emoji);
+    return url === null ? Promise.reject(new Error(`unknown sprite: ${emoji}`)) : this.raster(url, bucket);
+  }
 
   get bytes(): number {
     return this.total;
@@ -88,7 +97,7 @@ export class SpriteCache {
     let p = this.inflight.get(k);
     if (!p) {
       const gen = this.generation;
-      p = this.raster(spriteUrl(hexcode), bucket).then(
+      p = this.rasterOf(hexcode, bucket).then(
         (bmp) => {
           if (gen !== this.generation) {
             bmp.close(); // cleared (the view went away) while this was loading
@@ -117,7 +126,7 @@ export class SpriteCache {
    */
   async preload(hexcodes: readonly string[], bucket: SpriteBucket): Promise<PinnedSprites> {
     const unique = [...new Set(hexcodes)];
-    const results = await Promise.allSettled(unique.map((h) => this.raster(spriteUrl(h), bucket)));
+    const results = await Promise.allSettled(unique.map((h) => this.rasterOf(h, bucket)));
     const held = new Map<string, ImageBitmap>();
     const failed: string[] = [];
     results.forEach((r, i) => {
@@ -126,7 +135,7 @@ export class SpriteCache {
     });
     if (failed.length > 0) {
       for (const b of held.values()) b.close();
-      throw new Error(`sprites failed to load: ${failed.join(', ')}`);
+      throw Object.assign(new Error(`sprites failed to load: ${failed.join(', ')}`), { failed });
     }
     return {
       get: (h) => held.get(h),
@@ -158,4 +167,9 @@ export class SpriteCache {
       eb.close();
     }
   }
+}
+
+/** A sprite cache is bound to one project and one url resolver: rebuild it when either changes. */
+export function needsNewSpriteCache<U>(built: { id: string; urls: U } | null, id: string, urls: U): boolean {
+  return built === null || built.id !== id || built.urls !== urls;
 }

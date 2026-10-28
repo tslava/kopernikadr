@@ -44,6 +44,13 @@ cd camera-android
 ```
 
 Pinned versions and why some are held back: [camera-android/VERSIONS.md](camera-android/VERSIONS.md).
+
+**Segmenter model (remote, once per machine).** The photo-sticker cut-out needs a 30.5 MB MediaPipe
+model that is not in the repo. `scripts/build.sh` and `npm run android:debug` fetch it for you; by hand
+run `cd remote && npm run models` (`node scripts/fetch-models.mjs`: it downloads the pinned URL, checks
+the sha256, caches it in `~/.kopernikadr/models/` and copies it into the ignored
+`remote/android/app/src/main/assets/mediapipe/`). A plain `gradlew assembleDebug` without it fails with
+this hint. Details: [remote/VERSIONS.md](remote/VERSIONS.md).
 JS tests: `npm test --workspaces` at the root (run `npm ci` once first).
 
 ### Build the APKs (`scripts/build.sh`)
@@ -179,6 +186,13 @@ For the parent. The kid's remote is the **Kopernikadr** app on the tablet.
      the trash button to remove it. With the emoji selected, tap another frame and use **Od tego
      kadru / Do tego kadru** to shorten or extend the range. The emoji are drawn in playback and
      in the video.
+   - **Zrób naklejkę** (a sticker from a toy): in the emoji picker open the **Moje** tab and tap
+     "Zrób naklejkę". Take a photo with the tablet camera ("Zrób zdjęcie") or pick one ("Z galerii").
+     Tap the toy, or draw over it, and the tablet cuts it out (the first cut of a picture takes a few
+     seconds); fix the edge with **Dodaj** / **Usuń** and **Cofnij**, then pick a style ("Naklejka" or
+     "Komiks") and save. A PNG with a transparent background skips the cut. The sticker then behaves like
+     an emoji. A copy goes into the movie, so deleting it from "Moje" (the x on its tile) does not break
+     movies that use it. Stickers stay only on the tablet.
    - **Play:** the movie plays at its frame rate. The export button saves a video.
    - **Export:** the video is encoded on the tablet and saved to the gallery, in
      **`Movies/Kopernikadr`**, as `kopernikadr-<name>-<date>.mp4`. The dialog says "Zapisano w
@@ -191,7 +205,7 @@ For the parent. The kid's remote is the **Kopernikadr** app on the tablet.
    not be downloaded. The Diagnostics screen (`#/diagnostics`) is for probes. It is opened by a
    long-press on the wrench on the movies screen, and it also has the **quarantine** section
    (photos that failed the check after download; see below) and "O aplikacji" with the OpenMoji
-   attribution (CC BY-SA 4.0).
+   attribution (CC BY-SA 4.0) and the MediaPipe / MagicTouch model credit (Apache 2.0).
 5. Each frame goes to the tablet right after it is shot, and only then does the phone's copy
    become removable. The phone deletes a frame it already handed over only when it runs low on
    space.
@@ -357,6 +371,11 @@ devices. Never try to bypass supervision.
   "Kwarantanna zdjęć" shows the count, the size and up to 12 thumbnails; "Wyczyść" asks for the
   answer to a small multiplication. On the **phone**: hold the title on the status screen for 3
   seconds to open the parent screen, which has the same card. Clearing is permanent.
+- A movie with photo stickers (`my:`) plays in an older tablet app but that app cannot export it:
+  install the newer build to export.
+- The Android build of the tablet app includes MediaPipe, which brings a Google telemetry component
+  (`transport-backend-cct`); it is not verified whether it sends anything. Segmentation itself uses
+  no network.
 - Edits and stickers are stored only by the tablet app. If you install an older tablet app over
   a newer one, its first save drops them (the photos stay and the movie goes back to shoot order);
   install the newer app again before editing.

@@ -448,7 +448,9 @@ Data/kopernikadr/
                                       pendingProjectDeletes:[{id, deadline}]}
   projects/{id}/project.json         see below (plus "version": 1)
   projects/{id}/frames/{frameId}.{full|play|thumb}.jpg
-  tmp/                               downloads in progress; emptied on start
+  tmp/                               downloads in progress, sticker and segmenter files; emptied on start
+  stickers/                          the custom-sticker library: index.json, <uuid>.webp, <uuid>.thumb.webp
+  projects/{id}/stickers/<uuid>.webp the movie's own copies of the custom stickers it uses
   exports/                           the MP4 writer's temp files (videoCleanupAbandoned)
   quarantine/                        install files that failed verification; never deleted
   probe/                             diagnostics reports
@@ -470,7 +472,7 @@ is kept renamed to `*.corrupt-<ts>`, and the project is rebuilt from the directo
   "deletedFrameIds": ["…"],                            // permanent tombstones
   "outstanding": [{"reqId":"…", "cameraId":"…", "sentAt":"…"}],
   "cut": [{"id":"…", "frameId":"…", "hold":1, "off":true}],   // optional: the edit list
-  "stickers": [{"id":"…", "emoji":"1F436", "x":0.5, "y":0.5, "size":0.25, "rot":0, "on":["<entryId>"]}]
+  "stickers": [{"id":"…", "emoji":"1F436" | "my:<uuid>", "x":0.5, "y":0.5, "size":0.25, "rot":0, "on":["<entryId>"]}]
 }
 ```
 
@@ -489,6 +491,80 @@ is kept renamed to `*.corrupt-<ts>`, and the project is rebuilt from the directo
   that has them, ignores them, and its first write drops them (the frames and files are not
   touched, so the movie is back to shoot order with no stickers). Install the newer app again to
   keep editing a movie, but the edits made before the downgrade are gone after that first write.
+  For `my:` stickers see §5.4a: the 3a app cannot export such a movie.
+
+### 5.4a Custom stickers ("Zrób naklejkę", 2026-10-28)
+
+A sticker made from a photo of a toy. Plan: `docs/plans/20261028-photo-stickers.md`; tablet run:
+`docs/diagnostics/20261028-photo-stickers.md`. Tablet-only; PROTOCOL v1 and the camera app are unchanged.
+
+- **Reference.** `Sticker.emoji` is either an OpenMoji hexcode or `my:<uuid>` (a strict regex is checked
+  wherever a path is built). `project.json` stays version 1.
+- **Library** (`lib/stickers/library.ts`): `stickers/index.json` (`{v:1, items:[{id, created, bytes,
+  sha256}]}`, newest first, at most 200), `stickers/<uuid>.webp` (a square, at most 1024 px, transparent)
+  and `stickers/<uuid>.thumb.webp` (160 px, for the "Moje" tiles). `list()` drops rows whose file is
+  missing; orphan files are left alone.
+- **WebP, not PNG.** `OffscreenCanvas.convertToBlob({type:'image/webp', quality: 0.92})`: on the tablet
+  a 1024 px PNG encode took 4.0 s, WebP 0.34 s (45 KB against 547 KB). Old `.png` stickers (made before
+  the switch) are not migrated and fail as an unknown sprite.
+- **Copy-on-place, no GC.** Placing a "Moje" sticker copies its WebP to `projects/{pid}/stickers/<uuid>.webp`
+  (`Filesystem.copy` into `tmp/`, then `installFile`, whose `ALREADY_INSTALLED` makes it idempotent after a
+  crash), outside the store mutation and before the project write. If the copy fails nothing is placed.
+  Deleting from "Moje" removes only the library files; the movie keeps its copy and still plays and exports.
+  The copies are never garbage-collected: they go away with the movie folder.
+- **§5.4 exception: binary writes.** The new sticker is written to `tmp/` with `Filesystem.writeFile`
+  (base64, at most about 1 MB), then moved into place by the native `installFile(tmp, dest, bytes, sha256)`
+  (atomic, verified). It is the only app-written image that crosses the bridge as base64, like
+  `videoWriteAt`. Reading stays `convertFileSrc` → `fetch`/`<img>`; `SpriteCache` gets a per-project
+  `urlOf(emoji)` (the key stays `emoji@bucket`: `my:` images are immutable).
+- **Missing sticker file.** Playback and editing draw a "?" placeholder on the stage (`stickerPaint` in
+  `lib/render/compose.ts`) and the edit-tools chip shows the same "?" on an `<img>` error, so the sticker
+  can be found and removed. Export stays fail-loud: `SpriteLoadError` becomes `export.errStickerMissing`
+  (pl/ru) when the failed id is `my:`.
+- **Downgrade caveat.** The 3a app opens and plays a movie with `my:` stickers (an unknown sprite is
+  skipped) but **cannot export it** (`SpriteLoadError`). Install the new build again to export. Accepted:
+  there is one tablet and it gets the new build.
+- **Native segmenter** (`native/SegSession.kt`, `SegEngine.kt`; MediaPipe Interactive Segmenter,
+  `tasks-vision` 1.1.1, the stroke API, MagicTouch model).
+  - API: `segOpen({path, maxSide:1024})` decodes with `ImageDecoder` (EXIF and downscale in one call) to
+    `tmp/seg-<handle>.png`, deletes the source, creates no engine, and reports `hasAlpha` (then the web
+    side skips the cut and calls `segClose`). `segRun({handle, strokes})` returns a mask
+    (`tmp/seg-<handle>.mask`, **raw uint8** `w*h`, confidence x 255, read with `fetch(...).arrayBuffer()`;
+    not a PNG). Strokes are validated (at most 50, 1..2000 points, 0..1). `segClose` is idempotent.
+  - **Own executor:** a dedicated single-thread `ScheduledExecutorService` (`KopernikadrSeg`), separate
+    from the shared native executor, so a slow segmenter never delays frame downloads or project saves.
+    It also runs the idle check and the picker/camera file copies; it is shut down in `handleOnDestroy`.
+  - **Engine reused across pictures.** Creating the engine costs 4-8 s on the GPU, so one engine lives for
+    the app run and is re-bound to the picture of the session that runs (`setImage`). It keeps the `MPImage`
+    and its Bitmap alive until `close()` (the encoder runs lazily inside `segment`). Sessions and the engine
+    are closed after 5 minutes idle, on `takePhoto`/`pickImage` (memory) and on destroy; the cut step keeps
+    the decoded picture and transparently reopens the session on `NO_SESSION`.
+  - **GPU crash marker and CPU fallback.** `noBackupFilesDir/seg-gpu-attempt` is written before the GPU
+    engine is created and removed when the attempt ends. A marker found at start means a native crash:
+    GPU is disabled for good (`seg-gpu-disabled`). A Java exception on the GPU recreates the engine on
+    the CPU and retries once.
+  - **Prewarm.** `SegClient.warm()` queues a dummy centre-stroke run right after the cut step opens (result
+    discarded). The first real tap waits behind it ("Chwilka…"). On the tablet: first run per picture
+    about 4-8 s, later runs 0.5-0.9 s (GPU); CPU about 2 s.
+  - Errors: `CANCELLED`, `NO_APP`, `TOO_LARGE`, `UNSUPPORTED`, `SEG_FAILED`, `MODEL_MISSING`, `NO_SESSION`.
+- **Camera and picker: activity results and process death.** `takePhoto` uses `ACTION_IMAGE_CAPTURE` with a
+  a per-request `EXTRA_OUTPUT` (`cacheDir/capture/photo-<uuid>.jpg`, FileProvider; remembered by the call id, so a result consumes only its own file); `pickImage` uses the
+  `PickVisualMedia` intent. Both go through Capacitor `startActivityForResult`. Cancel or a 0-byte file is
+  `CANCELLED`, `ActivityNotFoundException` is `NO_APP`, the picked file is copied with a 40 MB cap
+  (`TOO_LARGE`) and only jpeg/png/webp/heic/heif are accepted. If the process dies while the other app is
+  in front, the photo is lost by design: the plugin clears `cacheDir/capture/` in `load()`, a result with
+  a null call is ignored, and the app opens on its default route without a crash (no `appRestoredResult`
+  restore). The merged manifest declares no `CAMERA` permission (that would make the capture intent throw).
+- **Known fact: telemetry component.** MediaPipe tasks-core pulls in Google's `transport-backend-cct`
+  (Firebase/datatransport) with three components (`TransportBackendDiscovery`, `JobInfoSchedulerService`,
+  `AlarmManagerSchedulerBroadcastReceiver`) and `ACCESS_NETWORK_STATE`. It is not verified whether it sends
+  anything; the segmentation itself makes no network calls. See `remote/VERSIONS.md` (transitive audit).
+- **Model.** The 30.5 MB model is not in the repo: `node scripts/fetch-models.mjs` (also `npm run models`,
+  `android:debug`, `scripts/build.sh`) caches it in `~/.kopernikadr/models/<sha256>.task` and copies it
+  into the ignored assets folder; the Gradle `checkSegModel` fails the build without it.
+- **Pixel styling is web-side** (`lib/stickers/stickerize.ts`, pure functions over `ImageData`): cutout,
+  trim, square pad, chamfer outline, shadow, comic. Styles: "Naklejka" (white outline + shadow) and
+  "Komiks". APK, arm64 only: +50.3 MB.
 
 ### 5.5 ProjectStore: serialized mutations
 
@@ -786,6 +862,7 @@ the overlays; both are optional and tablet-only.
 | **1** (done 2026-10-27) | Protocol v1 on both sides + fake camera. Connection screen, sessions/BUSY, preview with watchdog, capture with the durable spool (operation rows, recovery, idempotency, `getOperation`), outstanding captures on the tablet, onion skin, parent drawer (controls with `confirmed`/`settling`, rotation for empty projects). Phone status UI, keep-on/dim, permission-denied screen. | Shooting works; locks hold across phone lock/unlock; preview and onion skin line up in the grid test. |
 | **2** (done 2026-10-27) | Transfer with verification and ack eligibility, reconcile (incl. recovered projects), serialized ProjectStore, projects screen (create/rename/delete + Undo), phone retention + orphans, storage reserves on both sides. | The failure list: Wi-Fi off mid-transfer, phone locked, either app killed around capture/install/ack, lost capture response, low storage on each side. |
 | **3a + emoji** (done 2026-10-27, emulator only) | Frame strip; edit tools (delete with Undo, duplicate, hold, move, off, trim "Od tego"/"Do tego", Cofnij); the `cut` and `stickers` model; one canvas renderer for stage and export; 242 curated OpenMoji as stickers (place, drag, scale, rotate, range); export of the timeline with holds and stickers. Phone: 7-day reclaim, `ScreenPolicy` dim, parent screen with quarantine show/clear (the tablet has the same). Acceptance run: `docs/diagnostics/20261027-stage3a-emulator.md`. | On the real tablet and phone: shoot, edit, add emoji, export, watch in the gallery; a 500-frame project stays flat in memory. |
+| **Photo stickers** (done 2026-10-28, tablet) | "Zrób naklejkę": camera/gallery → on-device cut-out (MediaPipe) → "Naklejka"/"Komiks" → "Moje" tab (§5.4a). Run: `docs/diagnostics/20261028-photo-stickers.md`. | The kid makes a sticker from her own toy, places it, exports, watches it. |
 | **3b** | Insert a frame in the middle, reshoot frame N, copy/paste frames, reverse a range. Then the rest of the effects layer (ROADMAP). | With the kid. |
 | **4** | UX polish from your notes. | With the kid. |
 

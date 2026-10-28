@@ -45,6 +45,12 @@ describe('nativeErrorCode', () => {
     }
   });
 
+  it('knows the image and segmenter codes', () => {
+    for (const code of ['CANCELLED', 'NO_APP', 'TOO_LARGE', 'UNSUPPORTED', 'SEG_FAILED', 'MODEL_MISSING', 'NO_SESSION']) {
+      expect(nativeErrorCode({ code })).toBe(code);
+    }
+  });
+
   it('ignores other errors', () => {
     expect(nativeErrorCode(new Error('x'))).toBeUndefined();
     expect(nativeErrorCode({ code: 'UNIMPLEMENTED' })).toBeUndefined();

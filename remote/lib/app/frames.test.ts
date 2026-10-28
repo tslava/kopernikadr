@@ -22,6 +22,12 @@ describe('createFrameUrls', () => {
     expect(u.url('p', 'zz', 'play')).toBeNull();
     expect(u.url('nope', 'a', 'play')).toBeNull();
   });
+  it('spriteUrlOf binds a movie: OpenMoji svg, its own custom copy, nothing for a bad id', () => {
+    const f = mk().spriteUrlOf('p');
+    expect(f('1F436')).toBe('/openmoji/1F436.svg');
+    expect(f('my:0123abcd-0123-4abc-8abc-0123456789ab')).toBe('conv:file:///data/kopernikadr/projects/p/stickers/0123abcd-0123-4abc-8abc-0123456789ab.webp');
+    expect(f('my:nope')).toBeNull();
+  });
   it('is null for a kind known to be absent, other kinds stay', () => {
     const u = mk();
     u.markAbsent('p', 'a', 'play');

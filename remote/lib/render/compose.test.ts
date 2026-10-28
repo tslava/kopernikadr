@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Sticker } from '../projects/model';
-import { drawFrame, drawStickers, type Ctx2D } from './compose';
+import { drawFrame, drawStickers, stickerPaint, type Ctx2D } from './compose';
 import { stickerBox } from './stickerGeometry';
 
 function recorder(width: number, height: number) {
@@ -79,5 +79,33 @@ describe('drawStickers', () => {
     expect(calls).toEqual([]);
     drawStickers(ctx, [stk('s', 'A', ['e'])], null, lookup);
     expect(calls).toEqual([]);
+  });
+});
+
+const MY = 'my:0123abcd-0123-4abc-8abc-0123456789ab';
+
+describe('stickerPaint', () => {
+  it('draws a loaded sprite, placeholders a failed custom one, skips everything else', () => {
+    expect(stickerPaint(MY, true, false)).toBe('draw');
+    expect(stickerPaint('1F436', true, false)).toBe('draw');
+    expect(stickerPaint(MY, false, true)).toBe('placeholder');
+    expect(stickerPaint(MY, false, false)).toBe('skip'); // still loading
+    expect(stickerPaint('1F436', false, true)).toBe('skip'); // unknown OpenMoji
+  });
+
+  it('drawStickers puts the placeholder at the sticker geometry only when told it failed', () => {
+    const s = stk('s', MY, ['e'], { x: 0.25, y: 0.75, size: 0.5, rot: 90 });
+    const none = recorder(1440, 1080);
+    drawStickers(none.ctx, [s], 'e', () => undefined);
+    expect(none.calls).toEqual([]);
+    const { ctx, calls } = recorder(1440, 1080);
+    const extra: unknown[][] = [];
+    Object.assign(ctx, { beginPath: () => extra.push(['beginPath']), roundRect: (...a: unknown[]) => extra.push(['roundRect', ...a]), fill: () => {}, stroke: () => {}, setLineDash: () => {}, fillText: (...a: unknown[]) => extra.push(['fillText', ...a]) });
+    drawStickers(ctx, [s], 'e', () => undefined, (id) => id === MY);
+    const b = stickerBox(s, 1440, 1080);
+    expect(calls.slice(0, 3)).toEqual([['save'], ['translate', b.cx, b.cy], ['rotate', Math.PI / 2]]);
+    expect(calls.at(-1)).toEqual(['restore']);
+    expect(extra.find((c) => c[0] === 'roundRect')?.slice(1, 5)).toEqual([-b.side / 2, -b.side / 2, b.side, b.side]);
+    expect(extra.find((c) => c[0] === 'fillText')?.[1]).toBe('?');
   });
 });

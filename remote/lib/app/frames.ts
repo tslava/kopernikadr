@@ -6,6 +6,7 @@ import { Directory, Filesystem } from '@capacitor/filesystem';
 import { useEffect, useState } from 'react';
 import type { ProjectStore } from '../projects/store';
 import { ROOT } from '../projects/files';
+import { projectSpriteUrlOf, type SpriteUrlOf } from '../render/catalog';
 
 export type FrameFileKind = 'play' | 'thumb' | 'full';
 export type FrameUrlFn = (projectId: string, frameId: string, kind: FrameFileKind) => string | null;
@@ -14,6 +15,8 @@ export interface FrameUrls {
   url: FrameUrlFn;
   /** The file failed to load: `url` returns null for it from now on. */
   markAbsent(projectId: string, frameId: string, kind: FrameFileKind): void;
+  /** Sprite urls of one movie (OpenMoji, and the movie's own copies of custom stickers). */
+  spriteUrlOf(projectId: string): SpriteUrlOf;
 }
 
 export const framePath = (projectId: string, frameId: string, kind: FrameFileKind): string =>
@@ -48,6 +51,7 @@ export function createFrameUrls(store: Pick<ProjectStore, 'state'>, deps: FrameU
     markAbsent(projectId, frameId, kind) {
       absent.set(key(projectId, frameId, kind), now());
     },
+    spriteUrlOf: (projectId) => projectSpriteUrlOf(projectId, base, convert),
   };
 }
 

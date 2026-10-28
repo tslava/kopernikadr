@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bmp, asBitmap, type FakeBitmap } from '../play/play.testutil';
-import { loadCatalog, parseCatalog, resetCatalogCache, spriteUrl } from './catalog';
-import { SpriteCache, bucketFor, type Rasterize, type SpriteBucket } from './sprites';
+import { customStickerPath, loadCatalog, openmojiUrlOf, parseCatalog, projectSpriteUrlOf, resetCatalogCache, spriteUrl } from './catalog';
+import { SpriteCache, bucketFor, needsNewSpriteCache, type Rasterize, type SpriteBucket } from './sprites';
 
 function fakeRaster(failing: string[] = []) {
   const calls: { url: string; size: number }[] = [];
@@ -190,5 +190,69 @@ describe('catalog', () => {
     const cat = parseCatalog(JSON.parse(readFileSync(new URL('catalog.json', dir), 'utf8')));
     expect(cat.categories).toHaveLength(8);
     for (const c of cat.categories) for (const h of c.hexcodes) expect(existsSync(new URL(`${h}.svg`, dir)), h).toBe(true);
+  });
+});
+
+describe('sprite urls (urlOf)', () => {
+  const ID = 'my:0123abcd-0123-4abc-8abc-0123456789ab';
+  const urlOf = projectSpriteUrlOf('P1', 'file:///data/kopernikadr/', (u) => `conv:${u}`);
+
+  it('a hexcode gives the OpenMoji svg, a custom id the movie copy, an invalid id nothing', () => {
+    expect(urlOf('1F436')).toBe('/openmoji/1F436.svg');
+    expect(urlOf(ID)).toBe('conv:file:///data/kopernikadr/projects/P1/stickers/0123abcd-0123-4abc-8abc-0123456789ab.webp');
+    expect(urlOf('my:../../etc')).toBeNull();
+    expect(urlOf('my:')).toBeNull();
+    expect(customStickerPath('P1', '1F436')).toBeNull();
+    expect(openmojiUrlOf(ID)).toBeNull();
+    expect(openmojiUrlOf('1F436')).toBe('/openmoji/1F436.svg');
+  });
+
+  it('SpriteCache loads a custom sticker from the per-project url', async () => {
+    const f = fakeRaster();
+    const c = new SpriteCache(f.raster, undefined, urlOf);
+    await c.load(ID, 256);
+    await c.load('1F436', 256);
+    expect(f.calls.map((x) => x.url)).toEqual([urlOf(ID), '/openmoji/1F436.svg']);
+  });
+
+  it('an invalid custom id is an unknown sprite: load fails (and is remembered), nothing is rasterized', async () => {
+    const f = fakeRaster();
+    const c = new SpriteCache(f.raster, undefined, urlOf);
+    await expect(c.load('my:bad', 128)).rejects.toThrow('unknown sprite');
+    expect(c.hasFailed('my:bad', 128)).toBe(true);
+    expect(f.calls).toEqual([]);
+  });
+
+  it('playback: a missing movie copy fails once, is remembered, and draws nothing', async () => {
+    const c = new SpriteCache(async () => {
+      throw new Error('gone');
+    }, undefined, urlOf);
+    await expect(c.load(ID, 256)).rejects.toThrow('gone');
+    expect(c.hasFailed(ID, 256)).toBe(true);
+    expect(c.get(ID, 256)).toBeUndefined();
+  });
+
+  it('preload names the custom sticker that is missing', async () => {
+    const f = fakeRaster([ID.slice(3)]); // its .webp url fails
+    const failing: Rasterize = async (url, size) => {
+      if (url.includes(ID.slice(3))) throw new Error('gone');
+      return f.raster(url, size);
+    };
+    const c = new SpriteCache(failing, undefined, urlOf);
+    const err = await c.preload(['1F436', ID], 1024).catch((e: unknown) => e as Error & { failed: string[] });
+    expect((err as Error).message).toContain(ID);
+    expect((err as { failed: string[] }).failed).toEqual([ID]);
+    expect(f.made.every((b) => b.closed)).toBe(true);
+  });
+});
+
+describe('needsNewSpriteCache', () => {
+  const urls = { a: 1 };
+  it('rebuilds on first use, project change or resolver change only', () => {
+    expect(needsNewSpriteCache(null, 'A', urls)).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'A', urls)).toBe(false);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'B', urls)).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls }, 'A', { a: 1 })).toBe(true);
+    expect(needsNewSpriteCache({ id: 'A', urls: undefined }, 'A', undefined)).toBe(false);
   });
 });

@@ -7,7 +7,7 @@
 # Default variant: release. Release needs the keystore (~/.kopernikadr/keystore.properties, or
 # KOPERNIKADR_KEYSTORE_PROPERTIES); without it this script refuses to build, because an unsigned
 # release APK can't be installed. The remote has no probe build type.
-# Remote: `npm run build` (Next static export) → `npx cap sync android` → Gradle.
+# Remote: fetch the segmenter model → `npm run build` (Next static export) → `npx cap sync android` → Gradle.
 set -euo pipefail
 # shellcheck source=scripts/lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -75,6 +75,8 @@ for app in "${apps[@]}"; do
       copy_apk camera "$REPO_ROOT/camera-android/app/build/outputs/apk"
       ;;
     remote)
+      info "remote: segmenter model (cached in ~/.kopernikadr/models)"
+      (cd "$REPO_ROOT/remote" && node scripts/fetch-models.mjs)
       info "remote: web build (next build)"
       (cd "$REPO_ROOT/remote" && npm run build)
       info "remote: npx cap sync android"

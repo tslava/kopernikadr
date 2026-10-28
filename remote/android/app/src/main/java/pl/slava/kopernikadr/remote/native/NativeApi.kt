@@ -1,15 +1,24 @@
 package pl.slava.kopernikadr.remote.native
 
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+
 /**
  * The `KopernikadrNative` API (`remote/lib/native.ts`) over plain arguments and results, so the
  * whole bridge contract is JVM-testable. [KopernikadrNativePlugin] only adapts `PluginCall` to
  * [BridgeArgs], runs these off the main thread and turns the result map into a `JSObject`.
- * Not thread-safe by itself; the plugin calls it from one thread.
+ * Not thread-safe by itself: the plugin calls the file and video methods from one thread and the
+ * image and segmenter methods ([seg] included) from another.
  */
 class NativeApi(
     private val files: AtomicFiles,
     private val writer: VideoWriter,
     private val gallery: GalleryPublisher,
+    private val images: ImageImport,
+    private val seg: SegSession,
+    /** Folders the debug-only [testImportImage] may read from (empty: it refuses everything). */
+    private val testImportRoots: List<File> = emptyList(),
     private val log: (String) -> Unit = {},
 ) {
     fun writeTextAtomic(a: BridgeArgs): Map<String, Any> {
@@ -66,4 +75,56 @@ class NativeApi(
     /** Debug builds only (the plugin checks): a pending gallery row as a killed publish leaves it. */
     fun testInsertPending(a: BridgeArgs): Map<String, Any> =
         mapOf("uri" to gallery.insertPendingForTest(a.optString("displayName") ?: "test-pending"))
+
+    /** A picked image (stream from the picker) copied to `tmp/`; runs on the segmenter executor. */
+    fun importPicked(mime: String?, input: InputStream): Map<String, Any> {
+        val r = images.importStream(mime, input)
+        return mapOf("path" to r.path, "mime" to r.mime)
+    }
+
+    /** The camera's photo moved into `tmp/`; runs on the segmenter executor. `CANCELLED` for an empty file. */
+    fun importCaptured(src: File): Map<String, Any> = mapOf("path" to images.importCaptured(src).path)
+
+    /** Debug builds only (the plugin checks): imports a file from a test folder like a pick would. */
+    fun testImportImage(a: BridgeArgs): Map<String, Any> {
+        val src = try {
+            File(a.string("path")).canonicalFile
+        } catch (e: IOException) {
+            raise(NativeErrorCode.BAD_ARGUMENT, "bad path: ${e.message}")
+        }
+        if (testImportRoots.none { src.path.startsWith(it.canonicalPath + File.separator) }) {
+            raise(NativeErrorCode.PATH_INVALID, "path is outside the test import folders")
+        }
+        val r = images.importFile(src)
+        return mapOf("path" to r.path, "mime" to r.mime)
+    }
+
+    /**
+     * Decodes the image in `tmp/` (EXIF orientation applied, long side at most `maxSide`, default
+     * 1024) into `tmp/seg-<handle>.png`, deletes the source and opens a session. No engine yet.
+     */
+    fun segOpen(a: BridgeArgs): Map<String, Any> {
+        val maxSide = a.optLong("maxSide") ?: DEFAULT_MAX_SIDE
+        if (maxSide !in MIN_MAX_SIDE..MAX_MAX_SIDE) raise(NativeErrorCode.BAD_ARGUMENT, "'maxSide' must be $MIN_MAX_SIDE..$MAX_MAX_SIDE")
+        val o = seg.open(a.string("path"), maxSide.toInt())
+        return mapOf("handle" to o.handle, "image" to o.image, "width" to o.width, "height" to o.height, "hasAlpha" to o.hasAlpha)
+    }
+
+    /** Runs the segmenter on the whole stroke list; the raw mask is `tmp/seg-<handle>.mask`. */
+    fun segRun(a: BridgeArgs): Map<String, Any> {
+        val handle = a.string("handle")
+        val r = seg.run(handle, SegStrokes.parse(a.raw("strokes")))
+        return mapOf("mask" to r.mask, "width" to r.width, "height" to r.height, "ms" to r.ms, "delegate" to r.delegate)
+    }
+
+    fun segClose(a: BridgeArgs): Map<String, Any> {
+        seg.close(a.string("handle"))
+        return emptyMap()
+    }
+
+    private companion object {
+        const val DEFAULT_MAX_SIDE = 1024L
+        const val MIN_MAX_SIDE = 64L
+        const val MAX_MAX_SIDE = 2048L
+    }
 }

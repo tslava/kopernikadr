@@ -13,7 +13,9 @@ with a range) + export again with the gallery file's duration checked against Su
 1. Fake camera on the Mac (the emulator reaches it as `10.0.2.2:8765`):
    `node protocol/tools/probe-client/fake-camera.mjs --port 8765`
    (it listens on 127.0.0.1, which the emulator reaches via 10.0.2.2).
-2. Build and install the debug APK, start the app once:
+2. Build and install the debug APK, start the app once. The build needs the segmenter model (not in the
+   repo): `npm run android:debug` fetches it (`npm run models` does only that; the Gradle `checkSegModel`
+   fails with a hint otherwise):
    ```
    cd remote && npm ci && npm run android:debug
    adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -50,3 +52,28 @@ JSON as `expectedGalleryName`). Pull it and check the frame count with ffprobe, 
   (the app acks only after the full is local and verified). Use a fresh fake camera or ignore old
   frames: only frames of the movie the script created are counted.
 - The unit test of the helpers: `node --test remote/e2e/lib.test.mjs`.
+
+## Photo stickers on the tablet (`stickers.cdp.mjs`)
+
+`stickers.cdp.mjs` drives the photo-sticker flow on a real tablet over CDP: open a movie, select frame 1,
+"+ Emoji" -> "Moje" -> "Zrób naklejkę", import via the debug hook `__testImportImage` (the script redirects the
+plugin's `pickImage` to it, so the "Z galerii" button is the real UI path), cut (tap the toy, wait for
+"Chwilka…" to go; the first run per picture takes up to about 10 s), "Usuń" brush stroke, "Cofnij", "Dalej",
+"Komiks", "Zapisz", place the new "Moje" tile, assert `project.json` has a `my:<uuid>` sticker and
+`projects/<id>/stickers/<uuid>.webp` exists, then delete the tile from "Moje" (tile x + confirm) and assert
+the library file is gone while the movie copy and the `project.json` entry stay. With `--png` it also checks
+that a transparent PNG goes straight to the style step (and removes the sticker it made).
+
+Safety: `--project <uuid>` is mandatory (no movie is ever picked automatically) and the script refuses to
+run unless that movie's name starts with "Test".
+
+```
+adb -s <serial> push toy.jpg /sdcard/Download/toy.jpg
+adb -s <serial> push alpha.png /sdcard/Download/alpha.png      # optional
+adb -s <serial> forward tcp:9222 localabstract:webview_devtools_remote_$(adb -s <serial> shell pidof pl.slava.kopernikadr.remote.debug | tr -d '\r')
+node remote/e2e/stickers.cdp.mjs --devtools 9222 --adb "adb -s <serial>" --project <uuid of a Test movie> \
+  --photo /sdcard/Download/toy.jpg --toy 0.5,0.55 [--png /sdcard/Download/alpha.png] [--package pl.slava.kopernikadr.remote.debug]
+```
+
+`--toy x,y` is the toy's centre as fractions (0..1) of the cut image. Needs a debug build (the hook exists
+only there) and a Test movie with at least one frame. Remove the pushed files afterwards.

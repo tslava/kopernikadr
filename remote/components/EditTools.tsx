@@ -1,8 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import type { EditTool, ToolStates } from '@/lib/app/editController';
 import type { Translate } from '@/lib/i18n';
-import { spriteUrl } from '@/lib/render/catalog';
 import Icon, { type IconName } from './Icon';
 
 /** One row of the kid's editing tools: icon over a short label, 72 px wide. */
@@ -14,7 +14,7 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk =
   /** The selected entry can show a sticker (a playable one); false greys "+ Emoji" out. */
   emojiOk?: boolean;
   /** A selected sticker: its emoji and range/delete actions (they work on the selected entry). */
-  sticker?: { emoji: string; onFrom: () => void; onTo: () => void; onDelete: () => void } | null;
+  sticker?: { src: string | null; onFrom: () => void; onTo: () => void; onDelete: () => void } | null;
   /** The selected entry is switched off: the toggle reads "turn on". */
   isOff: boolean;
   onTool: (tool: EditTool) => void;
@@ -49,7 +49,7 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk =
     </div>
     {sticker && (
       <div className="edit-tools sticker-tools" role="toolbar" aria-label={t('sticker.selected')}>
-        <span className="sticker-chip"><img src={spriteUrl(sticker.emoji)} alt="" draggable={false} /></span>
+        <StickerChip key={sticker.src ?? ''} src={sticker.src} />
         <button type="button" className="tool-btn" data-tool="stickerFrom" aria-label={t('sticker.from')} onClick={sticker.onFrom}>
           <Icon name="trimStart" />
           <span>{t('tools.startHere')}</span>
@@ -65,5 +65,16 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk =
       </div>
     )}
     </>
+  );
+}
+
+/** The selected sticker's picture; a picture that fails to load (a custom sticker's file is gone) shows the same "?" as the stage. */
+function StickerChip({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className={`sticker-chip${broken ? ' missing' : ''}`}>
+      {src && !broken && <img src={src} alt="" draggable={false} onError={() => setBroken(true)} />}
+      {broken && <span className="sticker-missing" aria-hidden="true">?</span>}
+    </span>
   );
 }

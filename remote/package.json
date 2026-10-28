@@ -9,7 +9,8 @@
     "build": "next build",
     "typecheck": "next typegen && tsc --noEmit",
     "cap:sync": "cap sync android",
-    "android:debug": "npm run build && npm run cap:sync && cd android && ./gradlew-jbr :app:assembleDebug",
+    "models": "node scripts/fetch-models.mjs",
+    "android:debug": "npm run models && npm run build && npm run cap:sync && cd android && ./gradlew-jbr :app:assembleDebug",
     "test": "vitest run",
     "openmoji": "node scripts/openmoji-subset.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\""

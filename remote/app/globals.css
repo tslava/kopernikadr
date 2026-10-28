@@ -149,6 +149,8 @@ button { min-height: 64px; }
 .sticker-tools .tool-btn:not(.danger) { border-color: #5b8def; }
 .sticker-chip { width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; border: 2px solid #5b8def; border-radius: 16px; background: var(--panel); }
 .sticker-chip img { width: 56px; height: 56px; }
+.sticker-chip.missing { border-style: dashed; background: rgba(255, 255, 255, 0.55); }
+.sticker-missing { font-size: 40px; font-weight: 700; line-height: 1; color: rgba(60, 60, 80, 0.9); }
 .picker { min-width: 0; width: 640px; max-height: 680px; gap: 12px; }
 .picker-head { display: flex; align-items: center; justify-content: space-between; }
 .picker-head h2 { margin: 0; font-size: 26px; }
@@ -255,3 +257,40 @@ button { min-height: 64px; }
 .icon-btn.on { background: #e9e3ff; color: #3b2a8a; }
 .speed { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 18px; color: var(--muted); }
 .speed input { width: 200px; min-height: 0; }
+
+/* Sticker maker ("Zrób naklejkę") and the "Moje" tab: big plain-tap targets (>= 56 px) */
+.picker-grid.mine { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.picker-grid.mine .picker-item { min-height: 128px; width: 100%; }
+.picker-grid.mine .picker-item img { width: 96px; height: 96px; }
+.picker-item.make { flex-direction: column; gap: 6px; border: 3px dashed var(--accent); color: var(--accent); font-size: 18px; line-height: 1.15; }
+.mine-wrap { position: relative; display: flex; }
+.mine-del { position: absolute; top: 4px; right: 4px; width: 56px; height: 56px; min-height: 56px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(20, 22, 26, 0.8); }
+.maker { position: fixed; inset: 0; z-index: 35; background: var(--bg); padding: 16px 32px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+.maker-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 32px; }
+.maker-sources { display: flex; gap: 32px; }
+.maker-source { width: 280px; min-height: 200px; flex-direction: column; display: flex; align-items: center; justify-content: center; gap: 16px; border-radius: 24px; font-size: 28px; }
+.maker-source .ic { width: 64px; height: 64px; }
+.maker-wait { flex: 1; display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 28px; margin: 0; }
+.spinner { width: 40px; height: 40px; border-radius: 50%; border: 5px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.maker-body.style { align-items: stretch; }
+.maker-preview { flex: 1; min-width: 0; min-height: 0; border-radius: 20px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.maker-preview canvas { max-width: 100%; max-height: 100%; aspect-ratio: 1; object-fit: contain; }
+.checker { background: conic-gradient(#3a3f47 25%, #2a2e34 0 50%, #3a3f47 0 75%, #2a2e34 0) 0 0 / 32px 32px; }
+.maker-side { width: 320px; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+.maker-styles { display: flex; flex-direction: column; gap: 12px; }
+.maker-style { min-height: 80px; font-size: 26px; border-radius: 20px; }
+.maker-style { display: flex; align-items: center; justify-content: center; gap: 12px; border: 2px solid var(--line); }
+.maker-style.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); border: 4px solid var(--accent); color: inherit; font-weight: 600; }
+.maker-check { color: var(--accent); font-weight: 700; }
+.maker-save { min-height: 88px; font-size: 28px; border-radius: 20px; }
+.maker-body.cut { align-items: stretch; }
+.cut-stage { position: relative; flex: 1; min-width: 0; min-height: 0; border-radius: 20px; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+.cut-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.cut-msg { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); margin: 0; padding: 12px 24px; border-radius: 28px; background: rgba(20, 22, 26, 0.85); color: #fff; font-size: 26px; display: flex; align-items: center; gap: 12px; pointer-events: none; white-space: nowrap; }
+.cut-msg.busy { top: 16px; bottom: auto; }
+.maker-style.brush { min-height: 72px; }
+.maker-row { display: flex; gap: 12px; }
+.maker-tool { flex: 1; min-height: 64px; font-size: 22px; border-radius: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid var(--line); }
+.maker-tool:disabled { opacity: 0.4; }
+.maker-notice { margin: 0; text-align: center; font-size: 24px; color: var(--accent); }
