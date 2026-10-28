@@ -40,6 +40,7 @@ import java.util.concurrent.TimeUnit
 class KopernikadrNativePlugin : Plugin() {
     private lateinit var api: NativeApi
     private lateinit var seg: SegSession
+    private lateinit var captures: CaptureFiles
     private lateinit var executor: ExecutorService
     private lateinit var segExecutor: ScheduledExecutorService
     private var debuggable = false
@@ -76,6 +77,7 @@ class KopernikadrNativePlugin : Plugin() {
         debuggable = (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         // a photo left by a process death while the camera was in front is of no use to anyone
         File(ctx.cacheDir, CAPTURE_DIR).deleteRecursively()
+        captures = CaptureFiles(File(ctx.cacheDir, CAPTURE_DIR))
         segExecutor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "KopernikadrSeg") }
         segExecutor.scheduleWithFixedDelay(
             {
@@ -198,18 +200,17 @@ class KopernikadrNativePlugin : Plugin() {
 
     /**
      * Opens the system camera app (`ACTION_IMAGE_CAPTURE`, so the app needs no CAMERA permission)
-     * writing to the fixed `cacheDir/capture/photo.jpg`, and resolves with `{path}`: the photo moved
+     * writing to a per-request `cacheDir/capture/photo-<uuid>.jpg` ([CaptureFiles]), and resolves with `{path}`: the photo moved
      * to `tmp/photo-<uuid>.jpg`. `CANCELLED` (back out or an empty file), `NO_APP` on failure.
      */
     @PluginMethod
     fun takePhoto(call: PluginCall) {
         closeSegSessions()
-        val file = capturePhotoFile()
+        val file = captures.newFor(call.callbackId)
         val uri = try {
-            file.parentFile!!.mkdirs()
-            file.delete()
             FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
         } catch (e: Exception) {
+            captures.discard(call.callbackId)
             call.reject("cannot prepare the photo file", NativeErrorCode.IO.name)
             return
         }
@@ -219,6 +220,7 @@ class KopernikadrNativePlugin : Plugin() {
         try {
             startActivityForResult(call, intent, "cameraResult")
         } catch (e: ActivityNotFoundException) {
+            captures.discard(call.callbackId)
             call.reject("no camera app", NativeErrorCode.NO_APP.name)
         }
     }
@@ -226,12 +228,13 @@ class KopernikadrNativePlugin : Plugin() {
     /** Result of [takePhoto]; [call] is null after a process death (the photo is lost, nobody to answer). */
     @ActivityCallback
     private fun cameraResult(call: PluginCall?, result: ActivityResult) {
-        val file = capturePhotoFile()
+        // exactly this request's file (none after a process death: the startup sweep removed the photo)
+        val file = captures.take(call?.callbackId)
         val outcome = ActivityResults.cameraOutcome(
-            ActivityResults.callLive(call != null, call?.callbackId), result.resultCode, file.length(),
+            ActivityResults.callLive(call != null, call?.callbackId), result.resultCode, file?.length() ?: 0L,
         )
-        if (call == null || outcome == ActivityResults.Outcome.IGNORE) {
-            file.delete() // nobody to import it for: do not keep the photo
+        if (call == null || file == null || outcome == ActivityResults.Outcome.IGNORE) {
+            file?.delete() // nobody to import it for: do not keep the photo
             return
         }
         ActivityResults.errorOf(outcome)?.let {
@@ -241,8 +244,6 @@ class KopernikadrNativePlugin : Plugin() {
         }
         runOn(segExecutor, call) { api.importCaptured(file) }
     }
-
-    private fun capturePhotoFile() = File(File(context.cacheDir, CAPTURE_DIR), "photo.jpg")
 
     /** Frees the segmenter's memory while another app is in front (or on destroy); runs on the segmenter executor. */
     private fun closeSegSessions() {

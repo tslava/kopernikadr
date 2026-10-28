@@ -155,8 +155,11 @@ export function outline(img: Img, opts: { radiusPx: number; color: [number, numb
 /** A translucent black copy of the silhouette, offset by (dx, dy) and blurred, under the image (grows the canvas). */
 export function shadow(img: Img, opts: { dx: number; dy: number; alpha: number; blurPx: number }): Img {
   const blur = Math.max(0, Math.round(opts.blurPx));
-  const padL = Math.max(0, blur - opts.dx), padR = Math.max(0, blur + opts.dx);
-  const padT = Math.max(0, blur - opts.dy), padB = Math.max(0, blur + opts.dy);
+  // two box-blur passes spread the shadow 2 * blur px beyond the offset silhouette; +1 so the last
+  // (faintest) pixel is not on the canvas edge
+  const reach = blur > 0 ? 2 * blur + 1 : 0;
+  const padL = Math.max(0, reach - opts.dx), padR = Math.max(0, reach + opts.dx);
+  const padT = Math.max(0, reach - opts.dy), padB = Math.max(0, reach + opts.dy);
   const out = blank(img.width + padL + padR, img.height + padT + padB);
   const w = out.width, h = out.height;
   let a: Float32Array = new Float32Array(w * h);

@@ -145,6 +145,26 @@ describe('shadow', () => {
     const [x0, , x1] = bbox(s);
     expect(x1 - x0 + 1).toBeGreaterThan(3);
   });
+
+  it('the shadow fades out before the canvas edge (no straight cutoff), also with an offset', () => {
+    for (const [dx, dy, blurPx] of [[0, 0, 4], [3, 5, 4], [-3, -5, 4], [4, 0, 2], [0, -6, 3]]) { // |offset| < reach: the sticker itself stays off the edge
+      // a wide, opaque shape: its straight edges keep the spread's tail well above 1/255
+      const src = square(40, 40, 0, 0, 40);
+      const s = shadow(src, { dx, dy, alpha: 1, blurPx });
+      const reach = 2 * blurPx + 1;
+      const w = s.width, h = s.height;
+      const padL = Math.max(0, reach - dx), padT = Math.max(0, reach - dy);
+      let touches = false;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (alphaAt(s, x, y) > 0 && (x === 0 || y === 0 || x === w - 1 || y === h - 1)) touches = true;
+        }
+      }
+      expect(touches, `dx=${dx} dy=${dy} blur=${blurPx}`).toBe(false);
+      expect(w).toBe(src.width + padL + Math.max(0, reach + dx));
+      expect(h).toBe(src.height + padT + Math.max(0, reach + dy));
+    }
+  });
 });
 
 describe('comic', () => {

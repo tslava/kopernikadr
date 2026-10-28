@@ -548,7 +548,7 @@ A sticker made from a photo of a toy. Plan: `docs/plans/20261028-photo-stickers.
     about 4-8 s, later runs 0.5-0.9 s (GPU); CPU about 2 s.
   - Errors: `CANCELLED`, `NO_APP`, `TOO_LARGE`, `UNSUPPORTED`, `SEG_FAILED`, `MODEL_MISSING`, `NO_SESSION`.
 - **Camera and picker: activity results and process death.** `takePhoto` uses `ACTION_IMAGE_CAPTURE` with a
-  fixed `EXTRA_OUTPUT` (`cacheDir/capture/photo.jpg`, FileProvider); `pickImage` uses the
+  a per-request `EXTRA_OUTPUT` (`cacheDir/capture/photo-<uuid>.jpg`, FileProvider; remembered by the call id, so a result consumes only its own file); `pickImage` uses the
   `PickVisualMedia` intent. Both go through Capacitor `startActivityForResult`. Cancel or a 0-byte file is
   `CANCELLED`, `ActivityNotFoundException` is `NO_APP`, the picked file is copied with a 40 MB cap
   (`TOO_LARGE`) and only jpeg/png/webp/heic/heif are accepted. If the process dies while the other app is

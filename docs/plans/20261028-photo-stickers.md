@@ -212,8 +212,8 @@ checked by `PathGuard`.
     while copying, with a 40 MB cap (`TOO_LARGE`).
   - Mime jpeg / png / webp / heic / heif. Anything else is `UNSUPPORTED`.
 - `takePhoto()` → `{path}`.
-  - Uses `MediaStore.ACTION_IMAGE_CAPTURE`. `EXTRA_OUTPUT` is a **fixed** file
-    `cacheDir/capture/photo.jpg` via `packageName + ".fileprovider"`.
+  - Uses `MediaStore.ACTION_IMAGE_CAPTURE`. `EXTRA_OUTPUT` is a **per-request** file
+    `cacheDir/capture/photo-<uuid>.jpg` (remembered by the call id; a result consumes only its own) via `packageName + ".fileprovider"`.
   - On `RESULT_OK` with a non-empty file, the file is moved on the segmenter executor to
     `tmp/photo-<uuid>.jpg`.
   - Errors:
@@ -498,7 +498,7 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify tests: `ActivityResultsTest.kt`, `NativeApiImageTest.kt`, `stickerMakerModel.test.ts`
 
 - [x] `takePhoto`:
-  - `ACTION_IMAGE_CAPTURE`, with the fixed `cacheDir/capture/photo.jpg` via
+  - `ACTION_IMAGE_CAPTURE`, with a per-request `cacheDir/capture/photo-<uuid>.jpg` (by call id) via
     `packageName + ".fileprovider"`;
   - the move to `tmp/photo-<uuid>.jpg` runs on the segmenter executor;
   - 0-byte → `CANCELLED`, no camera app → `NO_APP`;

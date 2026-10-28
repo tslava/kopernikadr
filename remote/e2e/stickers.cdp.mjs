@@ -321,6 +321,12 @@ for (const [name, fn] of steps) {
     break; // later steps depend on the earlier ones
   }
 }
+try {
+  // put the page's picker back (the override would otherwise stay until the WebView reloads)
+  await ev(`(() => { const c = window.Capacitor; if (c && c.__origNativePromise) { c.nativePromise = c.__origNativePromise; delete c.__origNativePromise; } return true; })()`);
+} catch (e) {
+  console.log(`WARN could not restore Capacitor.nativePromise: ${e.message}`);
+}
 ws?.close();
 if (ctx.leftovers.length) console.log(`LEFTOVER stickers made by this run, remove by hand from "Moje": ${ctx.leftovers.join(', ')}`);
 console.log(J({ project: args.project, timings: ctx.timings, results }, null, 2));
