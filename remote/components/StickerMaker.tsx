@@ -46,10 +46,11 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
 
   const styled = (style: StickerStyle): Img | null => cache.current.get(style);
 
-  const onGallery = async () => {
+  /** Both sources hand back a file in `tmp/`; from there the flow is the same. */
+  const onSource = async (get: () => Promise<{ path: string }>) => {
     dispatch({ type: 'pick' });
     try {
-      const { path } = await KopernikadrNative.pickImage();
+      const { path } = await get();
       let img: Img;
       try {
         img = await decodeImage(await storeFileUrl(path));
@@ -96,7 +97,11 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
       {state.step === 'source' && (
         <div className="maker-body">
           <div className="maker-sources">
-            <button type="button" className="maker-source" data-testid="maker-gallery" onClick={() => void onGallery()}>
+            <button type="button" className="maker-source" data-testid="maker-camera" onClick={() => void onSource(() => KopernikadrNative.takePhoto())}>
+              <Icon name="camera" />
+              <span>{t('maker.camera')}</span>
+            </button>
+            <button type="button" className="maker-source" data-testid="maker-gallery" onClick={() => void onSource(() => KopernikadrNative.pickImage())}>
               <Icon name="film" />
               <span>{t('maker.gallery')}</span>
             </button>

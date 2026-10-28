@@ -7,6 +7,8 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import android.os.Environment
 import android.util.Log
 import com.getcapacitor.JSObject
@@ -59,6 +61,8 @@ class KopernikadrNativePlugin : Plugin() {
             log = log,
         )
         debuggable = (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        // a photo left by a process death while the camera was in front is of no use to anyone
+        File(ctx.cacheDir, CAPTURE_DIR).deleteRecursively()
         segExecutor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "KopernikadrSeg") }
         executor = Executors.newSingleThreadExecutor { r -> Thread(r, "KopernikadrNative") }
         // Startup sweep (§5.7): an export killed mid-encode or mid-publish leaves an exports/ file
@@ -132,6 +136,7 @@ class KopernikadrNativePlugin : Plugin() {
      */
     @PluginMethod
     fun pickImage(call: PluginCall) {
+        closeSegSessions()
         val intent = ActivityResultContracts.PickVisualMedia().createIntent(
             context,
             PickVisualMediaRequest.Builder().setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly).build(),
@@ -162,6 +167,52 @@ class KopernikadrNativePlugin : Plugin() {
             input.use { api.importPicked(resolver.getType(uri), it) }
         }
     }
+
+    /**
+     * Opens the system camera app (`ACTION_IMAGE_CAPTURE`, so the app needs no CAMERA permission)
+     * writing to the fixed `cacheDir/capture/photo.jpg`, and resolves with `{path}`: the photo moved
+     * to `tmp/photo-<uuid>.jpg`. `CANCELLED` (back out or an empty file), `NO_APP` on failure.
+     */
+    @PluginMethod
+    fun takePhoto(call: PluginCall) {
+        closeSegSessions()
+        val file = capturePhotoFile()
+        val uri = try {
+            file.parentFile!!.mkdirs()
+            file.delete()
+            FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+        } catch (e: Exception) {
+            call.reject("cannot prepare the photo file", NativeErrorCode.IO.name)
+            return
+        }
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            .putExtra(MediaStore.EXTRA_OUTPUT, uri)
+            .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try {
+            startActivityForResult(call, intent, "cameraResult")
+        } catch (e: ActivityNotFoundException) {
+            call.reject("no camera app", NativeErrorCode.NO_APP.name)
+        }
+    }
+
+    /** Result of [takePhoto]; [call] is null after a process death (the photo is lost, nobody to answer). */
+    @ActivityCallback
+    private fun cameraResult(call: PluginCall?, result: ActivityResult) {
+        val file = capturePhotoFile()
+        val outcome = ActivityResults.cameraOutcome(call != null, result.resultCode, file.length())
+        if (call == null) return
+        ActivityResults.errorOf(outcome)?.let {
+            file.delete()
+            call.reject(it.name.lowercase(), it.name)
+            return
+        }
+        runOn(segExecutor, call) { api.importCaptured(file) }
+    }
+
+    private fun capturePhotoFile() = File(File(context.cacheDir, CAPTURE_DIR), "photo.jpg")
+
+    /** Frees the segmenter session's memory while another app is in front (the session arrives with the segmenter). */
+    private fun closeSegSessions() {}
 
     /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
     @PluginMethod
@@ -221,5 +272,6 @@ class KopernikadrNativePlugin : Plugin() {
 
     private companion object {
         const val TAG = "KopernikadrNative"
+        private const val CAPTURE_DIR = "capture"
     }
 }

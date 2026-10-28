@@ -53,6 +53,31 @@ class ImageImport(
         return io("open image") { src.inputStream() }.use { importStream(null, it) }
     }
 
+    /**
+     * The camera's output file moved to `tmp/photo-<uuid>.jpg`. An empty or missing file (the user
+     * backed out after the camera app already created it) is `CANCELLED` and is removed.
+     */
+    fun importCaptured(src: File): Imported {
+        if (!src.isFile || src.length() == 0L) {
+            src.delete()
+            raise(NativeErrorCode.CANCELLED, "the camera returned no photo")
+        }
+        val rel = "${AppDirs.TMP}/photo-${ids()}.jpg"
+        val dest = guard.resolve(rel)
+        io("create tmp dir") { dest.parentFile!!.mkdirs() }
+        if (!src.renameTo(dest)) {
+            // cacheDir and filesDir can sit on different mounts: copy, then drop the source
+            try {
+                io("move photo") { src.copyTo(dest, overwrite = true) }
+            } catch (e: Throwable) {
+                dest.delete()
+                throw e
+            }
+            src.delete()
+        }
+        return Imported(rel, "image/jpeg")
+    }
+
     companion object {
         const val MAX_BYTES = 40L * 1024 * 1024
         private const val HEADER = 16

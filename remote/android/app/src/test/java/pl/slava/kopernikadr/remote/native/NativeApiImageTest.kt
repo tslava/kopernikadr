@@ -47,6 +47,13 @@ class NativeApiImageTest {
     }
 
     @Test
+    fun importCapturedReturnsThePathOnly() {
+        val photo = temp.newFile("photo.jpg").also { it.writeBytes(byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 1)) }
+        assertEquals(mapOf("path" to "tmp/photo-i1.jpg"), api.importCaptured(photo))
+        expectCode(NativeErrorCode.CANCELLED) { api.importCaptured(temp.newFile("zero.jpg")) }
+    }
+
+    @Test
     fun testImportCopiesFromTheTestFolder() {
         val f = File(downloads, "toy.png").also { it.writeBytes(png) }
         val r = api.testImportImage(args("path" to f.path))

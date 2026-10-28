@@ -497,16 +497,16 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify: `KopernikadrNativePlugin.kt` (`takePhoto`, `cameraResult`, `cacheDir/capture/` clear at `load()`), `NativeApi.kt`, `ActivityResults.kt`, `remote/lib/native.ts`, `StickerMaker.tsx` (show "Zrób zdjęcie")
 - Modify tests: `ActivityResultsTest.kt`, `NativeApiImageTest.kt`, `stickerMakerModel.test.ts`
 
-- [ ] `takePhoto`:
+- [x] `takePhoto`:
   - `ACTION_IMAGE_CAPTURE`, with the fixed `cacheDir/capture/photo.jpg` via
     `packageName + ".fileprovider"`;
   - the move to `tmp/photo-<uuid>.jpg` runs on the segmenter executor;
   - 0-byte → `CANCELLED`, no camera app → `NO_APP`;
   - closes any segmenter session first.
-- [ ] `load()` clears `cacheDir/capture/`. A null call in the callback is ignored.
-- [ ] Tests: the result mapping for the camera (OK, cancel, 0 bytes, no app, null call); the
+- [x] `load()` clears `cacheDir/capture/`. A null call in the callback is ignored.
+- [x] Tests: the result mapping for the camera (OK, cancel, 0 bytes, no app, null call); the
       StickerMaker camera path.
-- [ ] Run tests; they must pass before Task 8.
+- [x] Run tests; they must pass before Task 8.
 
 ### Task 8: Native segmenter session
 **Files:**

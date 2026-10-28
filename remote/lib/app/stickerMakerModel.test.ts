@@ -15,6 +15,13 @@ describe('sticker maker flow', () => {
     expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: false }])).toEqual({ step: 'source', notice: 'soon' });
   });
 
+  it('the camera shares the pick events: backing out is silent, no camera app says so', () => {
+    const loading = run([{ type: 'pick' }]);
+    expect(reduce(loading, { type: 'pickFailed', code: 'CANCELLED' })).toEqual({ step: 'source', notice: null });
+    expect(reduce(loading, { type: 'pickFailed', code: 'NO_APP' })).toEqual({ step: 'source', notice: 'noApp' });
+    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }]).step).toBe('style');
+  });
+
   it('picker errors return to the source step with a notice; backing out of the picker is silent', () => {
     const loading = run([{ type: 'pick' }]);
     expect(reduce(loading, { type: 'pickFailed', code: 'CANCELLED' })).toEqual({ step: 'source', notice: null });

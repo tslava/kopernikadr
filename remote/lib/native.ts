@@ -103,6 +103,12 @@ export interface KopernikadrNativePlugin {
    */
   pickImage(): Promise<{ path: string; mime: string }>;
 
+  /**
+   * Opens the system camera app; resolves with the photo moved to `tmp/photo-<uuid>.jpg`.
+   * Rejects `CANCELLED` (backed out, or an empty file) and `NO_APP`.
+   */
+  takePhoto(): Promise<{ path: string }>;
+
   /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
   __testImportImage(options: { path: string }): Promise<{ path: string; mime: string }>;
 

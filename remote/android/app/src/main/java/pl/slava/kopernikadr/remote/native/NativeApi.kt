@@ -80,6 +80,9 @@ class NativeApi(
         return mapOf("path" to r.path, "mime" to r.mime)
     }
 
+    /** The camera's photo moved into `tmp/`; runs on the segmenter executor. `CANCELLED` for an empty file. */
+    fun importCaptured(src: File): Map<String, Any> = mapOf("path" to images.importCaptured(src).path)
+
     /** Debug builds only (the plugin checks): imports a file from a test folder like a pick would. */
     fun testImportImage(a: BridgeArgs): Map<String, Any> {
         val src = try {

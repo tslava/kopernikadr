@@ -29,6 +29,10 @@ object ActivityResults {
         else -> Outcome.CANCELLED
     }
 
+    /** The camera result: the payload is a non-empty output file, not an intent extra. */
+    fun cameraOutcome(callPresent: Boolean, resultCode: Int, photoBytes: Long): Outcome =
+        outcome(callPresent, resultCode, photoBytes > 0)
+
     /** The error to reject the call with, or null when the outcome is not an error. */
     fun errorOf(o: Outcome): NativeErrorCode? = when (o) {
         Outcome.CANCELLED -> NativeErrorCode.CANCELLED

@@ -29,6 +29,25 @@ class ImageImportTest {
     private fun heic(brand: String) = byteArrayOf(0, 0, 0, 24) + "ftyp".toByteArray() + brand.toByteArray() + ByteArray(8)
 
     @Test
+    fun capturedPhotoIsMovedToTmp() {
+        val src = temp.newFile("photo.jpg").also { it.writeBytes(jpeg) }
+        val r = importer().importCaptured(src)
+        assertEquals("tmp/photo-u1.jpg", r.path)
+        assertEquals("image/jpeg", r.mime)
+        assertArrayEquals(jpeg, File(guard.root, r.path).readBytes())
+        assertEquals("the capture file is gone", false, src.exists())
+    }
+
+    @Test
+    fun emptyOrMissingCapturedPhotoIsCancelled() {
+        val empty = temp.newFile("empty.jpg")
+        expectCode(NativeErrorCode.CANCELLED) { importer().importCaptured(empty) }
+        assertEquals(false, empty.exists())
+        expectCode(NativeErrorCode.CANCELLED) { importer().importCaptured(File(temp.root, "nope.jpg")) }
+        assertEquals(false, File(guard.root, "tmp/photo-u1.jpg").exists())
+    }
+
+    @Test
     fun copiesBytesToTmpWithTheMimeExtension() {
         val r = importer().importStream("image/jpeg", jpeg.inputStream())
         assertEquals("tmp/pick-u1.jpg", r.path)

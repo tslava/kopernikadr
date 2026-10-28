@@ -31,6 +31,20 @@ class ActivityResultsTest {
     }
 
     @Test
+    fun cameraNeedsANonEmptyPhoto() {
+        assertEquals(Outcome.OK, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_OK, 1234))
+        assertEquals(Outcome.CANCELLED, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_OK, 0))
+        assertEquals(Outcome.CANCELLED, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_CANCELED, 1234))
+        assertEquals(Outcome.CANCELLED, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_CANCELED, 0))
+    }
+
+    @Test
+    fun cameraNullCallIsIgnored() {
+        assertEquals(Outcome.IGNORE, ActivityResults.cameraOutcome(false, ActivityResults.RESULT_OK, 1234))
+        assertEquals(Outcome.IGNORE, ActivityResults.cameraOutcome(false, ActivityResults.RESULT_CANCELED, 0))
+    }
+
+    @Test
     fun errorsMapToCodes() {
         assertEquals(NativeErrorCode.CANCELLED, ActivityResults.errorOf(Outcome.CANCELLED))
         assertEquals(NativeErrorCode.NO_APP, ActivityResults.errorOf(Outcome.NO_APP))
