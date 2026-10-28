@@ -634,7 +634,7 @@ Then the picker opens on "Moje" with the new sticker first.
     audio).
 - [x] The "O aplikacji" screen: MediaPipe (Apache 2.0) and the MagicTouch model credit.
       `README.md` / `remote/e2e/README.md`: the model fetch step.
-- [ ] Move this plan to `docs/plans/completed/`. (moved by the orchestrator after the Codex review)
+- [x] Move this plan to `docs/plans/completed/` (after the Codex review: 4 passes, 15 findings fixed)
 
 ## Post-Completion
 *Requires the owner or the kid; informational only.*
