@@ -28,6 +28,7 @@ class NativeApiImageTest {
             writer = VideoWriter(guard, DirSync.NONE, disk = disk),
             gallery = GalleryPublisher(FakeMediaStore(), "pkg", temp.newFolder("vol"), disk, 0),
             images = ImageImport(guard, ids = { "i1" }),
+            seg = SegSession(guard, FakeLoader(), { FakeEngine() }, temp.newFolder("state")),
             testImportRoots = listOf(downloads),
         )
     }
@@ -59,6 +60,30 @@ class NativeApiImageTest {
         val r = api.testImportImage(args("path" to f.path))
         assertEquals(mapOf("path" to "tmp/pick-i1.png", "mime" to "image/png"), r)
         assertEquals("source is kept", true, f.isFile)
+    }
+
+    @Test
+    fun segOpenRunCloseThroughTheBridgeArgs() {
+        File(guard.root, "tmp/pick-i1.png").also { it.parentFile!!.mkdirs(); it.writeBytes(png) }
+        val o = api.segOpen(args("path" to "tmp/pick-i1.png"))
+        val handle = o["handle"] as String
+        assertEquals(mapOf("image" to "tmp/seg-$handle.png", "width" to 8, "height" to 6, "hasAlpha" to false), o - "handle")
+        val strokes = listOf(mapOf("mode" to "add", "points" to listOf(listOf(0.5, 0.5))))
+        val r = api.segRun(args("handle" to handle, "strokes" to strokes))
+        assertEquals("tmp/seg-$handle.mask", r["mask"])
+        assertEquals("gpu", r["delegate"])
+        assertEquals(emptyMap<String, Any>(), api.segClose(args("handle" to handle)))
+        expectCode(NativeErrorCode.NO_SESSION) { api.segRun(args("handle" to handle, "strokes" to strokes)) }
+    }
+
+    @Test
+    fun segArgumentsAreValidated() {
+        File(guard.root, "tmp/pick-i1.png").also { it.parentFile!!.mkdirs(); it.writeBytes(png) }
+        expectCode(NativeErrorCode.BAD_ARGUMENT) { api.segOpen(args("path" to "tmp/pick-i1.png", "maxSide" to 10)) }
+        expectCode(NativeErrorCode.BAD_ARGUMENT) { api.segOpen(args()) }
+        val handle = api.segOpen(args("path" to "tmp/pick-i1.png", "maxSide" to 512))["handle"] as String
+        expectCode(NativeErrorCode.BAD_ARGUMENT) { api.segRun(args("handle" to handle)) }
+        expectCode(NativeErrorCode.BAD_ARGUMENT) { api.segRun(args("handle" to handle, "strokes" to emptyList<Any>())) }
     }
 
     @Test

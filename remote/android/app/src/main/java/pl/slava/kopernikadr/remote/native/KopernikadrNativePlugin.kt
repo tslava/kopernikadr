@@ -17,24 +17,29 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 
 /**
  * In-app Capacitor plugin `KopernikadrNative` (TS facade: `remote/lib/native.ts`). Thin: every
  * method runs [NativeApi] on one background thread (so calls are serialized and never block the
  * main thread) and rejects with `code` = a [NativeErrorCode] name.
  *
- * Image work (copying a picked image, later decoding and segmenting) runs on its own single-thread
- * [segExecutor], so a slow segmenter call never delays frame downloads or project saves queued on
- * the shared executor. It is a scheduled one for the segmenter session's idle timeout.
+ * Image work (copying a picked image, decoding and segmenting: `segOpen` / `segRun` / `segClose`)
+ * runs on its own single-thread [segExecutor], so a slow segmenter call never delays frame downloads
+ * or project saves queued on the shared executor. It is a scheduled one for the segmenter session's
+ * idle timeout, and the only thread that touches [seg].
  */
 @CapacitorPlugin(name = "KopernikadrNative")
 class KopernikadrNativePlugin : Plugin() {
     private lateinit var api: NativeApi
+    private lateinit var seg: SegSession
     private lateinit var executor: ExecutorService
     private lateinit var segExecutor: ScheduledExecutorService
     private var debuggable = false
@@ -44,6 +49,13 @@ class KopernikadrNativePlugin : Plugin() {
         val guard = PathGuard.forFilesDir(ctx.filesDir)
         val dirSync = AndroidDirSync()
         val log: (String) -> Unit = { Log.i(TAG, it) }
+        seg = SegSession(
+            guard = guard,
+            loader = AndroidImageLoader(),
+            engines = MediaPipeEngineFactory(ctx),
+            stateDir = ctx.noBackupFilesDir,
+            log = log,
+        )
         api = NativeApi(
             files = AtomicFiles(guard, dirSync, StatFsDiskSpace),
             writer = VideoWriter(guard, dirSync, disk = StatFsDiskSpace, reserveBytes = GalleryPublisher.RESERVE_BYTES),
@@ -54,6 +66,7 @@ class KopernikadrNativePlugin : Plugin() {
                 disk = StatFsDiskSpace,
             ),
             images = ImageImport(guard),
+            seg = seg,
             testImportRoots = listOfNotNull(
                 File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOWNLOADS),
                 ctx.getExternalFilesDir(null),
@@ -64,6 +77,17 @@ class KopernikadrNativePlugin : Plugin() {
         // a photo left by a process death while the camera was in front is of no use to anyone
         File(ctx.cacheDir, CAPTURE_DIR).deleteRecursively()
         segExecutor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "KopernikadrSeg") }
+        segExecutor.scheduleWithFixedDelay(
+            {
+                try {
+                    val n = seg.closeIdle()
+                    if (n > 0) log("closed $n idle segmenter session(s)")
+                } catch (e: Throwable) {
+                    Log.w(TAG, "idle segmenter close failed", e)
+                }
+            },
+            IDLE_CHECK_SECONDS, IDLE_CHECK_SECONDS, TimeUnit.SECONDS,
+        )
         executor = Executors.newSingleThreadExecutor { r -> Thread(r, "KopernikadrNative") }
         // Startup sweep (§5.7): an export killed mid-encode or mid-publish leaves an exports/ file
         // and maybe a pending gallery row. Queued first on the serial executor, so it finishes
@@ -80,7 +104,9 @@ class KopernikadrNativePlugin : Plugin() {
 
     override fun handleOnDestroy() {
         executor.shutdown()
-        segExecutor.shutdownNow()
+        // queued work (and a run in progress) finishes, the sessions are closed last, then the thread ends
+        closeSegSessions()
+        segExecutor.shutdown()
     }
 
     @PluginMethod
@@ -211,8 +237,29 @@ class KopernikadrNativePlugin : Plugin() {
 
     private fun capturePhotoFile() = File(File(context.cacheDir, CAPTURE_DIR), "photo.jpg")
 
-    /** Frees the segmenter session's memory while another app is in front (the session arrives with the segmenter). */
-    private fun closeSegSessions() {}
+    /** Frees the segmenter's memory while another app is in front (or on destroy); runs on the segmenter executor. */
+    private fun closeSegSessions() {
+        try {
+            segExecutor.execute {
+                try {
+                    seg.closeAll()
+                } catch (e: Throwable) {
+                    Log.w(TAG, "closing the segmenter sessions failed", e)
+                }
+            }
+        } catch (e: RejectedExecutionException) {
+            // already shut down: nothing is left to close
+        }
+    }
+
+    @PluginMethod
+    fun segOpen(call: PluginCall) = run(call, api::segOpen, segExecutor)
+
+    @PluginMethod
+    fun segRun(call: PluginCall) = run(call, api::segRun, segExecutor)
+
+    @PluginMethod
+    fun segClose(call: PluginCall) = run(call, api::segClose, segExecutor)
 
     /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
     @PluginMethod
@@ -236,7 +283,7 @@ class KopernikadrNativePlugin : Plugin() {
 
     private fun run(call: PluginCall, op: (BridgeArgs) -> Map<String, Any>, on: ExecutorService = executor) {
         val data = call.data
-        val args = BridgeArgs { name -> data.opt(name).takeUnless { it == null || it == JSONObject.NULL } }
+        val args = BridgeArgs { name -> plain(data.opt(name)) }
         runOn(on, call) { op(args) }
     }
 
@@ -258,6 +305,14 @@ class KopernikadrNativePlugin : Plugin() {
         }
     }
 
+    /** JSON arrays and objects as plain lists and maps (so [BridgeArgs] and the validators stay JVM-testable); JSON null as null. */
+    private fun plain(v: Any?): Any? = when (v) {
+        null, JSONObject.NULL -> null
+        is JSONArray -> List(v.length()) { plain(v.opt(it)) }
+        is JSONObject -> v.keys().asSequence().associateWith { plain(v.opt(it)) }
+        else -> v
+    }
+
     private fun Map<String, Any>.toJSObject() = JSObject().also { o ->
         for ((k, v) in this) {
             when (v) {
@@ -273,5 +328,6 @@ class KopernikadrNativePlugin : Plugin() {
     private companion object {
         const val TAG = "KopernikadrNative"
         private const val CAPTURE_DIR = "capture"
+        private const val IDLE_CHECK_SECONDS = 30L
     }
 }

@@ -31,6 +31,7 @@ class NativeApiTest {
             writer = VideoWriter(guard, DirSync.NONE, ids = { "h${++n}" }, disk = disk),
             gallery = GalleryPublisher(store, "pkg", temp.newFolder("sdcard"), disk, 0),
             images = ImageImport(guard, ids = { "i1" }),
+            seg = SegSession(guard, FakeLoader(), { FakeEngine() }, temp.newFolder("state")),
             log = { logs += it },
         )
     }

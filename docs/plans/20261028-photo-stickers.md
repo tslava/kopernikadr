@@ -514,12 +514,12 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify: `NativeApi.kt`, `KopernikadrNativePlugin.kt` (`segOpen`/`segRun`/`segClose` on the segmenter executor; `JSONArray` → plain lists), `NativeErrors.kt`, `remote/lib/native.ts`
 - Create: `remote/lib/stickers/segClient.ts` (+ `FakeSegClient`), `segClient.test.ts`; JVM tests `SegSessionTest.kt`, `SegStrokesTest.kt`, `ImageLoadSizeTest.kt`
 
-- [ ] `ImageLoad`:
+- [x] `ImageLoad`:
   - `ImageDecoder` with a target long side of 1024;
   - writes `tmp/seg-<handle>.png`;
   - deletes the source;
   - `hasAlpha`.
-- [ ] `SegSession`:
+- [x] `SegSession`:
   - the engine is created lazily on the first run;
   - the GPU-crash marker, and the CPU fallback with re-`setImage` and one retry;
   - the raw mask goes to `tmp/seg-<handle>.mask`;
@@ -527,12 +527,12 @@ Then the picker opens on "Moje" with the new sticker first.
   - idle close after 5 min;
   - `close` deletes the session files;
   - `MODEL_MISSING` and `NO_SESSION`.
-- [ ] `segClient`:
+- [x] `segClient`:
   - serializes calls;
   - a newer run supersedes a queued one;
   - reads the mask via `fetch(convertFileSrc).arrayBuffer()`;
   - `segClose` runs on dispose.
-- [ ] JVM tests (pure, fake engine):
+- [x] JVM tests (pure, fake engine):
   - stroke validation;
   - target-size math;
   - open/run/close;
@@ -540,8 +540,8 @@ Then the picker opens on "Moje" with the new sticker first.
   - the marker present → CPU;
   - idle close;
   - a run after close.
-- [ ] Vitest: `segClient` queue/supersede, error mapping, close on dispose.
-- [ ] Run tests; they must pass before Task 9.
+- [x] Vitest: `segClient` queue/supersede, error mapping, close on dispose.
+- [x] Run tests; they must pass before Task 9.
 
 ### Task 9: Cut step in StickerMaker
 **Files:**

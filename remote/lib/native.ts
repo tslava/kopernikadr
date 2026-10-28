@@ -55,6 +55,12 @@ export const NATIVE_ERROR_CODES: readonly NativeErrorCode[] = [
   'NO_SESSION',
 ];
 
+/** One brush stroke over the image (`add` to the cut-out or `erase` from it), points normalized to 0..1. */
+export interface SegStrokeArg {
+  mode: 'add' | 'erase';
+  points: [number, number][];
+}
+
 export type InstallResult = 'INSTALLED' | 'ALREADY_INSTALLED';
 
 export interface KopernikadrNativePlugin {
@@ -108,6 +114,37 @@ export interface KopernikadrNativePlugin {
    * Rejects `CANCELLED` (backed out, or an empty file) and `NO_APP`.
    */
   takePhoto(): Promise<{ path: string }>;
+
+  /**
+   * Decodes the image at `path` (in `tmp/`; EXIF orientation applied, long side at most `maxSide`,
+   * default 1024) into `tmp/seg-<handle>.png`, deletes the source and opens a segmenter session.
+   * `image` is the exact image the mask refers to. `hasAlpha`: a pixel has alpha < 250 (skip the
+   * segmenter). No engine yet. Opening a session closes any other. Rejects `NOT_FOUND`, `UNSUPPORTED`.
+   */
+  segOpen(options: { path: string; maxSide?: number }): Promise<{
+    handle: string;
+    image: string;
+    width: number;
+    height: number;
+    hasAlpha: boolean;
+  }>;
+
+  /**
+   * Segments with the whole stroke list (points normalized 0..1; at most 50 strokes of 1..2000
+   * points). `mask` is `tmp/seg-<handle>.mask`: `width * height` raw uint8 bytes (confidence x 255),
+   * overwritten each run. The first run is slow (engine warm-up). Rejects `NO_SESSION`,
+   * `MODEL_MISSING`, `SEG_FAILED`.
+   */
+  segRun(options: { handle: string; strokes: SegStrokeArg[] }): Promise<{
+    mask: string;
+    width: number;
+    height: number;
+    ms: number;
+    delegate: 'gpu' | 'cpu';
+  }>;
+
+  /** Closes the session and deletes `tmp/seg-<handle>.*`. Idempotent. */
+  segClose(options: { handle: string }): Promise<void>;
 
   /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
   __testImportImage(options: { path: string }): Promise<{ path: string; mime: string }>;
