@@ -37,7 +37,11 @@ android {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            // The MediaPipe model is read as a memory-mapped asset: keep it stored, not deflated.
+            noCompress 'task'
         }
+        // The tablet and the emulator are both arm64; this drops ~14 MB per extra ABI.
+        ndk { abiFilters 'arm64-v8a' }
     }
     signingConfigs {
         if (releaseKeystoreProps != null) {
@@ -82,6 +86,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation "com.google.mediapipe:tasks-vision:1.1.1"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -89,6 +94,26 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+// The segmenter model is not in the repo (remote/scripts/fetch-models.mjs puts it into the assets).
+// Without a verified copy the APK would build and then fail at runtime with MODEL_MISSING, so fail here.
+def segModelSha256 = '38431bc66b883404e8397f74c3579404315b9b52b04a46c6346fe906a7309b03'
+tasks.register('checkSegModel') {
+    def model = file('src/main/assets/mediapipe/interactive_segmentation.task')
+    doLast {
+        def hint = "run `node scripts/fetch-models.mjs` in remote/ (it downloads and verifies the model)"
+        if (!model.isFile()) throw new GradleException("MediaPipe model missing: ${model}; ${hint}")
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        model.withInputStream { ins ->
+            def buf = new byte[1 << 16]
+            int n
+            while ((n = ins.read(buf)) > 0) digest.update(buf, 0, n)
+        }
+        def actual = digest.digest().collect { String.format('%02x', it) }.join()
+        if (actual != segModelSha256) throw new GradleException("MediaPipe model has the wrong sha256 (${actual}); ${hint}")
+    }
+}
+tasks.named('preBuild') { dependsOn 'checkSegModel' }
 
 try {
     def servicesJSON = file('google-services.json')

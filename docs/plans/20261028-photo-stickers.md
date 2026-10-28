@@ -477,20 +477,20 @@ Then the picker opens on "Moje" with the new sticker first.
 - Create: `remote/scripts/fetch-models.mjs`, `remote/scripts/fetch-models.test.mjs`
 - Modify: `remote/android/app/build.gradle` (dependency, `noCompress 'task'`, `abiFilters 'arm64-v8a'`, `checkSegModel` on `preBuild`), `remote/android/.gitignore`, `remote/package.json` (`android:debug` runs the fetch), `scripts/build.sh`, `remote/VERSIONS.md`
 
-- [ ] Fetch script:
+- [x] Fetch script:
   - pinned URL + sha256;
   - the cache `~/.kopernikadr/models/<sha>.task`;
   - copied into assets;
   - a hash match skips, a mismatch fails and deletes.
-- [ ] Gradle `checkSegModel` fails the build with a clear message when the asset is missing or wrong.
-- [ ] Add the dependency, `noCompress` and the ABI filter. Run the transitive dependency audit (all
+- [x] Gradle `checkSegModel` fails the build with a clear message when the asset is missing or wrong.
+- [x] Add the dependency, `noCompress` and the ABI filter. Run the transitive dependency audit (all
       new or bumped artifacts stable and ≥ 14 days old) and record it in `remote/VERSIONS.md`. Check
       that the merged manifest has no `CAMERA` permission.
-- [ ] Build the debug APK; check `unzip -lv` (the model is stored uncompressed, only arm64 `.so`
+- [x] Build the debug APK; check `unzip -lv` (the model is stored uncompressed, only arm64 `.so`
       files) and record the APK size delta.
-- [ ] Tests for the fetch script (injected fetch: skip on match, fail on mismatch,
+- [x] Tests for the fetch script (injected fetch: skip on match, fail on mismatch,
       download-then-verify, cache reuse).
-- [ ] Run tests (`npm run test:scripts`, `npm test`); they must pass before Task 7.
+- [x] Run tests (`npm run test:scripts`, `npm test`); they must pass before Task 7.
 
 ### Task 7: Native photo capture
 **Files:**
