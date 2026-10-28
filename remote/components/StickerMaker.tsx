@@ -138,26 +138,28 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
     const req = gate.current.begin();
     // stale = unmounted, cancelled or replaced by a newer pick; a stale request never touches the state
     const stale = () => !live.current || !gate.current.current(req) || stepRef.current !== 'loading';
-    // a newer pick that is loading owns the native session (its `open` replaces ours); otherwise free it
-    const releaseIfIdle = () => {
-      if (stepRef.current !== 'loading') void seg().close();
+    // The native session this request opened itself (`SegImage.image` names it). A stale request closes
+    // only that one, never the session of a newer pick or of the current cut step.
+    let ownImage: string | undefined;
+    const releaseOwn = () => {
+      if (ownImage !== undefined) void seg().close(ownImage);
     };
     let path: string | undefined;
     try {
       ({ path } = await get());
       if (stale()) {
         void removeStoreFile(path);
-        releaseIfIdle();
         return;
       }
       const opened = await seg().open(path);
+      ownImage = opened.image;
       if (stale()) {
-        releaseIfIdle();
+        releaseOwn();
         return;
       }
       const img = await decodeImage(await storeFileUrl(opened.image));
       if (stale()) {
-        releaseIfIdle(); // the kid backed out (or asked for another picture) while the picture loaded
+        releaseOwn(); // the kid backed out (or asked for another picture) while the picture loaded
         return;
       }
       if (opened.hasAlpha) {
@@ -175,7 +177,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
     } catch (e) {
       if (path) void removeStoreFile(path); // `segOpen` deletes it only on success; the sweep does the rest
       if (stale()) {
-        releaseIfIdle();
+        releaseOwn();
         return;
       }
       void seg().close();

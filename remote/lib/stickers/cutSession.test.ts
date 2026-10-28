@@ -102,6 +102,25 @@ describe('reopenFrom', () => {
     expect(removed).toEqual(['tmp/seg-src-u1.png']);
   });
 
+  it('a failed PNG encode or write still removes the temporary file and never opens', async () => {
+    for (const over of [
+      { encodePng: async () => { throw new Error('encode'); } },
+      { write: async () => { throw new Error('disk full'); } },
+    ] as Partial<ReopenIO>[]) {
+      const seg = new FakeSegClient();
+      const { base, removed } = io(over);
+      await expect(reopenFrom(seg, () => photo, base)()).rejects.toThrow();
+      expect(seg.opened).toEqual([]);
+      expect(removed).toEqual(['tmp/seg-src-u1.png']);
+    }
+  });
+
+  it('a failing cleanup does not mask the original error', async () => {
+    const seg = new FakeSegClient({ open: () => { throw new SegError('UNSUPPORTED', 'x'); } });
+    const { base } = io({ remove: async () => { throw new Error('rm failed'); } });
+    await expect(reopenFrom(seg, () => photo, base)()).rejects.toMatchObject({ code: 'UNSUPPORTED' });
+  });
+
   it('without a photo there is nothing to reopen', async () => {
     const { base, written } = io();
     await expect(reopenFrom(new FakeSegClient(), () => null, base)()).rejects.toMatchObject({ code: 'NO_SESSION' });

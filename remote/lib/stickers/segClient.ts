@@ -42,8 +42,11 @@ export interface SegClient {
    * so a real `run` made meanwhile waits for it and then reuses the warm engine. Never rejects.
    */
   warm(): Promise<void>;
-  /** Idempotent; never rejects. */
-  close(): Promise<void>;
+  /**
+   * Idempotent; never rejects. With `image` (the `SegImage.image` an `open` returned) it closes only the
+   * session that open made: when another `open` has replaced it meanwhile, nothing happens.
+   */
+  close(image?: string): Promise<void>;
 }
 
 /** The warm-up stroke: one point in the middle of the picture. */
@@ -95,6 +98,8 @@ const toSegError = (e: unknown): SegError =>
 export function createSegClient(deps: SegDeps = appDeps()): SegClient {
   let tail: Promise<unknown> = Promise.resolve();
   let handle: string | undefined;
+  /** `SegImage.image` of the session `handle` belongs to. */
+  let handleImage: string | undefined;
   /** The run waiting in the queue (not started yet), if any. */
   let queued: { superseded: boolean; cancel(): void } | undefined;
 
@@ -107,6 +112,7 @@ export function createSegClient(deps: SegDeps = appDeps()): SegClient {
   const closeNow = async (): Promise<void> => {
     const h = handle;
     handle = undefined;
+    handleImage = undefined;
     if (h === undefined) return;
     try {
       await deps.native.segClose({ handle: h });
@@ -123,6 +129,7 @@ export function createSegClient(deps: SegDeps = appDeps()): SegClient {
         try {
           const o = await deps.native.segOpen(maxSide === undefined ? { path } : { path, maxSide });
           handle = o.handle;
+          handleImage = o.image;
           return { image: o.image, width: o.width, height: o.height, hasAlpha: o.hasAlpha };
         } catch (e) {
           throw toSegError(e);
@@ -177,9 +184,15 @@ export function createSegClient(deps: SegDeps = appDeps()): SegClient {
       });
     },
 
-    close() {
-      queued?.cancel();
-      return enqueue(closeNow);
+    close(image) {
+      if (image === undefined) {
+        queued?.cancel();
+        return enqueue(closeNow);
+      }
+      // only the session that produced `image`: decided when it is this close's turn in the queue
+      return enqueue(async () => {
+        if (handleImage === image) await closeNow();
+      });
     },
   };
 }
@@ -189,6 +202,8 @@ export class FakeSegClient implements SegClient {
   readonly opened: string[] = [];
   readonly runs: SegStrokeArg[][] = [];
   closes = 0;
+  /** The `image` argument of every `close` call (undefined = close whatever is open). */
+  readonly closeArgs: (string | undefined)[] = [];
   warms = 0;
 
   constructor(
@@ -214,7 +229,8 @@ export class FakeSegClient implements SegClient {
     this.warms++;
   }
 
-  async close(): Promise<void> {
+  async close(image?: string): Promise<void> {
     this.closes++;
+    this.closeArgs.push(image);
   }
 }

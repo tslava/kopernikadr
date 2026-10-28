@@ -21,7 +21,7 @@ function setup(opts: { maskBytes?: (w: number, h: number) => Uint8Array } = {}) 
     native: {
       async segOpen(o) {
         log.push(`open ${o.path} ${o.maxSide ?? '-'}`);
-        return { handle: `h${log.length}`, image: 'tmp/seg-x.png', width: 4, height: 2, hasAlpha: false };
+        return { handle: `h${log.length}`, image: `tmp/seg-h${log.length}.png`, width: 4, height: 2, hasAlpha: false };
       },
       async segRun(o) {
         const n = ++state.runs;
@@ -51,7 +51,7 @@ describe('segClient', () => {
   it('opens a session and returns the image info', async () => {
     const t = setup();
     const c = createSegClient(t.deps);
-    expect(await c.open('tmp/pick-1.jpg')).toEqual({ image: 'tmp/seg-x.png', width: 4, height: 2, hasAlpha: false });
+    expect(await c.open('tmp/pick-1.jpg')).toEqual({ image: 'tmp/seg-h1.png', width: 4, height: 2, hasAlpha: false });
     expect(t.log).toEqual(['open tmp/pick-1.jpg -']);
     await c.open('tmp/pick-2.jpg', 512);
     // the old session is closed first
@@ -213,6 +213,23 @@ describe('segClient', () => {
     await c.close();
     expect(t.log.filter((l) => l.startsWith('close'))).toEqual(['close h1']);
     expect((await c.run([stroke(0.3)]).catch((x) => x)).code).toBe('NO_SESSION');
+  });
+});
+
+describe('segClient close(image)', () => {
+  it('closes only the session that open made; a replaced one is left alone', async () => {
+    const t = setup();
+    const c = createSegClient(t.deps);
+    const a = await c.open('tmp/a.jpg');
+    const b = await c.open('tmp/b.jpg'); // replaces (and closes) a
+    t.log.length = 0;
+    await c.close(a.image); // stale request A must not close B
+    expect(t.log).toEqual([]);
+    await c.close(b.image);
+    expect(t.log).toHaveLength(1);
+    expect(t.log[0]).toMatch(/^close h/);
+    await c.close(b.image); // idempotent
+    expect(t.log).toHaveLength(1);
   });
 });
 

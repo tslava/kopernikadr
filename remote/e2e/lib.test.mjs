@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile, newStickerId } from './lib.mjs';
+import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile, newStickerId, parseLibraryIndex, singleNewIndexId, ownTileUnique } from './lib.mjs';
 
 test('parseArgs', () => {
   const a = parseArgs(['--devtools', '9222', '--adb-restart', 'adb x', '--camera', 'http://h:1/']);
@@ -85,4 +85,31 @@ test('newStickerId finds only the sticker made by the run', () => {
   assert.equal(newStickerId(['a', 'b'], ['c', 'a', 'b']), 'c');
   assert.equal(newStickerId([], ['c']), 'c');
   assert.throws(() => newStickerId(['a'], ['x', 'y', 'a']), /more than one/);
+});
+
+test('parseLibraryIndex: absent file is empty, garbage aborts', () => {
+  assert.deepEqual(parseLibraryIndex(null), []);
+  assert.deepEqual(parseLibraryIndex(JSON.stringify({ v: 1, items: [{ id: 'a' }, { id: 'b' }] })), ['a', 'b']);
+  assert.throws(() => parseLibraryIndex(''));
+  assert.throws(() => parseLibraryIndex('{oops'));
+  assert.throws(() => parseLibraryIndex('{"v":1}'));
+  assert.throws(() => parseLibraryIndex('{"items":[{"id":1}]}'));
+  assert.throws(() => parseLibraryIndex('{"items":[null]}'));
+});
+
+test('singleNewIndexId: exactly one new id', () => {
+  assert.equal(singleNewIndexId(['a'], ['n', 'a']), 'n');
+  assert.equal(singleNewIndexId([], ['n']), 'n');
+  assert.throws(() => singleNewIndexId(['a'], ['a']));
+  assert.throws(() => singleNewIndexId(['a'], ['a', 'x', 'y']));
+  assert.throws(() => singleNewIndexId(['a', 'b'], ['a']));
+});
+
+test('ownTileUnique: only an exact, single id match is deletable', () => {
+  assert.equal(ownTileUnique([{ id: 'x' }, { id: 'n' }], 'n'), true);
+  assert.equal(ownTileUnique([{ id: 'x' }], 'n'), false);
+  assert.equal(ownTileUnique([{ id: 'n' }, { id: 'n' }], 'n'), false);
+  assert.equal(ownTileUnique([{ id: 'n1' }], 'n'), false);
+  assert.equal(ownTileUnique([{ id: 'n' }], null), false);
+  assert.equal(ownTileUnique([], ''), false);
 });

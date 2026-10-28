@@ -102,3 +102,36 @@ export function newStickerId(beforeIds, nowIds) {
   if (fresh.length > 1) throw new Error(`more than one new sticker appeared: ${fresh.join(', ')}`);
   return fresh[0] ?? null;
 }
+
+/**
+ * Ids in the persisted library index (`stickers/index.json`, `{ v: 1, items: [{ id, ... }] }`). `text === null`
+ * means the file does not exist yet (an empty library). Anything unreadable throws: the run must abort
+ * rather than guess which stickers are the child's.
+ */
+export function parseLibraryIndex(text) {
+  if (text === null) return [];
+  let doc;
+  try { doc = JSON.parse(text); } catch (e) { throw new Error(`stickers/index.json is not valid JSON: ${e.message}`); }
+  if (!doc || !Array.isArray(doc.items)) throw new Error('stickers/index.json has no items array');
+  const ids = doc.items.map((it) => it?.id);
+  if (ids.some((id) => typeof id !== 'string' || !id)) throw new Error('stickers/index.json has an item without a string id');
+  return ids;
+}
+
+/** The exactly-one id that is in the index after saving but was not before; throws on zero or several. */
+export function singleNewIndexId(beforeIds, afterIds) {
+  const known = new Set(beforeIds);
+  const fresh = [...new Set(afterIds)].filter((id) => !known.has(id));
+  if (fresh.length !== 1) throw new Error(`expected exactly one new sticker in index.json, got ${fresh.length}${fresh.length ? `: ${fresh.join(', ')}` : ''}`);
+  return fresh[0];
+}
+
+/**
+ * Whether the tile about to be tapped is the run's own sticker: `tiles` are the "Moje" tiles as
+ * `{ id }` (their data-sticker attribute), `expectedId` the id the index diff produced. True only for
+ * exactly one tile with exactly that id; never decided by position.
+ */
+export function ownTileUnique(tiles, expectedId) {
+  if (typeof expectedId !== 'string' || !expectedId) return false;
+  return tiles.filter((t) => t.id === expectedId).length === 1;
+}

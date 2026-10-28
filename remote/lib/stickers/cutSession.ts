@@ -46,16 +46,19 @@ export function reopenFrom(seg: SegClient, photo: () => Img | null, io: ReopenIO
     const img = photo();
     if (!img) throw new SegError('NO_SESSION', 'no picture to reopen');
     const path = `tmp/seg-src-${io.uuid()}.png`;
-    await io.write(path, await io.encodePng(img));
-    if (!isCurrent()) {
-      // `open` would cancel the newest queued run: the newer cut recovers itself
-      await io.remove(path);
-      throw new SegSupersededError();
-    }
+    // every failure path (encode, write, a superseded run, open) leaves no file behind; `open` deletes the
+    // source itself only when it succeeds
+    const cleanup = () => io.remove(path).catch(() => undefined);
     try {
+      const bytes = await io.encodePng(img);
+      await io.write(path, bytes);
+      if (!isCurrent()) {
+        // `open` would cancel the newest queued run: the newer cut recovers itself
+        throw new SegSupersededError();
+      }
       await seg.open(path);
     } catch (e) {
-      await io.remove(path); // open deletes the source only when it succeeds
+      await cleanup();
       throw e;
     }
   };

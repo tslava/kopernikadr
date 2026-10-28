@@ -16,7 +16,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { assertTestProject, movieStickerFile, myStickers, newStickerId, parseStickerArgs, pickPage, pointInRect } from './lib.mjs';
+import { assertTestProject, movieStickerFile, myStickers, newStickerId, ownTileUnique, parseLibraryIndex, parseStickerArgs, pickPage, pointInRect, singleNewIndexId } from './lib.mjs';
 
 const sh = promisify(exec);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -142,6 +142,51 @@ async function openMaker() {
   await waitFor('maker', `!!document.querySelector('[role=dialog][aria-label=${J(T.make)}]')`, 5_000);
 }
 
+const INDEX_REL = 'files/kopernikadr/stickers/index.json';
+/** Ids in the persisted library index; throws (aborting the run) when the file exists but cannot be read or parsed. */
+async function readLibraryIds() {
+  if (!(await exists(INDEX_REL))) return [];
+  return parseLibraryIndex((await sh(`${args.adb} shell run-as ${args.pkg} cat ${INDEX_REL}`)).stdout);
+}
+
+/** Snapshot of the persisted index BEFORE saving; the run must not start saving when it cannot be taken. */
+const snapshotLibrary = readLibraryIds;
+
+/** After saving: the one id the index gained, which must also be the new UI tile `uiId`. */
+async function confirmNewSticker(beforeIds, uiId) {
+  const id = singleNewIndexId(beforeIds, await readLibraryIds());
+  if (id !== uiId) throw new Error(`the new tile ${uiId} is not the id the index gained (${id})`);
+  return id;
+}
+
+/**
+ * Deletes the run's own sticker `id` (confirmed by the index diff) from the open "Moje" tab. Verifies the
+ * tile by its data-sticker attribute right before tapping; if it cannot be identified, deletes nothing and
+ * returns a note so a human cleans up (the child's other stickers are never at risk).
+ */
+async function deleteOwnSticker(id) {
+  const tiles = await mineIds().then((ids) => ids.map((i) => ({ id: i })));
+  if (!ownTileUnique(tiles, id)) {
+    ctx.leftovers.push(id);
+    return `NOT deleted: no unique "Moje" tile for ${id}; remove the run's sticker by hand`;
+  }
+  const clicked = await ev(`(() => {
+    const tiles = [...document.querySelectorAll('.mine-wrap')].filter((w) => w.querySelector('[data-sticker]')?.getAttribute('data-sticker') === ${J(id)});
+    if (tiles.length !== 1) return false;
+    const del = tiles[0].querySelector('[data-testid=mine-del]');
+    if (!del) return false;
+    del.click();
+    return true;
+  })()`);
+  if (!clicked) {
+    ctx.leftovers.push(id);
+    return `NOT deleted: the delete button of ${id} was not found; remove the run's sticker by hand`;
+  }
+  await click('confirm', byTid('mine-del-confirm'), 5_000);
+  await waitFor('tile gone', `!document.querySelector('[data-sticker=${J(id)}]')`, 10_000);
+  return 'deleted';
+}
+
 const mineIds = () => ev(`[...document.querySelectorAll('.picker-grid.mine [data-sticker]')].map((e) => e.getAttribute('data-sticker'))`).catch(() => []);
 
 /** Ids of the "Moje" tiles now, recorded before saving so only the sticker made by the run is ever touched. */
@@ -163,7 +208,7 @@ async function waitNewMineTile(beforeIds) {
 
 // ---- steps ------------------------------------------------------------------------------------
 
-const ctx = { uuid: null, timings: {} };
+const ctx = { uuid: null, timings: {}, leftovers: [] };
 const steps = [];
 
 steps.push(['0 safety: the movie is a "Test..." one with frames', async () => {
@@ -208,9 +253,11 @@ steps.push(['3 Komiks, Zapisz, "Moje" tile, place, project.json + copy', async (
   await click('Komiks', `document.querySelector('[data-style=komiks]')`);
   await waitFor('Komiks selected', `document.querySelector('[data-style=komiks]').getAttribute('aria-checked') === 'true'`, 5_000);
   const before = await recordMineIds();
+  const indexBefore = await snapshotLibrary();
   const t0 = Date.now();
   await click('Zapisz', byTid('maker-save'));
   ctx.uuid = await waitNewMineTile(before);
+  await confirmNewSticker(indexBefore, ctx.uuid);
   ctx.timings.saveMs = Date.now() - t0;
   await ev(`document.querySelector('.picker-grid.mine [data-sticker=${J(ctx.uuid)}]').click(); true`);
   await waitFor('picker closed', `!document.querySelector('[role=dialog].picker')`, 10_000);
@@ -231,9 +278,8 @@ steps.push(['4 delete from "Moje", the movie copy stays', async () => {
   await waitFor('picker', `!!document.querySelector('[role=dialog].picker')`, 15_000);
   await click('"Moje" tab', `document.querySelector('[role=tab][data-tab=mine]')`);
   await waitFor('tile', `!!document.querySelector('.mine-wrap [data-sticker=${J(ctx.uuid)}]')`, 10_000);
-  await ev(`document.querySelector('.mine-wrap:has([data-sticker=${J(ctx.uuid)}]) [data-testid=mine-del]').click(); true`);
-  await click('confirm', byTid('mine-del-confirm'), 5_000);
-  await waitFor('tile gone', `!document.querySelector('[data-sticker=${J(ctx.uuid)}]')`, 10_000);
+  const note = await deleteOwnSticker(ctx.uuid);
+  if (note !== 'deleted') throw new Error(note);
   await ev(`${byLabel('Zamknij')}?.click(); true`).catch(() => {});
   if (await exists(`files/kopernikadr/stickers/${ctx.uuid}.webp`)) throw new Error('library file still exists');
   if (!(await exists(movieStickerFile(args.project, ctx.uuid)))) throw new Error('the movie copy vanished with the library item');
@@ -250,13 +296,13 @@ steps.push(['5 transparent PNG skips the cut', async () => {
   await click('"Z galerii"', byTid('maker-gallery'));
   await waitFor('style step directly (no cut stage)', `!!document.querySelector('[data-style]') && !document.querySelector('[data-testid=cut-stage]')`, 30_000);
   const before = await recordMineIds();
+  const indexBefore = await snapshotLibrary();
   await click('Zapisz', byTid('maker-save'));
-  // cleanup: only the tile made by this run (existing stickers of the child are never touched)
+  // cleanup: only the sticker made by this run, proven by the index diff and the tile's id
   const id = await waitNewMineTile(before);
-  await ev(`document.querySelector('.mine-wrap:has([data-sticker=${J(id)}]) [data-testid=mine-del]').click(); true`);
-  await click('confirm', byTid('mine-del-confirm'), 5_000);
-  await waitFor('tile gone', `!document.querySelector('[data-sticker=${J(id)}]')`, 10_000);
-  return 'PNG went alpha -> style, saved and removed';
+  await confirmNewSticker(indexBefore, id);
+  const note = await deleteOwnSticker(id);
+  return `PNG went alpha -> style, saved; cleanup: ${note}`;
 }]);
 
 // ---- run ---------------------------------------------------------------------------------------
@@ -276,5 +322,6 @@ for (const [name, fn] of steps) {
   }
 }
 ws?.close();
+if (ctx.leftovers.length) console.log(`LEFTOVER stickers made by this run, remove by hand from "Moje": ${ctx.leftovers.join(', ')}`);
 console.log(J({ project: args.project, timings: ctx.timings, results }, null, 2));
 process.exit(results.some((r) => !r.ok) || results.length < steps.length ? 1 : 0);
