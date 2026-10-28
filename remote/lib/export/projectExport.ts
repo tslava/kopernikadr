@@ -12,6 +12,7 @@ import type { Project } from '../projects/model';
 import { PLAY_HEIGHT, PLAY_WIDTH, type FrameSource } from '../play/frameSource';
 import { playableItems, timeline } from '../projects/timeline';
 import { drawFrame, drawStickers, type Ctx2D } from '../render/compose';
+import type { SpriteUrlOf } from '../render/catalog';
 import { SpriteCache, type PinnedSprites } from '../render/sprites';
 import { createStore, type Store } from '../state/store';
 import type { TransferPause } from '../transfer/types';
@@ -160,8 +161,12 @@ export class NoCodecError extends Error {
 /** A sticker's sprite could not be loaded: the export fails instead of silently dropping the sticker. */
 export class SpriteLoadError extends Error {
   readonly code = 'SPRITE_LOAD_FAILED';
+  /** The sprite ids that did not load (hexcodes and `my:<uuid>`); the message names them too. */
+  readonly failed: string[];
   constructor(cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause));
+    const f = (cause as { failed?: unknown } | null)?.failed;
+    this.failed = Array.isArray(f) ? f.filter((x): x is string => typeof x === 'string') : [];
     this.name = 'SpriteLoadError';
   }
 }
@@ -204,6 +209,8 @@ export interface ExportDeps {
   frameSource: FrameSource;
   /** Preloads every sprite the movie uses (default: a SpriteCache). */
   sprites?: Pick<SpriteCache, 'preload'>;
+  /** Sprite urls of the project being exported (custom stickers resolve to the movie's copies). Used when `sprites` is not given. */
+  spriteUrlOf?: (projectId: string) => SpriteUrlOf;
   /** Default: an OffscreenCanvas of the export size. */
   createCanvas?: (width: number, height: number) => ComposeCanvas;
   /** One writer per export (it holds one temp file). */
@@ -280,7 +287,6 @@ const isAbort = (e: unknown) => (e as { name?: unknown } | null)?.name === 'Abor
 
 export function createExportController(deps: ExportDeps): ExportController {
   const state = createStore<ExportState>({ phase: 'idle' });
-  const spriteCache = deps.sprites ?? new SpriteCache();
   let abort: AbortController | null = null;
   let running = false;
 
@@ -307,6 +313,7 @@ export function createExportController(deps: ExportDeps): ExportController {
       const entryIds = new Set(items.map((e) => e.id));
       const hexcodes = stickers.filter((st) => st.on.some((id) => entryIds.has(id))).map((st) => st.emoji);
       if (hexcodes.length > 0) {
+        const spriteCache = deps.sprites ?? new SpriteCache(undefined, undefined, deps.spriteUrlOf?.(project.id));
         try {
           pinned = await spriteCache.preload(hexcodes, EXPORT_SPRITE_BUCKET);
         } catch (e) {

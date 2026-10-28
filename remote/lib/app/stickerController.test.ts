@@ -7,7 +7,7 @@ import { mergeFrame, setLocal } from '../projects/reducers';
 import { ProjectStore } from '../projects/store';
 import { moveEntry } from '../projects/edit';
 import { handlePoint } from '../render/stickerGeometry';
-import { pickSticker, reconcileSticker, StickerController, stickersOn, withLivePose } from './stickerController';
+import { pickSticker, reconcileSticker, StickerController, StickerCopyError, stickersOn, withLivePose } from './stickerController';
 
 const info = (projectId: string, frameId: string, seq: number): FrameInfo => ({
   frameId, seq, projectId, clientId: 'c', rotation: 0, capturedAt: '2026-10-27T10:00:00.000Z',
@@ -17,7 +17,7 @@ const info = (projectId: string, frameId: string, seq: number): FrameInfo => ({
 const W = 400;
 const H = 300;
 
-async function setup(frames = 5) {
+async function setup(frames = 5, copySticker?: (id: string, pid: string) => Promise<void>) {
   let n = 0;
   const fs = new FakeFs();
   const store = new ProjectStore(fs, { now: () => 1_700_000_000_000, newId: () => 'p1' });
@@ -30,7 +30,7 @@ async function setup(frames = 5) {
   });
   const exporting = createStore(false);
   const history = new EditHistory();
-  const c = new StickerController({ store, exporting, history, newId: () => `s${++n}` });
+  const c = new StickerController({ store, exporting, history, copySticker, newId: () => `s${++n}` });
   const project = () => store.state.get().projects.p1!;
   const sticker = (id = 's1') => project().stickers!.find((s) => s.id === id)!;
   return { c, store, exporting, history, project, sticker };
@@ -173,5 +173,52 @@ describe('StickerController', () => {
     expect(await c.add('p1', 'f2', '1F431')).toBeNull();
     expect(await c.remove('p1', 's1')).toBe(false);
     expect(project().stickers).toHaveLength(1);
+  });
+});
+
+describe('StickerController: custom stickers (copy-on-place)', () => {
+  const UUID = '0123abcd-0123-4abc-8abc-0123456789ab';
+  const MY = `my:${UUID}`;
+
+  it('copies the library sticker into the movie first, then places it', async () => {
+    const calls: string[] = [];
+    const { c, project, sticker } = await setup(5, async (id, pid) => void calls.push(`${pid}/${id}`));
+    expect(await c.add('p1', 'f2', MY)).toBe('s1');
+    expect(calls).toEqual([`p1/${UUID}`]);
+    expect(sticker().emoji).toBe(MY);
+    expect(project().stickers).toHaveLength(1);
+  });
+
+  it('a failed copy places nothing, writes nothing and throws StickerCopyError', async () => {
+    const { c, project, history } = await setup(5, async () => {
+      throw new Error('disk full');
+    });
+    const before = project();
+    await expect(c.add('p1', 'f2', MY)).rejects.toBeInstanceOf(StickerCopyError);
+    expect(project()).toBe(before);
+    expect(history.canUndo('p1')).toBe(false);
+  });
+
+  it('without a copy dep a custom sticker cannot be placed; an OpenMoji one still can', async () => {
+    const { c } = await setup();
+    await expect(c.add('p1', 'f2', MY)).rejects.toBeInstanceOf(StickerCopyError);
+    expect(await c.add('p1', 'f2', '1F436')).not.toBeNull();
+  });
+
+  it('does not copy while an export runs', async () => {
+    const calls: string[] = [];
+    const { c, exporting } = await setup(5, async (id) => void calls.push(id));
+    exporting.set(true);
+    expect(await c.add('p1', 'f2', MY)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  it('the movie keeps drawing after the library sticker is removed (the copy is what it references)', async () => {
+    const files = new Map<string, string>([[`lib/${UUID}`, 'png']]);
+    const { c, sticker } = await setup(5, async (id, pid) => void files.set(`projects/${pid}/stickers/${id}.png`, files.get(`lib/${id}`)!));
+    await c.add('p1', 'f2', MY);
+    files.delete(`lib/${UUID}`); // library delete
+    expect(files.has(`projects/p1/stickers/${UUID}.png`)).toBe(true);
+    expect(sticker().emoji).toBe(MY);
   });
 });

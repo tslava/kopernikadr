@@ -3,6 +3,7 @@
 // that belong to a mounted Play screen (project, player ring, frame source) are re-bound on mount.
 import type { FrameSource } from '../play/frameSource';
 import type { Project } from '../projects/model';
+import { openmojiUrlOf, type SpriteUrlOf } from '../render/catalog';
 import type { Store } from '../state/store';
 import type { TransferPause } from '../transfer/types';
 import type { ExportWriter } from './mediabunnyExport';
@@ -13,6 +14,7 @@ export interface ExportBindings {
   link?: () => CameraLink | undefined;
   releasePlayer: () => void;
   frameSource: FrameSource;
+  spriteUrlOf?: (projectId: string) => SpriteUrlOf;
 }
 
 export interface SharedExport {
@@ -41,6 +43,7 @@ export function sharedExportFor(key: object, env: SharedExportEnv): SharedExport
       releasePlayer: () => b?.releasePlayer(),
       frameSource: { load: (...a) => b!.frameSource.load(...a) },
       createWriter: env.createWriter,
+      spriteUrlOf: (pid) => b?.spriteUrlOf?.(pid) ?? openmojiUrlOf,
     });
     s = { controller, bind: (x) => void (b = x) };
     shared.set(key, s);

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ackEligible } from './eligibility';
 import {
   droppedEditFields,
+  isCustomSticker,
   ModelError,
   parseIndex,
   parseProject,
@@ -500,6 +501,27 @@ describe('validation: index.json / project.json v1', () => {
       const p = parseProject(raw);
       expect(p.cut).toEqual([{ id: 'F1', frameId: 'F1', hold: 1 }, { id: 'F2', frameId: 'F2', hold: 3 }]);
       expect(p.stickers).toEqual([sticker]);
+    });
+    it('custom stickers: a valid my:<uuid> is kept, a malformed one is dropped and reported', () => {
+      const ok = 'my:0123abcd-0123-4abc-8abc-0123456789ab';
+      const raw = {
+        ...goodProject(),
+        stickers: [
+          { ...sticker, id: 'c1', emoji: ok },
+          { ...sticker, id: 'c2', emoji: 'my:../../x' },
+          { ...sticker, id: 'c3', emoji: 'my:0123ABCD-0123-4abc-8abc-0123456789ab' },
+          { ...sticker, id: 'c4', emoji: 'my:' },
+        ],
+      };
+      const p = parseProject(raw);
+      expect(p.stickers?.map((s) => s.emoji)).toEqual([ok]);
+      expect(droppedEditFields(raw, p)).toEqual(['stickers']);
+    });
+    it('isCustomSticker / MY_STICKER_RE accept only my:<lowercase uuid>', () => {
+      expect(isCustomSticker('my:0123abcd-0123-4abc-8abc-0123456789ab')).toBe(true);
+      expect(isCustomSticker('1F436')).toBe(false);
+      expect(isCustomSticker('my:0123abcd-0123-4abc-8abc-0123456789ab/../x')).toBe(false);
+      expect(isCustomSticker('xmy:0123abcd-0123-4abc-8abc-0123456789ab')).toBe(false);
     });
     it('a malformed field -> undefined, the project stays readable', () => {
       const p = parseProject({ ...goodProject(), cut: 'nope', stickers: { a: 1 } });

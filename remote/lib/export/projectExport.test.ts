@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FrameEntry, Project } from '../projects/model';
 import type { FrameSource } from '../play/frameSource';
-import type { PinnedSprites } from '../render/sprites';
+import { projectSpriteUrlOf } from '../render/catalog';
+import { SpriteCache, type PinnedSprites } from '../render/sprites';
 import { createStore } from '../state/store';
 import type { CreateEncoder, ExportImage, ExportWriter } from './mediabunnyExport';
 import {
@@ -11,6 +12,7 @@ import {
   exportDisplayName,
   exportGate,
   sanitizeName,
+  SpriteLoadError,
   type ExportDeps,
   type ExportState,
 } from './projectExport';
@@ -684,6 +686,36 @@ describe('export controller: stickers', () => {
     const r = rig(three(), { sprites: sp.sprites });
     await r.ctl.start();
     expect(sp.calls).toEqual([]);
+  });
+
+  const MY = 'my:0123abcd-0123-4abc-8abc-0123456789ab';
+  const withCustom = () => project([frame(1)], { cut: [entry('f1')], stickers: [sticker('s1', MY, ['f1'])] });
+
+  it('export with a custom sticker draws it like any other', async () => {
+    const sp = fakeSprites();
+    const r = rig(withCustom(), { sprites: sp.sprites });
+    await r.ctl.start();
+    expect(sp.calls).toEqual([{ hexcodes: [MY], bucket: 1024 }]);
+    expect(r.adds[0]).toEqual(['f1@1440', `s-${MY}@360`]);
+  });
+
+  it('a missing movie copy fails the export naming the sticker', async () => {
+    const missing = async (): Promise<ImageBitmap> => {
+      throw new Error('sprite image failed');
+    };
+    const cache = new SpriteCache(missing, undefined, projectSpriteUrlOf('P', 'file:///d', (u) => u));
+    const r = rig(withCustom(), { sprites: cache });
+    await r.ctl.start();
+    const s = r.ctl.state.get() as { phase: string; reason: string; detail: string };
+    expect(s).toMatchObject({ phase: 'failed', reason: 'sprite' });
+    expect(s.detail).toContain(MY);
+    expect(r.log).not.toContain('open');
+  });
+
+  it('SpriteLoadError carries the failed ids', () => {
+    const e = new SpriteLoadError(Object.assign(new Error('sprites failed to load: a'), { failed: ['a'] }));
+    expect(e.failed).toEqual(['a']);
+    expect(new SpriteLoadError('x').failed).toEqual([]);
   });
 
   it('a sprite missing from the pinned set is skipped, not fatal', async () => {

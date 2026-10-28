@@ -6,7 +6,7 @@
  * cancelled gesture leaves nothing behind. Everything does nothing while an export runs.
  */
 import type { EditHistory } from '../projects/history';
-import type { Project, Sticker } from '../projects/model';
+import { isCustomSticker, type Project, type Sticker } from '../projects/model';
 import type { ProjectStore } from '../projects/store';
 import { timeline } from '../projects/timeline';
 import { addSticker, clampPose, removeSticker, setRange, updateSticker, type Pose } from '../projects/stickers';
@@ -39,7 +39,20 @@ export interface StickerControllerDeps {
   exporting: { get(): boolean };
   /** Shared with the EditController: Cofnij undoes sticker edits too. */
   history: EditHistory;
+  /**
+   * Copies library sticker `id` (the uuid, no `my:`) into movie `projectId` (`projects/{pid}/stickers/<uuid>.png`).
+   * Idempotent. Without it a custom sticker cannot be placed.
+   */
+  copySticker?: (id: string, projectId: string) => Promise<void>;
   newId?: () => string;
+}
+
+/** A custom sticker's PNG could not be copied into the movie: nothing was placed. */
+export class StickerCopyError extends Error {
+  constructor(readonly emoji: string, cause?: unknown) {
+    super(`could not copy sticker ${emoji} into the movie`, { cause });
+    this.name = 'StickerCopyError';
+  }
 }
 
 export class StickerController {
@@ -49,8 +62,21 @@ export class StickerController {
     this.newId = d.newId ?? (() => crypto.randomUUID());
   }
 
-  /** Adds `emoji` on `entryId` and every entry after it; resolves the new sticker's id (null: nothing added). */
+  /**
+   * Adds `emoji` on `entryId` and every entry after it; resolves the new sticker's id (null: nothing added).
+   * A custom sticker (`my:<uuid>`) is first copied into the movie, so deleting it from the library never
+   * breaks the movie; if that copy fails nothing is placed and `StickerCopyError` is thrown.
+   */
   async add(projectId: string, entryId: string, emoji: string): Promise<string | null> {
+    if (this.d.exporting.get()) return null;
+    if (isCustomSticker(emoji)) {
+      try {
+        if (!this.d.copySticker) throw new Error('no copySticker');
+        await this.d.copySticker(emoji.slice(3), projectId); // outside the store mutation, before the write
+      } catch (e) {
+        throw new StickerCopyError(emoji, e);
+      }
+    }
     const id = this.newId();
     return (await this.edit(projectId, (p) => addSticker(p, entryId, emoji, id))) ? id : null;
   }

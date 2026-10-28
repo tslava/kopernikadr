@@ -15,6 +15,8 @@ import { createPlayer, timelineOf, type Clock, type Player, type PlayerStatus } 
 import { createRing } from '@/lib/play/ring';
 import { drawFrame, drawStickers } from '@/lib/render/compose';
 import { bucketFor, SpriteCache } from '@/lib/render/sprites';
+import { openmojiUrlOf } from '@/lib/render/catalog';
+import { StickerCopyError } from '@/lib/app/stickerController';
 import { createNativeWriter } from '@/lib/export/nativeWriter';
 import { isActive, type CameraLink } from '@/lib/export/projectExport';
 import { sharedExportFor } from '@/lib/export/sharedExport';
@@ -76,6 +78,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   const canvas = useRef<HTMLCanvasElement>(null);
   const stickerCanvas = useRef<HTMLCanvasElement>(null);
   const sprites = useRef<SpriteCache | null>(null);
+  const spritesFor = useRef<FrameUrls | null | undefined>(undefined);
   const player = useRef<Player | null>(null);
   const [status, setStatus] = useState<PlayerStatus>(IDLE);
 
@@ -96,7 +99,13 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
     const ctx = el?.getContext('2d');
     if (!el || !ctx) return;
     ctx.clearRect(0, 0, el.width, el.height);
-    const cache = (sprites.current ??= new SpriteCache());
+    // the cache is per project and per url resolver: a custom sticker resolves to the movie's own copy
+    if (!sprites.current || spritesFor.current !== urls) {
+      sprites.current?.clear();
+      sprites.current = new SpriteCache(undefined, undefined, urls ? urls.spriteUrlOf(id) : openmojiUrlOf);
+      spritesFor.current = urls;
+    }
+    const cache = sprites.current;
     const list = stickersRef.current.filter((st) => entryId !== null && st.on.includes(entryId));
     // rasterize at the size the sticker is shown at (device pixels)
     const scale = (el.clientWidth * window.devicePixelRatio) / PLAY_WIDTH;
@@ -133,8 +142,9 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       link: () => linkRef.current,
       releasePlayer: () => player.current?.release(),
       frameSource: createFrameSource({ frameUrl }),
+      spriteUrlOf: urls ? (pid) => urls.spriteUrlOf(pid) : undefined,
     });
-  }, [shared, frameUrl]);
+  }, [shared, frameUrl, urls]);
   const exportPhase = useStore(exporter?.state ?? NOT_ACTIVE, (s) => s.phase);
   const exportBusy = exportPhase !== 'idle' && exportPhase !== 'done' && exportPhase !== 'cancelled' && exportPhase !== 'failed';
   const [exportOpen, setExportOpen] = useState(() => (exporter ? isActive(exporter.state.get()) : false));
@@ -242,10 +252,22 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       : c.undo(id);
     run.catch((e) => console.error('edit', e));
   };
+  const [stickerToast, setStickerToast] = useState(false);
+  useEffect(() => {
+    if (!stickerToast) return;
+    const h = setTimeout(() => setStickerToast(false), 4000);
+    return () => clearTimeout(h);
+  }, [stickerToast]);
   const onPick = (hex: string) => {
     setPickerOpen(false);
     if (selected === null) return;
-    edit?.stickers.add(id, selected, hex).then((sid) => sid && setStickerSel(sid)).catch((e) => console.error('sticker', e));
+    edit?.stickers
+      .add(id, selected, hex)
+      .then((sid) => sid && setStickerSel(sid))
+      .catch((e) => {
+        console.error('sticker', e);
+        if (e instanceof StickerCopyError) setStickerToast(true);
+      });
   };
   const onStickerTool = (what: 'from' | 'to' | 'delete') => {
     const c = edit?.stickers;
@@ -271,6 +293,8 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
   }, [bigOpen, overlays]);
   // the stage changes size: repaint stickers at the new device-pixel size
   useEffect(() => paintStickers.current(shownRef.current), [bigOpen]);
+  // the url resolver became available (or changed): custom stickers can load now
+  useEffect(() => paintStickers.current(shownRef.current), [urls]);
 
   return (
     <main className="screen play" data-project={id}>
@@ -355,7 +379,7 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
             onTool={onTool}
             onEmoji={() => setPickerOpen(true)}
             emojiOk={emojiOk}
-            sticker={stickerShown ? { emoji: stickerShown.emoji, onFrom: () => onStickerTool('from'), onTo: () => onStickerTool('to'), onDelete: () => onStickerTool('delete') } : null}
+            sticker={stickerShown ? { src: (urls ? urls.spriteUrlOf(id) : openmojiUrlOf)(stickerShown.emoji), onFrom: () => onStickerTool('from'), onTo: () => onStickerTool('to'), onDelete: () => onStickerTool('delete') } : null}
           />
         )}
         {status.playable === 0 && status.downloading === 0 && <p className="note">{t('play.empty')}</p>}
@@ -364,6 +388,11 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
       {project && <FrameStrip t={t} project={project} selected={selected} onTap={onTile} urls={urls} stickerId={stickerSel} />}
       {edit && hiding && (
         <UndoToast t={t} message={t('tools.frameDeleted')} deadline={hiding.hiddenUntil!} label="tools.frameUndo" onUndo={() => void edit.frameDeletion.undo(id, hiding.frameId)} />
+      )}
+      {stickerToast && (
+        <div className="toast" role="alert" onClick={() => setStickerToast(false)}>
+          {t('sticker.addFailed')}
+        </div>
       )}
       {pickerOpen && <EmojiPicker t={t} lang={lang} onPick={onPick} onClose={() => setPickerOpen(false)} />}
       {exporter && exportOpen && project && (

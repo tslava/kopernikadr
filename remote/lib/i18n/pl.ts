@@ -79,6 +79,7 @@ export const pl = {
   'sticker.selected': 'Wybrana naklejka',
   'sticker.handle': 'Zmień rozmiar i obrót',
   'sticker.layer': 'Naklejki na kadrze',
+  'sticker.addFailed': 'Nie udało się dodać naklejki',
   'picker.title': 'Wybierz naklejkę',
   'picker.close': 'Zamknij',
   'picker.loading': 'Wczytuję…',

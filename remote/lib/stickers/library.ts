@@ -62,6 +62,20 @@ function parseIndex(text: string): LibraryItem[] | null {
   return out;
 }
 
+/** Store-relative path of a library sticker's copy inside a movie. */
+export const movieStickerPath = (projectId: string, id: string): string => `projects/${projectId}/stickers/${id}.png`;
+
+/**
+ * `copySticker` for the `StickerController`: library `stickers/<id>.png` -> `projects/{pid}/stickers/<id>.png`
+ * (tmp + installFile, idempotent: a repeat after a crash heals itself). Only a valid uuid builds a path.
+ */
+export function createStickerCopier(bin: BinaryFiles): (id: string, projectId: string) => Promise<void> {
+  return async (id, projectId) => {
+    if (!LIBRARY_ID_RE.test(id)) throw new Error(`bad sticker id: ${id}`);
+    await bin.copyFile(stickerPath(id), movieStickerPath(projectId, id));
+  };
+}
+
 export class StickerLibrary {
   private readonly fs: FileAdapter;
   private readonly bin: BinaryFiles;

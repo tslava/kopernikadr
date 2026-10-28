@@ -39,7 +39,7 @@ export interface CutEntry {
 
 export interface Sticker {
   id: string;
-  /** OpenMoji hexcode, e.g. "1F436". */
+  /** OpenMoji hexcode, e.g. "1F436", or a custom sticker `my:<uuid>` (see `isCustomSticker`). */
   emoji: string;
   /** Centre, 0..1 of the 4:3 frame (may hang partly off-frame). */
   x: number;
@@ -51,6 +51,12 @@ export interface Sticker {
   /** CutEntry ids it is shown on. */
   on: string[];
 }
+
+/** A custom (photo) sticker id; the uuid names `projects/{pid}/stickers/<uuid>.png`. Paths are built only from ids that match. */
+export const MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const isCustomSticker = (emoji: string): boolean => MY_STICKER_RE.test(emoji);
+/** Anything that claims to be custom (`my:` prefix) but is not a valid id. */
+export const isBadCustomSticker = (emoji: string): boolean => emoji.startsWith('my:') && !MY_STICKER_RE.test(emoji);
 
 export const HOLD_MIN = 1;
 export const HOLD_MAX = 8;
@@ -251,7 +257,7 @@ function parseStickers(raw: unknown): Sticker[] | undefined {
     if (typeof e !== 'object' || e === null || Array.isArray(e)) continue;
     const s = e as Obj;
     if (!nonEmpty(s.id) || !nonEmpty(s.emoji) || !finite(s.x) || !finite(s.y) || !finite(s.size) || !finite(s.rot)) continue;
-    if (!Array.isArray(s.on) || seen.has(s.id)) continue;
+    if (!Array.isArray(s.on) || seen.has(s.id) || isBadCustomSticker(s.emoji)) continue;
     seen.add(s.id);
     out.push({
       ...s,

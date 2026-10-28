@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FakeBinaryIO, FakeFs } from '../projects/fakeFs.testutil';
 import { createBinaryFiles } from './binaryFiles';
-import { INDEX, STICKER_LIMIT, StickerLibrary, StickerLibraryFullError } from './library';
+import { createStickerCopier, INDEX, STICKER_LIMIT, StickerLibrary, StickerLibraryFullError } from './library';
 
 const blob = (...b: number[]) => new Blob([new Uint8Array(b)]);
 const uid = (n: number) => `${n.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`;
@@ -136,5 +136,27 @@ describe('StickerLibrary', () => {
     const { lib } = setup();
     const added = await Promise.all([lib.add(blob(1), blob(1)), lib.add(blob(2), blob(2)), lib.add(blob(3), blob(3))]);
     expect(new Set(await ids(lib))).toEqual(new Set(added));
+  });
+});
+
+describe('createStickerCopier', () => {
+  it('copies the library PNG into the movie, idempotently, leaving the library copy', async () => {
+    const fs = new FakeFs();
+    const bin = createBinaryFiles(fs, new FakeBinaryIO(fs));
+    const lib = new StickerLibrary({ fs, bin });
+    const id = await lib.add(blob(7, 8, 9), blob(1));
+    const copy = createStickerCopier(bin);
+    await copy(id, 'P1');
+    await copy(id, 'P1');
+    expect([...fs.binaries.get(`projects/P1/stickers/${id}.png`)!]).toEqual([7, 8, 9]);
+    await lib.remove(id);
+    expect(fs.binaries.has(`projects/P1/stickers/${id}.png`)).toBe(true);
+  });
+
+  it('refuses a bad id and fails when the library file is gone', async () => {
+    const fs = new FakeFs();
+    const copy = createStickerCopier(createBinaryFiles(fs, new FakeBinaryIO(fs)));
+    await expect(copy('../x', 'P1')).rejects.toThrow(/bad sticker id/);
+    await expect(copy('0123abcd-0123-4abc-8abc-0123456789ab', 'P1')).rejects.toThrow();
   });
 });

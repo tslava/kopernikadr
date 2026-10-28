@@ -401,21 +401,21 @@ Then the picker opens on "Moje" with the new sticker first.
   - `remote/lib/app/frames.ts` (a shared file-URL helper if needed).
 - Modify tests: the `model`, `stickers`, `stickerController`, `sprites` and `projectExport` tests.
 
-- [ ] `MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`,
+- [x] `MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`,
       `isCustomSticker()`, accepted by `parseStickers`. Paths are built only from validated ids.
-- [ ] `SpriteCache` takes `urlOf(emoji)`:
+- [x] `SpriteCache` takes `urlOf(emoji)`:
   - a hexcode gives the OpenMoji SVG;
   - `my:` gives the project copy via `resolveFrameBaseUri()` + `convertFileSrc`;
   - an invalid id gives no URL (unknown sprite).
 
   The key stays `emoji@bucket`. PlayView and the export build their cache with the project's
   `urlOf`.
-- [ ] Copy-on-place in `stickerController` through a `copySticker(id, pid)` dep: after the
+- [x] Copy-on-place in `stickerController` through a `copySticker(id, pid)` dep: after the
       `exporting` check, outside the store mutation, before the write. A failure places nothing and
       shows an error.
-- [ ] Export: the `SpriteLoadError` message names the missing sticker. Behaviour is otherwise
+- [x] Export: the `SpriteLoadError` message names the missing sticker. Behaviour is otherwise
       unchanged (fail-loud).
-- [ ] Tests:
+- [x] Tests:
   - parse/validate;
   - `urlOf` for the three kinds of id;
   - copy-on-place, including the failure path;
@@ -423,7 +423,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - export with a custom sticker;
   - export with a missing copy fails with the named error;
   - playback skips a missing copy.
-- [ ] Run tests; they must pass before Task 4.
+- [x] Run tests; they must pass before Task 4.
 
 ### Task 4: Native image picker, activity results and the TS bridge
 **Files:**

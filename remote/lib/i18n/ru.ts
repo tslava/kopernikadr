@@ -81,6 +81,7 @@ export const ru: Strings = {
   'sticker.selected': 'Выбранная наклейка',
   'sticker.handle': 'Размер и поворот',
   'sticker.layer': 'Наклейки на кадре',
+  'sticker.addFailed': 'Не удалось добавить наклейку',
   'picker.title': 'Выбери наклейку',
   'picker.close': 'Закрыть',
   'picker.loading': 'Загружаю…',
