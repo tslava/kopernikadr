@@ -1,0 +1,158 @@
+/**
+ * The sticker library on the tablet (plan "Photo stickers"): `stickers/index.json`
+ * (`{v: 1, items: [{id, created, bytes, sha256}]}`, newest first), `stickers/<uuid>.png` (the
+ * sticker, <= 1024 px square) and `stickers/<uuid>.thumb.png` (160 px, for the "Moje" tiles).
+ * `add` writes both PNGs first and the index last, so a crash in between leaves an orphan PNG that
+ * nothing lists (harmless). `list` hides rows whose PNG is gone. Removing a sticker never touches a
+ * movie: placing a sticker copies the PNG into the movie folder.
+ */
+import type { FileAdapter } from '../projects/files';
+import type { BinaryFiles } from './binaryFiles';
+
+export const STICKERS_DIR = 'stickers';
+export const INDEX = `${STICKERS_DIR}/index.json`;
+export const STICKER_LIMIT = 200;
+export const LIBRARY_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export interface LibraryItem {
+  id: string;
+  /** ms since epoch. */
+  created: number;
+  bytes: number;
+  sha256: string;
+}
+
+export class StickerLibraryFullError extends Error {
+  constructor() {
+    super(`sticker library is full (${STICKER_LIMIT})`);
+    this.name = 'StickerLibraryFullError';
+  }
+}
+
+export interface StickerLibraryDeps {
+  fs: FileAdapter;
+  bin: BinaryFiles;
+  randomUUID?: () => string;
+  now?: () => number;
+  warn?: (msg: string, err?: unknown) => void;
+}
+
+export const stickerPath = (id: string): string => `${STICKERS_DIR}/${id}.png`;
+export const thumbPath = (id: string): string => `${STICKERS_DIR}/${id}.thumb.png`;
+
+function parseIndex(text: string): LibraryItem[] | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const o = raw as { v?: unknown; items?: unknown } | null;
+  if (!o || o.v !== 1 || !Array.isArray(o.items)) return null;
+  const out: LibraryItem[] = [];
+  for (const r of o.items as Partial<LibraryItem>[]) {
+    if (!r || typeof r.id !== 'string' || !LIBRARY_ID_RE.test(r.id)) continue;
+    out.push({
+      id: r.id,
+      created: Number.isFinite(r.created) ? (r.created as number) : 0,
+      bytes: Number.isFinite(r.bytes) ? (r.bytes as number) : 0,
+      sha256: typeof r.sha256 === 'string' ? r.sha256 : '',
+    });
+  }
+  return out;
+}
+
+export class StickerLibrary {
+  private readonly fs: FileAdapter;
+  private readonly bin: BinaryFiles;
+  private readonly uuid: () => string;
+  private readonly now: () => number;
+  private readonly warn: (msg: string, err?: unknown) => void;
+  /** Serializes add/remove: each is a read-modify-write of the index. */
+  private chain: Promise<unknown> = Promise.resolve();
+
+  constructor(deps: StickerLibraryDeps) {
+    this.fs = deps.fs;
+    this.bin = deps.bin;
+    this.uuid = deps.randomUUID ?? (() => crypto.randomUUID());
+    this.now = deps.now ?? Date.now;
+    this.warn = deps.warn ?? ((m, e) => console.warn(m, e));
+  }
+
+  private serial<T>(job: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(job, job);
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Index rows as stored (a corrupt or unreadable index is an empty list, files stay). */
+  private async readRows(): Promise<LibraryItem[]> {
+    let text: string | null;
+    try {
+      text = await this.fs.readText(INDEX);
+    } catch (e) {
+      this.warn('sticker index unreadable', e);
+      return [];
+    }
+    if (text === null) return [];
+    const rows = parseIndex(text);
+    if (!rows) {
+      this.warn('sticker index corrupt, starting empty');
+      return [];
+    }
+    return rows;
+  }
+
+  /** Newest first; rows whose PNG is missing are hidden. */
+  async list(): Promise<LibraryItem[]> {
+    const rows = await this.readRows();
+    if (rows.length === 0) return rows;
+    const present = new Set(await this.fs.list(STICKERS_DIR));
+    return rows.filter((r) => present.has(`${r.id}.png`));
+  }
+
+  /** Stores a new sticker (+ thumbnail) and returns its id. Throws `StickerLibraryFullError` at 200. */
+  add(png: Blob, thumb: Blob): Promise<string> {
+    return this.serial(async () => {
+      const rows = await this.list();
+      if (rows.length >= STICKER_LIMIT) throw new StickerLibraryFullError();
+      const id = this.uuid();
+      await this.fs.mkdir(STICKERS_DIR);
+      try {
+        const info = await this.bin.writeBinary(stickerPath(id), png);
+        await this.bin.writeBinary(thumbPath(id), thumb);
+        const item: LibraryItem = { id, created: this.now(), bytes: info.bytes, sha256: info.sha256 };
+        await this.fs.writeTextAtomic(INDEX, JSON.stringify({ v: 1, items: [item, ...rows] }));
+      } catch (e) {
+        await this.fs.remove(stickerPath(id)).catch(() => undefined);
+        await this.fs.remove(thumbPath(id)).catch(() => undefined);
+        throw e;
+      }
+      return id;
+    });
+  }
+
+  /** Deletes only the library copy; movies keep their own. Idempotent. */
+  remove(id: string): Promise<void> {
+    return this.serial(async () => {
+      if (!LIBRARY_ID_RE.test(id)) return;
+      const rows = await this.readRows();
+      if (rows.some((r) => r.id === id)) {
+        await this.fs.writeTextAtomic(INDEX, JSON.stringify({ v: 1, items: rows.filter((r) => r.id !== id) }));
+      }
+      await this.fs.remove(stickerPath(id));
+      await this.fs.remove(thumbPath(id));
+    });
+  }
+
+  /** Native file URI of the sticker PNG (feed it to `convertFileSrc`). */
+  fileUri(id: string): Promise<string> {
+    if (!LIBRARY_ID_RE.test(id)) return Promise.reject(new Error(`bad sticker id: ${id}`));
+    return this.fs.uri(stickerPath(id));
+  }
+
+  thumbUri(id: string): Promise<string> {
+    if (!LIBRARY_ID_RE.test(id)) return Promise.reject(new Error(`bad sticker id: ${id}`));
+    return this.fs.uri(thumbPath(id));
+  }
+}

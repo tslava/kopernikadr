@@ -368,18 +368,18 @@ Then the picker opens on "Moje" with the new sticker first.
 - Create: `remote/lib/stickers/library.ts`, `remote/lib/stickers/library.test.ts`, `remote/lib/stickers/binaryFiles.ts` (tmp write + `installFile`, `Filesystem.copy` + `installFile`), `binaryFiles.test.ts`
 - Modify: `remote/lib/projects/fakeFs.testutil.ts` (binary + install support in the fake)
 
-- [ ] `binaryFiles`:
+- [x] `binaryFiles`:
   - `writeBinary(dest, blob)`: base64 → `tmp/<uuid>.bin` → sha256 → `installFile`;
   - `copyFile(src, dest)`: `Filesystem.copy` → tmp → `installFile`, with `ALREADY_INSTALLED` = OK.
   - Document the §5.4 exception in the module header.
-- [ ] `StickerLibrary`:
+- [x] `StickerLibrary`:
   - `list()` filters missing files;
   - `add(png, thumb)` → id: both PNGs first, then `writeTextAtomic` of the index;
   - `remove(id)`;
   - `fileUri(id)` / `thumbUri(id)`;
   - the 200 limit;
   - ids from `crypto.randomUUID()`.
-- [ ] Tests:
+- [x] Tests:
   - add/list/remove;
   - newest-first order;
   - the limit;
@@ -387,7 +387,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - a row with a missing file is hidden;
   - a corrupt index → empty list + warning, files kept;
   - `copyFile` is idempotent.
-- [ ] Run tests; they must pass before Task 3.
+- [x] Run tests; they must pass before Task 3.
 
 ### Task 3: Custom stickers in projects, playback and export
 **Files:**

@@ -1,0 +1,140 @@
+import { describe, expect, it, vi } from 'vitest';
+import { FakeBinaryIO, FakeFs } from '../projects/fakeFs.testutil';
+import { createBinaryFiles } from './binaryFiles';
+import { INDEX, STICKER_LIMIT, StickerLibrary, StickerLibraryFullError } from './library';
+
+const blob = (...b: number[]) => new Blob([new Uint8Array(b)]);
+const uid = (n: number) => `${n.toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`;
+const ids = async (lib: StickerLibrary) => (await lib.list()).map((i) => i.id);
+
+function setup() {
+  const fs = new FakeFs();
+  const bin = createBinaryFiles(fs, new FakeBinaryIO(fs));
+  let n = 0;
+  let t = 1000;
+  const warn = vi.fn();
+  const lib = new StickerLibrary({ fs, bin, randomUUID: () => uid(++n), now: () => ++t, warn });
+  return { fs, lib, warn };
+}
+
+describe('StickerLibrary', () => {
+  it('starts empty', async () => {
+    expect(await setup().lib.list()).toEqual([]);
+  });
+
+  it('adds a sticker and its thumbnail, and lists it', async () => {
+    const { fs, lib } = setup();
+    const id = await lib.add(blob(1, 2, 3), blob(4));
+    expect(id).toBe(uid(1));
+    expect(fs.binaries.has(`stickers/${id}.png`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${id}.thumb.png`)).toBe(true);
+    const items = await lib.list();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ id, bytes: 3 });
+    expect(items[0]!.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect((fs.json(INDEX) as { v: number }).v).toBe(1);
+  });
+
+  it('lists newest first', async () => {
+    const { lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    const b = await lib.add(blob(2), blob(2));
+    const c = await lib.add(blob(3), blob(3));
+    expect(await ids(lib)).toEqual([c, b, a]);
+  });
+
+  it('removes only that sticker (files and row); idempotent', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    const b = await lib.add(blob(2), blob(2));
+    await lib.remove(a);
+    await lib.remove(a);
+    expect(await ids(lib)).toEqual([b]);
+    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(false);
+    expect(fs.binaries.has(`stickers/${a}.thumb.png`)).toBe(false);
+    expect(fs.binaries.has(`stickers/${b}.png`)).toBe(true);
+  });
+
+  it('rejects a malformed id', async () => {
+    const { lib } = setup();
+    await lib.add(blob(1), blob(1));
+    await lib.remove('../x');
+    expect(await lib.list()).toHaveLength(1);
+    await expect(lib.fileUri('../x')).rejects.toThrow(/bad sticker id/);
+    await expect(lib.thumbUri('x')).rejects.toThrow(/bad sticker id/);
+  });
+
+  it('gives file and thumbnail uris', async () => {
+    const { lib } = setup();
+    const id = await lib.add(blob(1), blob(1));
+    expect(await lib.fileUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.png`);
+    expect(await lib.thumbUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.thumb.png`);
+  });
+
+  it('refuses the 201st sticker and keeps the library intact', async () => {
+    const { fs, lib } = setup();
+    const rows = Array.from({ length: STICKER_LIMIT }, (_, i) => ({ id: uid(i + 1000), created: i, bytes: 1, sha256: '' }));
+    for (const r of rows) fs.binaries.set(`stickers/${r.id}.png`, new Uint8Array([1]));
+    fs.files.set(INDEX, JSON.stringify({ v: 1, items: rows }));
+    await expect(lib.add(blob(1), blob(1))).rejects.toBeInstanceOf(StickerLibraryFullError);
+    expect(await lib.list()).toHaveLength(STICKER_LIMIT);
+    await lib.remove(rows[0]!.id);
+    await expect(lib.add(blob(1), blob(1))).resolves.toBeTruthy();
+  });
+
+  it('a failed index write cleans up its PNGs and leaves the library as it was', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    fs.failOn({ op: 'writeTextAtomic', path: INDEX, times: 1 });
+    await expect(lib.add(blob(2), blob(2))).rejects.toThrow(/injected/);
+    expect(await ids(lib)).toEqual([a]);
+    expect([...fs.binaries.keys()].filter((k) => k.startsWith('stickers/'))).toHaveLength(2);
+  });
+
+  it('a hard crash after the PNGs, before the index: the orphan is ignored', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    fs.crashAfter(4); // PNG: tmp write + install, thumb: tmp write + install; the index write crashes
+    await expect(lib.add(blob(2), blob(2))).rejects.toThrow('simulated crash');
+    fs.restart();
+    // the orphans may or may not be cleaned (the crash also kills the cleanup), the index never lists them
+    expect(await ids(lib)).toEqual([a]);
+    const c = await lib.add(blob(3), blob(3));
+    expect(await ids(lib)).toEqual([c, a]);
+  });
+
+  it('hides a row whose PNG is missing', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    const b = await lib.add(blob(2), blob(2));
+    fs.binaries.delete(`stickers/${a}.png`);
+    expect(await ids(lib)).toEqual([b]);
+  });
+
+  it('a corrupt index is an empty list with a warning; the files stay', async () => {
+    const { fs, lib, warn } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    fs.files.set(INDEX, '{not json');
+    expect(await lib.list()).toEqual([]);
+    expect(warn).toHaveBeenCalled();
+    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(true);
+    const b = await lib.add(blob(2), blob(2));
+    expect(await ids(lib)).toEqual([b]);
+    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(true);
+  });
+
+  it('drops index rows with a bad id', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    const idx = fs.json(INDEX) as { items: object[] };
+    idx.items.push({ id: '../evil', created: 1, bytes: 1, sha256: '' });
+    fs.files.set(INDEX, JSON.stringify(idx));
+    expect(await ids(lib)).toEqual([a]);
+  });
+
+  it('serializes concurrent adds', async () => {
+    const { lib } = setup();
+    const added = await Promise.all([lib.add(blob(1), blob(1)), lib.add(blob(2), blob(2)), lib.add(blob(3), blob(3))]);
+    expect(new Set(await ids(lib))).toEqual(new Set(added));
+  });
+});
