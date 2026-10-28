@@ -547,7 +547,7 @@ Then the picker opens on "Moje" with the new sticker first.
 **Files:**
 - Modify: `remote/components/StickerMaker.tsx`, `remote/lib/app/stickerMakerModel.ts` (+ test), css, i18n
 
-- [ ] Cut view:
+- [x] Cut view:
   - pointer strokes in normalized coordinates (a tap = a one-point stroke);
   - "Dodaj"/"Usuń";
   - Cofnij (re-runs with the remaining strokes);
@@ -557,13 +557,16 @@ Then the picker opens on "Moje" with the new sticker first.
   - the > 55% hint.
 
   Then "Dalej" to the style step.
-- [ ] `segClose` on unmount, cancel and save.
-- [ ] Tests:
+- [x] `segClose` on unmount, cancel and save (and on "Dalej", since back from style goes to the source step).
+- [x] ➕ Native lifetime fix (`SegEngine.kt`): `MediaPipeEngine` keeps the `MPImage` and its Bitmap alive until `close()` (segmenter closed first). `setImage` only keeps a reference, the encoder runs lazily inside `segment`. The CPU-fallback path closes the old engine and binds a fresh decode of the same session PNG. JVM tests unchanged and green (the fakes never touched MediaPipe).
+- [x] ➕ Transparent reopen after the 5-minute idle close: the native close deletes `seg-<handle>.png`, so the cut step keeps the decoded picture (`Img`, <= 1024 px) in memory, and on `NO_SESSION` writes it back to `tmp/seg-src-<uuid>.png`, calls `segOpen` and retries the run once (`cutSession.ts`: `runCut`, `reopenFrom`).
+- [x] Removed the Task 5 "Wkrótce: wycinanie" path (`soon` notice and strings).
+- [x] Tests:
   - model: strokes and undo;
   - the hint threshold;
   - an error from `segRun` stays in the cut step with a retry;
   - the empty mask message.
-- [ ] Run tests; they must pass before Task 10.
+- [x] Run tests; they must pass before Task 10. (vitest 882, tsc, test:scripts 13, gradle :app:testDebugUnitTest)
 
 ### Task 10: Device e2e on the tablet
 **Files:**

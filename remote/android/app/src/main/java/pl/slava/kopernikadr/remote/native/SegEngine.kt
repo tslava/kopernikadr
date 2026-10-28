@@ -1,9 +1,11 @@
 package pl.slava.kopernikadr.remote.native
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.ByteBufferExtractor
+import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.components.containers.NormalizedKeypoint
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
@@ -19,7 +21,10 @@ class SegMask(val width: Int, val height: Int, val bytes: ByteArray)
 
 /** One loaded segmenter, bound to one image. Any exception that is not a [NativeException] is an engine failure. */
 interface SegEngine : AutoCloseable {
-    /** Runs the encoder on the PNG [image] (the exact image the strokes refer to). */
+    /**
+     * Binds the PNG [image] (the exact image the strokes refer to). The engine keeps the decoded image
+     * alive until [close]: the encoder runs lazily inside [segment].
+     */
     fun setImage(image: File)
 
     /** The decoder, for the whole stroke list (stateless per call). */
@@ -57,18 +62,43 @@ class MediaPipeEngineFactory(private val context: Context) : EngineFactory {
     }
 }
 
+/**
+ * The MediaPipe `setImage` only keeps a reference: the encoder runs lazily inside `segment` (spike:
+ * `setImage` 2-8 ms, every `segment` ~1.8 s on CPU). So the [MPImage] and its [Bitmap] must stay alive
+ * for the whole engine and are released only by [close] (after the segmenter itself).
+ */
 private class MediaPipeEngine(private val segmenter: InteractiveSegmenter) : SegEngine {
+    private var bitmap: Bitmap? = null
+    private var mpImage: MPImage? = null
+
     override fun setImage(image: File) {
-        val bitmap = BitmapFactory.decodeFile(image.path) ?: throw IOException("cannot decode ${image.name}")
+        releaseImage()
+        val bmp = BitmapFactory.decodeFile(image.path) ?: throw IOException("cannot decode ${image.name}")
         try {
-            val mp = BitmapImageBuilder(bitmap).build()
+            val mp = BitmapImageBuilder(bmp).build()
             try {
                 segmenter.setImage(mp)
-            } finally {
+            } catch (t: Throwable) {
                 mp.close()
+                throw t
             }
+            mpImage = mp
+            bitmap = bmp
+        } catch (t: Throwable) {
+            bmp.recycle()
+            throw t
+        }
+    }
+
+    private fun releaseImage() {
+        val mp = mpImage
+        val bmp = bitmap
+        mpImage = null
+        bitmap = null
+        try {
+            mp?.close()
         } finally {
-            bitmap.recycle()
+            bmp?.recycle()
         }
     }
 
@@ -93,7 +123,13 @@ private class MediaPipeEngine(private val segmenter: InteractiveSegmenter) : Seg
         }
     }
 
-    override fun close() = segmenter.close()
+    override fun close() {
+        try {
+            segmenter.close()
+        } finally {
+            releaseImage()
+        }
+    }
 
     private fun toByte(confidence: Float): Byte {
         val v = Math.round(confidence.coerceIn(0f, 1f) * 255f)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noticeForPick, reduce, START, type MakerEvent, type MakerState } from './stickerMakerModel';
+import { noticeForPick, reduce, START, WIDE_MASK, type CutState, type MakerEvent, type MakerState } from './stickerMakerModel';
 
 const run = (events: MakerEvent[], from: MakerState = START): MakerState => events.reduce(reduce, from);
 
@@ -9,10 +9,6 @@ describe('sticker maker flow', () => {
     expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }])).toEqual({ step: 'style', style: 'naklejka', notice: null });
     expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'style', style: 'komiks' }, { type: 'save' }])).toEqual({ step: 'saving', style: 'komiks' });
     expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'save' }, { type: 'saved', id: 'x' }])).toEqual({ step: 'done', id: 'x' });
-  });
-
-  it('a picture without transparency shows "soon" and returns to the source step', () => {
-    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: false }])).toEqual({ step: 'source', notice: 'soon' });
   });
 
   it('the camera shares the pick events: backing out is silent, no camera app says so', () => {
@@ -50,5 +46,82 @@ describe('sticker maker flow', () => {
     expect(reduce(START, { type: 'picked', hasAlpha: true })).toBe(START);
     expect(reduce(START, { type: 'save' })).toBe(START);
     expect(reduce({ step: 'closed' }, { type: 'pick' })).toEqual({ step: 'closed' });
+  });
+
+  describe('cut step', () => {
+    const tap = (x: number, y: number, mode: 'add' | 'erase' = 'add'): MakerEvent => ({ type: 'stroke', stroke: { mode, points: [[x, y]] } });
+    const cut = (events: MakerEvent[] = []) => run([{ type: 'pick' }, { type: 'picked', hasAlpha: false }, ...events]) as CutState;
+
+    it('a picture without transparency opens the cut step', () => {
+      expect(cut()).toMatchObject({ step: 'cut', strokes: [], brush: 'add', busy: false, ready: false, notice: null });
+    });
+
+    it('a stroke starts a run; the result makes "Dalej" possible', () => {
+      const s = cut([tap(0.5, 0.5)]);
+      expect(s).toMatchObject({ busy: true, ready: false });
+      expect(reduce(s, { type: 'next' })).toBe(s); // not while a run is in flight
+      const done = reduce(s, { type: 'cutDone', coverage: 0.2, empty: false }) as CutState;
+      expect(done).toMatchObject({ busy: false, ready: true, wide: false, notice: null });
+      expect(reduce(done, { type: 'next' })).toEqual({ step: 'style', style: 'naklejka', notice: null });
+    });
+
+    it('the brush is a toggle and strokes keep their order', () => {
+      const s = cut([{ type: 'brush', brush: 'erase' }, tap(0.1, 0.1), tap(0.2, 0.2, 'erase')]);
+      expect(s.brush).toBe('erase');
+      expect(s.strokes.map((x) => x.mode)).toEqual(['add', 'erase']);
+    });
+
+    it('undo pops the last stroke and re-runs with the rest; with none left nothing is run', () => {
+      const two = cut([tap(0.1, 0.1), tap(0.2, 0.2)]);
+      const one = reduce(two, { type: 'undo' }) as CutState;
+      expect(one.strokes).toEqual([two.strokes[0]]);
+      expect(one.busy).toBe(true);
+      const none = reduce(one, { type: 'undo' }) as CutState;
+      expect(none).toMatchObject({ strokes: [], busy: false, ready: false });
+      expect(reduce(none, { type: 'undo' })).toBe(none);
+    });
+
+    it('"Od nowa" drops every stroke and the old result', () => {
+      const done = reduce(cut([tap(0.1, 0.1)]), { type: 'cutDone', coverage: 0.7, empty: false });
+      expect(reduce(done, { type: 'reset' })).toMatchObject({ strokes: [], busy: false, ready: false, wide: false });
+    });
+
+    it('the hint shows only above the threshold', () => {
+      const s = cut([tap(0.5, 0.5)]);
+      expect(reduce(s, { type: 'cutDone', coverage: WIDE_MASK, empty: false })).toMatchObject({ wide: false });
+      expect(reduce(s, { type: 'cutDone', coverage: WIDE_MASK + 0.01, empty: false })).toMatchObject({ wide: true });
+      const wide = reduce(s, { type: 'cutDone', coverage: 0.9, empty: false });
+      expect(reduce(wide, { type: 'undo' })).toMatchObject({ wide: false });
+    });
+
+    it('an empty mask says so and keeps "Dalej" off', () => {
+      const s = reduce(cut([tap(0.5, 0.5)]), { type: 'cutDone', coverage: 0, empty: true }) as CutState;
+      expect(s).toMatchObject({ notice: 'cutEmpty', ready: false, wide: false, busy: false });
+      expect(reduce(s, { type: 'next' })).toBe(s);
+    });
+
+    it('a segmenter error stays in the cut step; retry runs the same strokes again', () => {
+      const s = cut([tap(0.5, 0.5)]);
+      const failed = reduce(s, { type: 'cutFailed' }) as CutState;
+      expect(failed).toMatchObject({ step: 'cut', notice: 'cutFailed', busy: false, ready: false });
+      expect(failed.strokes).toBe(s.strokes);
+      const retry = reduce(failed, { type: 'retry' }) as CutState;
+      expect(retry).toMatchObject({ busy: true, notice: null, attempt: 1 });
+      expect(retry.strokes).toBe(s.strokes);
+      expect(reduce(retry, { type: 'retry' })).toBe(retry); // already running
+    });
+
+    it('a stroke after a failure clears it; a late result of another step is ignored', () => {
+      const failed = reduce(cut([tap(0.5, 0.5)]), { type: 'cutFailed' });
+      expect((reduce(failed, tap(0.6, 0.6)) as CutState).notice).toBeNull();
+      expect(reduce(cut(), { type: 'cutDone', coverage: 0.1, empty: false })).toMatchObject({ ready: false });
+      expect(reduce(START, { type: 'cutFailed' })).toBe(START);
+    });
+
+    it('at most 50 strokes; cancel goes back to the source step', () => {
+      const s = cut(Array.from({ length: 60 }, () => tap(0.5, 0.5)));
+      expect(s.strokes).toHaveLength(50);
+      expect(reduce(s, { type: 'cancel' })).toEqual(START);
+    });
   });
 });

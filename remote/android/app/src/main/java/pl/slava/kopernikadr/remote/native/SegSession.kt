@@ -14,7 +14,8 @@ import java.util.UUID
  *   [stateDir]: `seg-gpu-attempt` is written before the engine is created and removed when the
  *   attempt ends. A marker found at start means the last attempt killed the process, so GPU is
  *   switched off for good (`seg-gpu-disabled`). A Java exception on GPU does the same, recreates the
- *   engine on CPU, sets the image again and retries once.
+ *   engine on CPU, binds the image again (a fresh decode: each engine owns its image and releases it
+ *   on close; MediaPipe only encodes it lazily inside `segment`) and retries once.
  * - The mask goes to `tmp/seg-<handle>.mask`, overwritten each run.
  * - **Close** is idempotent and deletes `tmp/seg-<handle>.*`. [closeIdle] closes sessions unused
  *   for [idleMs].

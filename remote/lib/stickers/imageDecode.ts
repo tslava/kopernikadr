@@ -19,6 +19,15 @@ export async function storeFileUrl(path: string): Promise<string> {
   return Capacitor.convertFileSrc(`${base}/${path}`);
 }
 
+/** The picture as PNG bytes (to hand it to the native side again). */
+export async function encodePng(img: Img): Promise<Uint8Array> {
+  const canvas = new OffscreenCanvas(img.width, img.height);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('encodePng: no 2d context');
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+  return new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+}
+
 export async function decodeImage(url: string, maxSide: number = MAX_STICKER_PX): Promise<Img> {
   const el = new Image();
   el.src = url;
