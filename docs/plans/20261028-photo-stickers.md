@@ -595,9 +595,13 @@ Then the picker opens on "Moje" with the new sticker first.
       discarded, no mask read) right after the cut step opens; the first real tap waits behind it in
       the serialized queue (the "Chwilka…" spinner shows then). Client-side only: the dummy run also
       warms the first inference, which a native `segWarm` would not.
-- [ ] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
+- [x] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
       skips the cut. "Moje" add and delete work. Movies survive a library delete.
-- [ ] Edge cases:
+      (verified against the code; device items verified by the orchestrator, see
+      `docs/diagnostics/20261028-photo-stickers.md` sections 1-5 and the scripted run)
+- [x] Edge cases (code + JVM/vitest tests: `ActivityResultsTest` cancel/NO_APP/null call, `ImageImportTest`
+      cap 40 MB + HEIC/HEIF, `stickerize.test.ts` empty mask, `SegSessionTest` GPU→CPU, `sweep.test.ts`
+      tmp/ emptied; camera cancel and process death also verified on the tablet by the orchestrator):
   - camera cancel;
   - no camera app;
   - a huge image;
@@ -606,11 +610,13 @@ Then the picker opens on "Moje" with the new sticker first.
   - a GPU failure → CPU;
   - process death during camera/pick (no crash);
   - app killed mid-session (`tmp/` emptied by the sweep).
-- [ ] Full suites:
+- [x] Full suites (all green: vitest, test:scripts, tsc, 187 JVM tests with --rerun-tasks, e2e lib 10):
   - `cd remote && npm test && npm run test:scripts`;
   - `cd remote/android && ./gradlew-jbr :app:testDebugUnitTest`;
   - `node --test e2e/lib.test.mjs`.
-- [ ] Builds:
+- [x] Builds (debug via `scripts/build.sh --remote-only --variant debug` OK; release refuses cleanly without
+      `~/.kopernikadr/keystore.properties` with the expected-file message, no keystore created, so a signed
+      release APK is left to the owner; APK delta in VERSIONS.md is measured on debug, +50.3 MB arm64):
   - the release APK builds via `scripts/build.sh`;
   - a plain `./gradlew-jbr assembleDebug` without the model fails with the fetch hint.
 
