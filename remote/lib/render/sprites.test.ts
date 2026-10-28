@@ -199,7 +199,7 @@ describe('sprite urls (urlOf)', () => {
 
   it('a hexcode gives the OpenMoji svg, a custom id the movie copy, an invalid id nothing', () => {
     expect(urlOf('1F436')).toBe('/openmoji/1F436.svg');
-    expect(urlOf(ID)).toBe('conv:file:///data/kopernikadr/projects/P1/stickers/0123abcd-0123-4abc-8abc-0123456789ab.png');
+    expect(urlOf(ID)).toBe('conv:file:///data/kopernikadr/projects/P1/stickers/0123abcd-0123-4abc-8abc-0123456789ab.webp');
     expect(urlOf('my:../../etc')).toBeNull();
     expect(urlOf('my:')).toBeNull();
     expect(customStickerPath('P1', '1F436')).toBeNull();
@@ -233,7 +233,7 @@ describe('sprite urls (urlOf)', () => {
   });
 
   it('preload names the custom sticker that is missing', async () => {
-    const f = fakeRaster([ID.slice(3)]); // its .png url fails
+    const f = fakeRaster([ID.slice(3)]); // its .webp url fails
     const failing: Rasterize = async (url, size) => {
       if (url.includes(ID.slice(3))) throw new Error('gone');
       return f.raster(url, size);

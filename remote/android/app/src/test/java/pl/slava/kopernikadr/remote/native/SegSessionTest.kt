@@ -137,8 +137,9 @@ class SegSessionTest {
         // later runs and later sessions go straight to CPU
         seg.run(h, listOf(stroke))
         assertEquals(2, created.size)
-        seg.run(seg.open(source("tmp/p2.jpg"), 1024).handle, listOf(stroke))
-        assertFalse(created[2].gpu)
+        val r2 = seg.run(seg.open(source("tmp/p2.jpg"), 1024).handle, listOf(stroke))
+        assertEquals("cpu", r2.delegate)
+        assertEquals("the CPU engine is reused", 2, created.size)
     }
 
     @Test
@@ -205,7 +206,7 @@ class SegSessionTest {
         assertEquals(listOf("seg-h1.mask", "seg-h1.png"), segFiles())
         seg.close(h)
         assertEquals(emptyList<String>(), segFiles())
-        assertTrue(created[0].closed)
+        assertFalse("the engine stays warm", created[0].closed)
         seg.close(h)
         seg.close("unknown")
     }
@@ -233,6 +234,61 @@ class SegSessionTest {
         assertEquals(emptyList<String>(), segFiles())
         assertTrue(created[0].closed)
         expectCode(NativeErrorCode.NO_SESSION) { seg.run(h, listOf(stroke)) }
+        // the next session warms up a new engine
+        seg.run(seg.open(source("tmp/n.jpg"), 1024).handle, listOf(stroke))
+        assertEquals(2, created.size)
+    }
+
+    @Test
+    fun theEngineOutlivesAClosedSessionButNotTheIdleTimeout() {
+        val h = seg.open(source(), 1024).handle
+        seg.run(h, listOf(stroke))
+        seg.close(h)
+        now = 900
+        assertEquals(0, seg.closeIdle())
+        assertFalse(created[0].closed)
+        now = 1000
+        seg.closeIdle()
+        assertTrue(created[0].closed)
+    }
+
+    @Test
+    fun twoSessionsInARowShareOneEngineAndSetTheImagePerPicture() {
+        val a = seg.open(source("tmp/a.jpg"), 1024).handle
+        seg.run(a, listOf(stroke))
+        seg.run(a, listOf(stroke))
+        val b = seg.open(source("tmp/b.jpg"), 1024).handle
+        val r = seg.run(b, listOf(stroke))
+        seg.run(b, listOf(stroke))
+        assertEquals(1, created.size)
+        assertEquals("gpu", r.delegate)
+        assertEquals(2, created[0].images)
+        assertEquals(4, created[0].segments)
+        assertFalse(created[0].closed)
+    }
+
+    @Test
+    fun theGpuMarkerIsOnlyWrittenForANewEngine() {
+        var markers = 0
+        factory = { gpu ->
+            if (File(state, "seg-gpu-attempt").isFile) markers++
+            FakeEngine(gpu).also { created += it }
+        }
+        seg.run(seg.open(source("tmp/a.jpg"), 1024).handle, listOf(stroke))
+        seg.run(seg.open(source("tmp/b.jpg"), 1024).handle, listOf(stroke))
+        assertEquals(1, markers)
+        assertFalse(File(state, "seg-gpu-attempt").exists())
+    }
+
+    @Test
+    fun aFailedSetImageOnAReusedEngineClosesItAndFallsBackToCpuOnGpu() {
+        var failNext = false
+        factory = { gpu -> FakeEngine(gpu, onSetImage = { e -> if (failNext && e.gpu) throw IllegalStateException("decode") }).also { created += it } }
+        seg.run(seg.open(source("tmp/a.jpg"), 1024).handle, listOf(stroke))
+        failNext = true
+        val r = seg.run(seg.open(source("tmp/b.jpg"), 1024).handle, listOf(stroke))
+        assertTrue(created[0].closed)
+        assertEquals("cpu", r.delegate)
     }
 
     @Test

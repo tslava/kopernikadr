@@ -40,14 +40,14 @@ export interface StickerControllerDeps {
   /** Shared with the EditController: Cofnij undoes sticker edits too. */
   history: EditHistory;
   /**
-   * Copies library sticker `id` (the uuid, no `my:`) into movie `projectId` (`projects/{pid}/stickers/<uuid>.png`).
+   * Copies library sticker `id` (the uuid, no `my:`) into movie `projectId` (`projects/{pid}/stickers/<uuid>.webp`).
    * Idempotent. Without it a custom sticker cannot be placed.
    */
   copySticker?: (id: string, projectId: string) => Promise<void>;
   newId?: () => string;
 }
 
-/** A custom sticker's PNG could not be copied into the movie: nothing was placed. */
+/** A custom sticker's WebP could not be copied into the movie: nothing was placed. */
 export class StickerCopyError extends Error {
   constructor(readonly emoji: string, cause?: unknown) {
     super(`could not copy sticker ${emoji} into the movie`, { cause });

@@ -15,8 +15,8 @@ const tmpLeft = (fs: FakeFs) => [...fs.binaries.keys()].filter((k) => k.startsWi
 describe('writeBinary', () => {
   it('goes through tmp and lands in place with size and sha256', async () => {
     const { fs, bin } = setup();
-    const r = await bin.writeBinary('stickers/a.png', blob(1, 2, 3));
-    expect([...fs.binaries.get('stickers/a.png')!]).toEqual([1, 2, 3]);
+    const r = await bin.writeBinary('stickers/a.webp', blob(1, 2, 3));
+    expect([...fs.binaries.get('stickers/a.webp')!]).toEqual([1, 2, 3]);
     expect(r.bytes).toBe(3);
     expect(r.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(tmpLeft(fs)).toEqual([]);
@@ -27,7 +27,7 @@ describe('writeBinary', () => {
   it('removes the tmp file when the install fails', async () => {
     const { fs, bin } = setup();
     fs.failOn({ op: 'installFile', times: 1 });
-    await expect(bin.writeBinary('stickers/a.png', blob(1))).rejects.toThrow(/injected/);
+    await expect(bin.writeBinary('stickers/a.webp', blob(1))).rejects.toThrow(/injected/);
     expect(fs.binaries.size).toBe(0);
   });
 });
@@ -35,20 +35,20 @@ describe('writeBinary', () => {
 describe('copyFile', () => {
   it('copies a file via tmp and keeps the source', async () => {
     const { fs, bin } = setup();
-    fs.binaries.set('stickers/a.png', new Uint8Array([9, 8, 7]));
-    const r = await bin.copyFile('stickers/a.png', 'projects/p/stickers/a.png');
-    expect([...fs.binaries.get('projects/p/stickers/a.png')!]).toEqual([9, 8, 7]);
-    expect([...fs.binaries.get('stickers/a.png')!]).toEqual([9, 8, 7]);
+    fs.binaries.set('stickers/a.webp', new Uint8Array([9, 8, 7]));
+    const r = await bin.copyFile('stickers/a.webp', 'projects/p/stickers/a.webp');
+    expect([...fs.binaries.get('projects/p/stickers/a.webp')!]).toEqual([9, 8, 7]);
+    expect([...fs.binaries.get('stickers/a.webp')!]).toEqual([9, 8, 7]);
     expect(r.bytes).toBe(3);
     expect(tmpLeft(fs)).toEqual([]);
   });
 
   it('is idempotent: a second copy succeeds and changes nothing', async () => {
     const { fs, bin } = setup();
-    fs.binaries.set('stickers/a.png', new Uint8Array([1, 2]));
-    await bin.copyFile('stickers/a.png', 'projects/p/stickers/a.png');
-    await bin.copyFile('stickers/a.png', 'projects/p/stickers/a.png');
-    expect([...fs.binaries.get('projects/p/stickers/a.png')!]).toEqual([1, 2]);
+    fs.binaries.set('stickers/a.webp', new Uint8Array([1, 2]));
+    await bin.copyFile('stickers/a.webp', 'projects/p/stickers/a.webp');
+    await bin.copyFile('stickers/a.webp', 'projects/p/stickers/a.webp');
+    expect([...fs.binaries.get('projects/p/stickers/a.webp')!]).toEqual([1, 2]);
   });
 
   it('installFile reports ALREADY_INSTALLED when the tmp file is gone and dest is valid', async () => {
@@ -60,17 +60,17 @@ describe('copyFile', () => {
 
   it('heals after a crash between the copy and the install', async () => {
     const { fs, bin } = setup();
-    fs.binaries.set('stickers/a.png', new Uint8Array([4, 4, 4]));
+    fs.binaries.set('stickers/a.webp', new Uint8Array([4, 4, 4]));
     fs.crashAfter(1); // the copy lands, then everything throws
-    await expect(bin.copyFile('stickers/a.png', 'projects/p/stickers/a.png')).rejects.toThrow('simulated crash');
-    expect(fs.binaries.has('projects/p/stickers/a.png')).toBe(false);
+    await expect(bin.copyFile('stickers/a.webp', 'projects/p/stickers/a.webp')).rejects.toThrow('simulated crash');
+    expect(fs.binaries.has('projects/p/stickers/a.webp')).toBe(false);
     fs.restart();
-    await bin.copyFile('stickers/a.png', 'projects/p/stickers/a.png');
-    expect([...fs.binaries.get('projects/p/stickers/a.png')!]).toEqual([4, 4, 4]);
+    await bin.copyFile('stickers/a.webp', 'projects/p/stickers/a.webp');
+    expect([...fs.binaries.get('projects/p/stickers/a.webp')!]).toEqual([4, 4, 4]);
   });
 
   it('fails when the source is missing', async () => {
     const { bin } = setup();
-    await expect(bin.copyFile('stickers/none.png', 'x/y.png')).rejects.toThrow(/no such file/);
+    await expect(bin.copyFile('stickers/none.webp', 'x/y.webp')).rejects.toThrow(/no such file/);
   });
 });

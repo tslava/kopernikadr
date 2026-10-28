@@ -52,7 +52,7 @@ export interface Sticker {
   on: string[];
 }
 
-/** A custom (photo) sticker id; the uuid names `projects/{pid}/stickers/<uuid>.png`. Paths are built only from ids that match. */
+/** A custom (photo) sticker id; the uuid names `projects/{pid}/stickers/<uuid>.webp`. Paths are built only from ids that match. */
 export const MY_STICKER_RE = /^my:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const isCustomSticker = (emoji: string): boolean => MY_STICKER_RE.test(emoji);
 /** Anything that claims to be custom (`my:` prefix) but is not a valid id. */

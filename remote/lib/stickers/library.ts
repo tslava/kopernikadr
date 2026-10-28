@@ -1,10 +1,10 @@
 /**
  * The sticker library on the tablet (plan "Photo stickers"): `stickers/index.json`
- * (`{v: 1, items: [{id, created, bytes, sha256}]}`, newest first), `stickers/<uuid>.png` (the
- * sticker, <= 1024 px square) and `stickers/<uuid>.thumb.png` (160 px, for the "Moje" tiles).
- * `add` writes both PNGs first and the index last, so a crash in between leaves an orphan PNG that
- * nothing lists (harmless). `list` hides rows whose PNG is gone. Removing a sticker never touches a
- * movie: placing a sticker copies the PNG into the movie folder.
+ * (`{v: 1, items: [{id, created, bytes, sha256}]}`, newest first), `stickers/<uuid>.webp` (the
+ * sticker, <= 1024 px square) and `stickers/<uuid>.thumb.webp` (160 px, for the "Moje" tiles).
+ * `add` writes both WebPs first and the index last, so a crash in between leaves an orphan WebP that
+ * nothing lists (harmless). `list` hides rows whose WebP is gone. Removing a sticker never touches a
+ * movie: placing a sticker copies the WebP into the movie folder.
  */
 import type { FileAdapter } from '../projects/files';
 import type { BinaryFiles } from './binaryFiles';
@@ -37,8 +37,8 @@ export interface StickerLibraryDeps {
   warn?: (msg: string, err?: unknown) => void;
 }
 
-export const stickerPath = (id: string): string => `${STICKERS_DIR}/${id}.png`;
-export const thumbPath = (id: string): string => `${STICKERS_DIR}/${id}.thumb.png`;
+export const stickerPath = (id: string): string => `${STICKERS_DIR}/${id}.webp`;
+export const thumbPath = (id: string): string => `${STICKERS_DIR}/${id}.thumb.webp`;
 
 function parseIndex(text: string): LibraryItem[] | null {
   let raw: unknown;
@@ -63,10 +63,10 @@ function parseIndex(text: string): LibraryItem[] | null {
 }
 
 /** Store-relative path of a library sticker's copy inside a movie. */
-export const movieStickerPath = (projectId: string, id: string): string => `projects/${projectId}/stickers/${id}.png`;
+export const movieStickerPath = (projectId: string, id: string): string => `projects/${projectId}/stickers/${id}.webp`;
 
 /**
- * `copySticker` for the `StickerController`: library `stickers/<id>.png` -> `projects/{pid}/stickers/<id>.png`
+ * `copySticker` for the `StickerController`: library `stickers/<id>.webp` -> `projects/{pid}/stickers/<id>.webp`
  * (tmp + installFile, idempotent: a repeat after a crash heals itself). Only a valid uuid builds a path.
  */
 export function createStickerCopier(bin: BinaryFiles): (id: string, projectId: string) => Promise<void> {
@@ -117,23 +117,23 @@ export class StickerLibrary {
     return rows;
   }
 
-  /** Newest first; rows whose PNG is missing are hidden. */
+  /** Newest first; rows whose WebP is missing are hidden. */
   async list(): Promise<LibraryItem[]> {
     const rows = await this.readRows();
     if (rows.length === 0) return rows;
     const present = new Set(await this.fs.list(STICKERS_DIR));
-    return rows.filter((r) => present.has(`${r.id}.png`));
+    return rows.filter((r) => present.has(`${r.id}.webp`));
   }
 
   /** Stores a new sticker (+ thumbnail) and returns its id. Throws `StickerLibraryFullError` at 200. */
-  add(png: Blob, thumb: Blob): Promise<string> {
+  add(webp: Blob, thumb: Blob): Promise<string> {
     return this.serial(async () => {
       const rows = await this.list();
       if (rows.length >= STICKER_LIMIT) throw new StickerLibraryFullError();
       const id = this.uuid();
       await this.fs.mkdir(STICKERS_DIR);
       try {
-        const info = await this.bin.writeBinary(stickerPath(id), png);
+        const info = await this.bin.writeBinary(stickerPath(id), webp);
         await this.bin.writeBinary(thumbPath(id), thumb);
         const item: LibraryItem = { id, created: this.now(), bytes: info.bytes, sha256: info.sha256 };
         await this.fs.writeTextAtomic(INDEX, JSON.stringify({ v: 1, items: [item, ...rows] }));
@@ -159,7 +159,7 @@ export class StickerLibrary {
     });
   }
 
-  /** Native file URI of the sticker PNG (feed it to `convertFileSrc`). */
+  /** Native file URI of the sticker WebP (feed it to `convertFileSrc`). */
   fileUri(id: string): Promise<string> {
     if (!LIBRARY_ID_RE.test(id)) return Promise.reject(new Error(`bad sticker id: ${id}`));
     return this.fs.uri(stickerPath(id));

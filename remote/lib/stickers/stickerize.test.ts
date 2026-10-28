@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_STICKER_PX,
   THUMB_PX,
@@ -6,6 +6,7 @@ import {
   cutout,
   distanceToInside,
   downscale,
+  encodeStickerWebps,
   makeSticker,
   makeThumbnail,
   naklejka,
@@ -258,5 +259,26 @@ describe('downscale / presets', () => {
     expect(Math.abs(x0 - (s.width - 1 - x1))).toBeLessThanOrEqual(1);
     expect(Math.abs(y0 - (s.height - 1 - y1))).toBeLessThanOrEqual(1);
     expect(x1 - x0).toBeGreaterThan(y1 - y0);
+  });
+});
+
+describe('encodeStickerWebps', () => {
+  it('encodes the sticker and the thumbnail as image/webp (PNG took 4 s on the tablet)', async () => {
+    const types: unknown[] = [];
+    class FakeCanvas {
+      constructor(public width: number, public height: number) {}
+      getContext() { return { putImageData() {}, drawImage() {}, imageSmoothingEnabled: true, imageSmoothingQuality: 'low' }; }
+      async convertToBlob(o: { type: string; quality: number }) { types.push(o); return new Blob([new Uint8Array(1)], { type: o.type }); }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeCanvas);
+    vi.stubGlobal('ImageData', class { constructor(public data: Uint8ClampedArray, public width: number, public height: number) {} });
+    try {
+      const r = await encodeStickerWebps(make(8, 8, () => [1, 2, 3, 255]));
+      expect(types).toEqual([{ type: 'image/webp', quality: 0.92 }, { type: 'image/webp', quality: 0.92 }]);
+      expect(r.webp.type).toBe('image/webp');
+      expect(r.thumb.type).toBe('image/webp');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

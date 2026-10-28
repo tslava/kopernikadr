@@ -5,7 +5,7 @@
  * The cache is an LRU capped by bytes; evicted bitmaps are closed. The export `preload`s every
  * sprite it needs into a pinned set that the LRU never touches.
  * `urlOf(emoji)` maps a sprite id to its image: a hexcode to the OpenMoji SVG, a custom `my:<uuid>`
- * to the movie's own PNG copy (bound per project); null means an unknown sprite (it fails like a
+ * to the movie's own WebP copy (bound per project); null means an unknown sprite (it fails like a
  * broken image).
  */
 import { openmojiUrlOf, type SpriteUrlOf } from './catalog';

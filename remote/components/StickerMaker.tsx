@@ -12,7 +12,7 @@ import { reopenFrom, runCut } from '@/lib/stickers/cutSession';
 import { decodeImage, encodePng, storeFileUrl } from '@/lib/stickers/imageDecode';
 import { StickerLibraryFullError, type StickerLibrary } from '@/lib/stickers/library';
 import { createSegClient, SegError, SegSupersededError, type SegClient, type SegStrokeArg } from '@/lib/stickers/segClient';
-import { cutout, encodeStickerPngs, makeSticker, type Img, type StickerStyle } from '@/lib/stickers/stickerize';
+import { cutout, encodeStickerWebps, makeSticker, type Img, type StickerStyle } from '@/lib/stickers/stickerize';
 import { StyleCache } from '@/lib/stickers/styleCache';
 import type { OverlayStack } from '@/lib/app/overlays';
 import Icon from './Icon';
@@ -162,8 +162,8 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       return;
     }
     try {
-      const { png, thumb } = await encodeStickerPngs(sticker);
-      const id = await library.add(png, thumb);
+      const { webp, thumb } = await encodeStickerWebps(sticker);
+      const id = await library.add(webp, thumb);
       if (live.current) dispatch({ type: 'saved', id });
     } catch (e) {
       console.error('sticker save', e);

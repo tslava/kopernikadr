@@ -24,7 +24,7 @@ export const spriteUrl = (hexcode: string): string => `${OPENMOJI_DIR}/${hexcode
 
 /** Store-relative path of a custom sticker's copy in its movie; null for an invalid id. */
 export function customStickerPath(projectId: string, emoji: string): string | null {
-  return isCustomSticker(emoji) ? `projects/${projectId}/stickers/${emoji.slice(3)}.png` : null;
+  return isCustomSticker(emoji) ? `projects/${projectId}/stickers/${emoji.slice(3)}.webp` : null;
 }
 
 /** emoji -> image url; null = unknown sprite (an invalid custom id). */

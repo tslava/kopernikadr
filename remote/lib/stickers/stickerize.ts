@@ -362,12 +362,16 @@ export function makeThumbnail(sticker: Img): Img {
   return downscale(sticker, THUMB_PX);
 }
 
+const STICKER_MIME = 'image/webp';
+const STICKER_QUALITY = 0.92;
+
 /**
- * The sticker PNG and its `THUMB_PX` thumbnail in one go (browser only: OffscreenCanvas). The big
+ * The sticker and its `THUMB_PX` thumbnail as WebP in one go (browser only: OffscreenCanvas). The big
  * canvas is filled once; the thumbnail is the same canvas drawn scaled (native resampling, no JS
- * pixel loop) and both PNGs are encoded natively with `convertToBlob`, in parallel.
+ * pixel loop) and both are encoded natively with `convertToBlob`, in parallel.
+ * WebP, not PNG: the PNG encode took 4 s on the tablet (1024 px), WebP at 0.92 takes 0.3 s; it keeps alpha.
  */
-export async function encodeStickerPngs(img: Img): Promise<{ png: Blob; thumb: Blob }> {
+export async function encodeStickerWebps(img: Img): Promise<{ webp: Blob; thumb: Blob }> {
   const canvas = new OffscreenCanvas(img.width, img.height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('stickerize: no 2d context');
@@ -380,6 +384,7 @@ export async function encodeStickerPngs(img: Img): Promise<{ png: Blob; thumb: B
   sctx.imageSmoothingEnabled = true;
   sctx.imageSmoothingQuality = 'high';
   sctx.drawImage(canvas, 0, 0, tw, th);
-  const [png, thumb] = await Promise.all([canvas.convertToBlob({ type: 'image/png' }), small.convertToBlob({ type: 'image/png' })]);
-  return { png, thumb };
+  const opts = { type: STICKER_MIME, quality: STICKER_QUALITY };
+  const [webp, thumb] = await Promise.all([canvas.convertToBlob(opts), small.convertToBlob(opts)]);
+  return { webp, thumb };
 }

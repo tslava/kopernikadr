@@ -224,10 +224,10 @@ describe('StickerController: custom stickers (copy-on-place)', () => {
 
   it('the movie keeps drawing after the library sticker is removed (the copy is what it references)', async () => {
     const files = new Map<string, string>([[`lib/${UUID}`, 'png']]);
-    const { c, sticker } = await setup(5, async (id, pid) => void files.set(`projects/${pid}/stickers/${id}.png`, files.get(`lib/${id}`)!));
+    const { c, sticker } = await setup(5, async (id, pid) => void files.set(`projects/${pid}/stickers/${id}.webp`, files.get(`lib/${id}`)!));
     await c.add('p1', 'f2', MY);
     files.delete(`lib/${UUID}`); // library delete
-    expect(files.has(`projects/p1/stickers/${UUID}.png`)).toBe(true);
+    expect(files.has(`projects/p1/stickers/${UUID}.webp`)).toBe(true);
     expect(sticker().emoji).toBe(MY);
   });
 });

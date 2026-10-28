@@ -26,8 +26,8 @@ describe('StickerLibrary', () => {
     const { fs, lib } = setup();
     const id = await lib.add(blob(1, 2, 3), blob(4));
     expect(id).toBe(uid(1));
-    expect(fs.binaries.has(`stickers/${id}.png`)).toBe(true);
-    expect(fs.binaries.has(`stickers/${id}.thumb.png`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${id}.webp`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${id}.thumb.webp`)).toBe(true);
     const items = await lib.list();
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ id, bytes: 3 });
@@ -50,9 +50,9 @@ describe('StickerLibrary', () => {
     await lib.remove(a);
     await lib.remove(a);
     expect(await ids(lib)).toEqual([b]);
-    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(false);
-    expect(fs.binaries.has(`stickers/${a}.thumb.png`)).toBe(false);
-    expect(fs.binaries.has(`stickers/${b}.png`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(false);
+    expect(fs.binaries.has(`stickers/${a}.thumb.webp`)).toBe(false);
+    expect(fs.binaries.has(`stickers/${b}.webp`)).toBe(true);
   });
 
   it('rejects a malformed id', async () => {
@@ -67,14 +67,14 @@ describe('StickerLibrary', () => {
   it('gives file and thumbnail uris', async () => {
     const { lib } = setup();
     const id = await lib.add(blob(1), blob(1));
-    expect(await lib.fileUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.png`);
-    expect(await lib.thumbUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.thumb.png`);
+    expect(await lib.fileUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.webp`);
+    expect(await lib.thumbUri(id)).toBe(`file:///data/kopernikadr/stickers/${id}.thumb.webp`);
   });
 
   it('refuses the 201st sticker and keeps the library intact', async () => {
     const { fs, lib } = setup();
     const rows = Array.from({ length: STICKER_LIMIT }, (_, i) => ({ id: uid(i + 1000), created: i, bytes: 1, sha256: '' }));
-    for (const r of rows) fs.binaries.set(`stickers/${r.id}.png`, new Uint8Array([1]));
+    for (const r of rows) fs.binaries.set(`stickers/${r.id}.webp`, new Uint8Array([1]));
     fs.files.set(INDEX, JSON.stringify({ v: 1, items: rows }));
     await expect(lib.add(blob(1), blob(1))).rejects.toBeInstanceOf(StickerLibraryFullError);
     expect(await lib.list()).toHaveLength(STICKER_LIMIT);
@@ -103,11 +103,11 @@ describe('StickerLibrary', () => {
     expect(await ids(lib)).toEqual([c, a]);
   });
 
-  it('hides a row whose PNG is missing', async () => {
+  it('hides a row whose WebP is missing', async () => {
     const { fs, lib } = setup();
     const a = await lib.add(blob(1), blob(1));
     const b = await lib.add(blob(2), blob(2));
-    fs.binaries.delete(`stickers/${a}.png`);
+    fs.binaries.delete(`stickers/${a}.webp`);
     expect(await ids(lib)).toEqual([b]);
   });
 
@@ -117,10 +117,10 @@ describe('StickerLibrary', () => {
     fs.files.set(INDEX, '{not json');
     expect(await lib.list()).toEqual([]);
     expect(warn).toHaveBeenCalled();
-    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(true);
     const b = await lib.add(blob(2), blob(2));
     expect(await ids(lib)).toEqual([b]);
-    expect(fs.binaries.has(`stickers/${a}.png`)).toBe(true);
+    expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(true);
   });
 
   it('drops index rows with a bad id', async () => {
@@ -148,9 +148,9 @@ describe('createStickerCopier', () => {
     const copy = createStickerCopier(bin);
     await copy(id, 'P1');
     await copy(id, 'P1');
-    expect([...fs.binaries.get(`projects/P1/stickers/${id}.png`)!]).toEqual([7, 8, 9]);
+    expect([...fs.binaries.get(`projects/P1/stickers/${id}.webp`)!]).toEqual([7, 8, 9]);
     await lib.remove(id);
-    expect(fs.binaries.has(`projects/P1/stickers/${id}.png`)).toBe(true);
+    expect(fs.binaries.has(`projects/P1/stickers/${id}.webp`)).toBe(true);
   });
 
   it('refuses a bad id and fails when the library file is gone', async () => {

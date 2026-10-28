@@ -1,6 +1,6 @@
 /**
  * Binary files for the sticker library (plan "Photo stickers"). The `FileAdapter` is text-only and
- * images never pass through `Filesystem.readFile/writeFile` (ARCHITECTURE §5.4). The sticker PNGs
+ * images never pass through `Filesystem.readFile/writeFile` (ARCHITECTURE §5.4). The sticker WebPs
  * are the documented exception, like `videoWriteAt`: they are small (<= ~1 MB), so one base64 write
  * to `tmp/` is fine. They never land in place directly: `tmp/<uuid>.bin` -> size + sha256 ->
  * native `installFile` (atomic, verified rename). `installFile` is idempotent, so a copy that is

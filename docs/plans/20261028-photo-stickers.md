@@ -37,7 +37,7 @@ skips the cut-out step and goes straight to the style step.
 - **Sources in this plan.** The tablet camera (system camera app) and the tablet gallery (photos and
   PNG/WebP). Picking a frame of the movie comes later.
 - **Storage.** A sticker library on the tablet, `stickers/`. When a sticker is placed in a movie, its
-  PNG is **copied into the movie folder**. Deleting a sticker from "Moje" never breaks a movie.
+  WebP is **copied into the movie folder**. Deleting a sticker from "Moje" never breaks a movie.
 - **Not in the repo.** Custom stickers stay only on the tablet. Character art (Sanrio, Disney) is
   never committed.
 
@@ -182,19 +182,19 @@ These go to `docs/ROADMAP.md`.
    - trims to the bounding box;
    - pads to a square;
    - draws the outline, shadow or comic style;
-   - encodes the PNG.
-3. **Custom stickers are square transparent PNGs** (≤ 1024 px). The renderer keeps drawing square
+   - encodes the WebP (PNG encode took 4 s on the tablet).
+3. **Custom stickers are square transparent WebPs** (≤ 1024 px; WebP, PNG encode took 4 s on the tablet). The renderer keeps drawing square
    sprites, so `drawStickers` geometry does not change. `SpriteCache` gets an injected
    `urlOf(emoji)`, bound per project. The key stays `emoji@bucket`, because `my:` images are
    immutable and each `SpriteCache` instance is per project already.
 4. **Reference.**
    - A custom sticker in a project is `emoji: "my:<uuid>"`. The id is validated by a strict regex
      wherever a path is built.
-   - On place, the library PNG is copied to `projects/{pid}/stickers/<uuid>.png`.
-   - Deleting from the library deletes only `stickers/<uuid>.png`, its thumbnail and its index row.
+   - On place, the library WebP is copied to `projects/{pid}/stickers/<uuid>.webp`.
+   - Deleting from the library deletes only `stickers/<uuid>.webp`, its thumbnail and its index row.
    - Movie copies are never garbage-collected. They go away with the movie.
 5. **Binary files go through `tmp/` + `installFile`.**
-   - The new PNG goes to `tmp/` (base64 via `Filesystem.writeFile`, ≤ ~1 MB; a documented exception to
+   - The new WebP goes to `tmp/` (base64 via `Filesystem.writeFile`, ≤ ~1 MB; a documented exception to
      §5.4, like `videoWriteAt`), then `installFile(tmp, dest, bytes, sha256)` moves it into place
      atomically and verifies it.
    - Copy-on-place is `Filesystem.copy` → `tmp/`, then `installFile` into the movie. Its
@@ -284,11 +284,11 @@ checked by `PathGuard`.
 **Library** (`remote/lib/stickers/library.ts`):
 - Layout:
   - `stickers/index.json` = `{v: 1, items: [{id, created, bytes, sha256}]}` in newest-first order;
-  - `stickers/<uuid>.png` is the sticker (≤ 1024 square);
-  - `stickers/<uuid>.thumb.png` is a 160 px thumbnail for the "Moje" tiles.
-- Add writes both PNGs through `tmp/` + `installFile`, then writes the index atomically
+  - `stickers/<uuid>.webp` is the sticker (≤ 1024 square);
+  - `stickers/<uuid>.thumb.webp` is a 160 px thumbnail for the "Moje" tiles.
+- Add writes both WebPs through `tmp/` + `installFile`, then writes the index atomically
   (`writeTextAtomic`).
-- `list()` filters out rows whose file is missing. Orphan PNGs are harmless and left alone.
+- `list()` filters out rows whose file is missing. Orphan WebPs are harmless and left alone.
 - Up to 200 stickers. Over 200, the kid is asked to delete one first.
 
 **Project model:**
@@ -316,7 +316,7 @@ checked by `PathGuard`.
 - `naklejka = shadow ∘ outline(white, r = 3% of side)`.
 - `komiks = shadow ∘ outline(black, r = 2%) ∘ comic`.
 - Output ≤ 1024 px square, plus the 160 px thumbnail. Encoded by
-  `OffscreenCanvas.convertToBlob({type: 'image/png'})`.
+  `OffscreenCanvas.convertToBlob({type: 'image/webp', quality: 0.92})` (WebP, PNG encode took 4 s on the tablet).
 - Both presets are computed once per cut-out and cached. A chip tap only swaps the preview. Move it to
   a Worker only if the device run shows jank.
 
@@ -374,7 +374,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - Document the §5.4 exception in the module header.
 - [x] `StickerLibrary`:
   - `list()` filters missing files;
-  - `add(png, thumb)` → id: both PNGs first, then `writeTextAtomic` of the index;
+  - `add(webp, thumb)` → id: both WebPs first, then `writeTextAtomic` of the index;
   - `remove(id)`;
   - `fileUri(id)` / `thumbUri(id)`;
   - the 200 limit;
@@ -383,7 +383,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - add/list/remove;
   - newest-first order;
   - the limit;
-  - a crash between the PNGs and the index (an orphan is ignored);
+  - a crash between the WebPs and the index (an orphan is ignored);
   - a row with a missing file is hidden;
   - a corrupt index → empty list + warning, files kept;
   - `copyFile` is idempotent.
@@ -560,6 +560,7 @@ Then the picker opens on "Moje" with the new sticker first.
 - [x] `segClose` on unmount, cancel and save (and on "Dalej", since back from style goes to the source step).
 - [x] ➕ Native lifetime fix (`SegEngine.kt`): `MediaPipeEngine` keeps the `MPImage` and its Bitmap alive until `close()` (segmenter closed first). `setImage` only keeps a reference, the encoder runs lazily inside `segment`. The CPU-fallback path closes the old engine and binds a fresh decode of the same session PNG. JVM tests unchanged and green (the fakes never touched MediaPipe).
 - [x] ➕ Transparent reopen after the 5-minute idle close: the native close deletes `seg-<handle>.png`, so the cut step keeps the decoded picture (`Img`, <= 1024 px) in memory, and on `NO_SESSION` writes it back to `tmp/seg-src-<uuid>.png`, calls `segOpen` and retries the run once (`cutSession.ts`: `runCut`, `reopenFrom`).
+- [x] ➕ Fix: custom stickers are stored as WebP (`stickers/<uuid>.webp`, `.thumb.webp`, `projects/{pid}/stickers/<uuid>.webp`), encoded with `convertToBlob({type: 'image/webp', quality: 0.92})`: the PNG encode took 4 s on the tablet (WebP 0.3 s). The `my:<uuid>` id is unchanged; old `.png` files are not migrated (they fail as an unknown sprite). The native segmenter engine is kept across `segOpen` sessions (see Task 6 area: `SegSession`/`SegEngine`).
 - [x] Removed the Task 5 "Wkrótce: wycinanie" path (`soon` notice and strings).
 - [x] Tests:
   - model: strokes and undo;
