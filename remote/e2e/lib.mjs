@@ -50,3 +50,43 @@ export function newestGalleryRow(output, prefix) {
   }).filter((r) => r && r.name.startsWith(prefix));
   return rows.sort((a, b) => b.id - a.id)[0] ?? null;
 }
+
+// ---- stickers.cdp.mjs ----
+
+/** Args of stickers.cdp.mjs. `--project` (an agent-created test movie) is mandatory: the script never picks a movie itself. */
+export function parseStickerArgs(argv) {
+  const out = { devtools: null, project: null, photo: null, png: null, toy: null, adb: 'adb', pkg: 'pl.slava.kopernikadr.remote.debug' };
+  const keys = { '--devtools': 'devtools', '--project': 'project', '--photo': 'photo', '--png': 'png', '--toy': 'toy', '--adb': 'adb', '--package': 'pkg' };
+  for (let i = 0; i < argv.length; i += 2) {
+    const k = keys[argv[i]];
+    if (!k || argv[i + 1] === undefined) throw new Error(`bad argument: ${argv[i]}`);
+    out[k] = argv[i + 1];
+  }
+  if (!out.devtools || !/^\d+$/.test(out.devtools)) throw new Error('--devtools <port> is required');
+  if (!out.project || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(out.project)) throw new Error('--project <uuid of a test movie> is required');
+  if (!out.photo || !out.photo.startsWith('/')) throw new Error('--photo <absolute device path of the toy photo (JPEG)> is required');
+  if (out.png && !out.png.startsWith('/')) throw new Error('--png must be an absolute device path');
+  const toy = (out.toy ?? '0.5,0.5').split(',').map(Number);
+  if (toy.length !== 2 || toy.some((n) => !Number.isFinite(n) || n < 0 || n > 1)) throw new Error('--toy must be "x,y" normalized 0..1');
+  out.toy = { x: toy[0], y: toy[1] };
+  return out;
+}
+
+/** Safety gate: only a movie named "Test..." and with exactly the id passed on the command line may be driven. */
+export function assertTestProject(project, id) {
+  if (!project || project.id !== id) throw new Error(`project.json id ${project?.id} is not the requested ${id}`);
+  if (typeof project.name !== 'string' || !project.name.startsWith('Test')) throw new Error(`refusing to run: movie "${project.name}" is not named "Test..."`);
+}
+
+/** The `my:<uuid>` stickers of a project.json, with the uuid. */
+export function myStickers(project) {
+  return (project.stickers ?? []).filter((s) => typeof s.emoji === 'string' && s.emoji.startsWith('my:')).map((s) => ({ ...s, uuid: s.emoji.slice(3) }));
+}
+
+/** Viewport point of a normalized (0..1) position inside a DOMRect-like {left, top, width, height}. */
+export function pointInRect(rect, nx, ny) {
+  return { x: rect.left + rect.width * nx, y: rect.top + rect.height * ny };
+}
+
+/** Path of a movie's copy of a library sticker, relative to the app's data dir (for `run-as`). */
+export const movieStickerFile = (projectId, uuid) => `files/kopernikadr/projects/${projectId}/stickers/${uuid}.webp`;

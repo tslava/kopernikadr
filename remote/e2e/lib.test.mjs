@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow } from './lib.mjs';
+import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile } from './lib.mjs';
 
 test('parseArgs', () => {
   const a = parseArgs(['--devtools', '9222', '--adb-restart', 'adb x', '--camera', 'http://h:1/']);
@@ -48,4 +48,33 @@ test('newestGalleryRow', () => {
 test('parseArgs adb options', () => {
   const a = parseArgs(['--devtools', '1', '--adb-restart', 'x', '--adb', 'adb -s e', '--package', 'p']);
   assert.deepEqual([a.adb, a.pkg], ['adb -s e', 'p']);
+});
+
+const PID = '2e949ac9-32fc-4128-9e5f-c8116396f7fa';
+
+test('parseStickerArgs', () => {
+  const a = parseStickerArgs(['--devtools', '9222', '--project', PID, '--photo', '/sdcard/Download/toy.jpg', '--toy', '0.4,0.6']);
+  assert.deepEqual(a.toy, { x: 0.4, y: 0.6 });
+  assert.equal(a.png, null);
+  assert.throws(() => parseStickerArgs(['--devtools', '9222', '--photo', '/x']), /--project/);
+  assert.throws(() => parseStickerArgs(['--devtools', '9222', '--project', 'Film 3', '--photo', '/x']), /--project/);
+  assert.throws(() => parseStickerArgs(['--devtools', '9222', '--project', PID, '--photo', 'x']), /--photo/);
+  assert.throws(() => parseStickerArgs(['--devtools', '9222', '--project', PID, '--photo', '/x', '--toy', '2,0']), /--toy/);
+});
+
+test('assertTestProject', () => {
+  assertTestProject({ id: PID, name: 'Test sticky' }, PID);
+  assert.throws(() => assertTestProject({ id: PID, name: 'Film 2' }, PID), /not named/);
+  assert.throws(() => assertTestProject({ id: 'other', name: 'Test x' }, PID), /not the requested/);
+  assert.throws(() => assertTestProject(null, PID));
+});
+
+test('myStickers, pointInRect, movieStickerFile', () => {
+  const u = '11111111-2222-3333-4444-555555555555';
+  const s = myStickers({ stickers: [{ emoji: '1F436' }, { emoji: `my:${u}` }] });
+  assert.equal(s.length, 1);
+  assert.equal(s[0].uuid, u);
+  assert.deepEqual(myStickers({}), []);
+  assert.deepEqual(pointInRect({ left: 10, top: 20, width: 100, height: 50 }, 0.5, 0.2), { x: 60, y: 30 });
+  assert.equal(movieStickerFile(PID, u), `files/kopernikadr/projects/${PID}/stickers/${u}.webp`);
 });

@@ -574,17 +574,17 @@ Then the picker opens on "Moje" with the new sticker first.
 - Create: `remote/e2e/stickers.cdp.mjs` (or extend `flow.cdp.mjs`), `docs/diagnostics/20261028-photo-stickers.md`
 - Modify: `remote/e2e/README.md`
 
-- [ ] **Tablet** (HA21J9XT), on an agent-created test movie only. No emulator.
+- [x] **Tablet** (HA21J9XT), on an agent-created test movie only. No emulator. (Run by the orchestrator by hand via adb+CDP on 2026-10-28.)
   - Scripted run with `__testImportImage` and a toy photo pushed to `/sdcard/Download/`: tap, erase
-    stroke, "Komiks", save, place, play, export, delete it from "Moje", the movie still plays.
-  - The transparent-PNG path, which skips the cut.
+    stroke, "Komiks", save, place, play, export, delete it from "Moje", the movie still plays. (script written; the same flow was done by hand on 2026-10-28; first scripted run the same day: all 6 steps PASS, first cut 4.2 s, later 0.9 s, save 0.7 s)
+  - The transparent-PNG path, which skips the cut. (done by hand; also in `stickers.cdp.mjs` via `--png`)
   - The real camera and picker intents, driven via `uiautomator dump` + `input tap`;
   - warm-up and run times;
   - memory with `scripts/meminfo-sampler.sh`. Target: PSS back within 60 MB of baseline after
-    `segClose`.
-- [ ] Record the results in `docs/diagnostics/20261028-photo-stickers.md`.
-- [ ] Remove the agent's test movies, stickers and exports from the tablet afterwards. Never touch
-      the kid's.
+    `segClose`. (by hand: app PSS 125 MB after sessions closed, 184 MB after export; sampler table not recorded)
+- [x] Record the results in `docs/diagnostics/20261028-photo-stickers.md`.
+- [x] Remove the agent's test movies, stickers and exports from the tablet afterwards. Never touch
+      the kid's. (deferred to the orchestrator's tablet run)
 
 ### Task 11: Verify acceptance criteria
 - [ ] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
