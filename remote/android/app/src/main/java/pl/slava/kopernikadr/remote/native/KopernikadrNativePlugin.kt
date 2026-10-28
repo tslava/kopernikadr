@@ -3,6 +3,9 @@ package pl.slava.kopernikadr.remote.native
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import android.os.Environment
 import android.util.Log
@@ -10,20 +13,28 @@ import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 import org.json.JSONObject
+import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 
 /**
  * In-app Capacitor plugin `KopernikadrNative` (TS facade: `remote/lib/native.ts`). Thin: every
  * method runs [NativeApi] on one background thread (so calls are serialized and never block the
  * main thread) and rejects with `code` = a [NativeErrorCode] name.
+ *
+ * Image work (copying a picked image, later decoding and segmenting) runs on its own single-thread
+ * [segExecutor], so a slow segmenter call never delays frame downloads or project saves queued on
+ * the shared executor. It is a scheduled one for the segmenter session's idle timeout.
  */
 @CapacitorPlugin(name = "KopernikadrNative")
 class KopernikadrNativePlugin : Plugin() {
     private lateinit var api: NativeApi
     private lateinit var executor: ExecutorService
+    private lateinit var segExecutor: ScheduledExecutorService
     private var debuggable = false
 
     override fun load() {
@@ -40,9 +51,15 @@ class KopernikadrNativePlugin : Plugin() {
                 volumeDir = Environment.getExternalStorageDirectory(),
                 disk = StatFsDiskSpace,
             ),
+            images = ImageImport(guard),
+            testImportRoots = listOfNotNull(
+                File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOWNLOADS),
+                ctx.getExternalFilesDir(null),
+            ),
             log = log,
         )
         debuggable = (ctx.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        segExecutor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "KopernikadrSeg") }
         executor = Executors.newSingleThreadExecutor { r -> Thread(r, "KopernikadrNative") }
         // Startup sweep (§5.7): an export killed mid-encode or mid-publish leaves an exports/ file
         // and maybe a pending gallery row. Queued first on the serial executor, so it finishes
@@ -59,6 +76,7 @@ class KopernikadrNativePlugin : Plugin() {
 
     override fun handleOnDestroy() {
         executor.shutdown()
+        segExecutor.shutdownNow()
     }
 
     @PluginMethod
@@ -107,6 +125,54 @@ class KopernikadrNativePlugin : Plugin() {
         }
     }
 
+    /**
+     * Opens the system image picker (the platform photo picker, its Play-services backport or
+     * `ACTION_OPEN_DOCUMENT`, whichever `PickVisualMedia` chooses) and resolves with the copy in
+     * `tmp/`: `{path, mime}`. `CANCELLED`, `NO_APP`, `TOO_LARGE`, `UNSUPPORTED` on failure.
+     */
+    @PluginMethod
+    fun pickImage(call: PluginCall) {
+        val intent = ActivityResultContracts.PickVisualMedia().createIntent(
+            context,
+            PickVisualMediaRequest.Builder().setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly).build(),
+        )
+        try {
+            startActivityForResult(call, intent, "pickResult")
+        } catch (e: ActivityNotFoundException) {
+            call.reject("no image picker", NativeErrorCode.NO_APP.name)
+        }
+    }
+
+    /**
+     * Result of [pickImage]. [call] is null when the process died while the picker was in front;
+     * then there is nobody to answer and the app just opens on its default route.
+     */
+    @ActivityCallback
+    private fun pickResult(call: PluginCall?, result: ActivityResult) {
+        val uri = result.data?.data ?: result.data?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+        val outcome = ActivityResults.outcome(call != null, result.resultCode, uri != null)
+        if (call == null) return
+        ActivityResults.errorOf(outcome)?.let {
+            call.reject(it.name.lowercase(), it.name)
+            return
+        }
+        val resolver = context.contentResolver
+        runOn(segExecutor, call) {
+            val input = resolver.openInputStream(uri!!) ?: raise(NativeErrorCode.NOT_FOUND, "picker returned an unreadable uri")
+            input.use { api.importPicked(resolver.getType(uri), it) }
+        }
+    }
+
+    /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
+    @PluginMethod
+    fun __testImportImage(call: PluginCall) {
+        if (!debuggable) {
+            call.reject("__testImportImage is debug-only", NativeErrorCode.BAD_ARGUMENT.name)
+            return
+        }
+        run(call, api::testImportImage, segExecutor)
+    }
+
     /** Debug builds only: inserts a pending gallery row, for the emulator cleanup check. */
     @PluginMethod
     fun __testInsertPending(call: PluginCall) {
@@ -117,13 +183,17 @@ class KopernikadrNativePlugin : Plugin() {
         run(call, api::testInsertPending)
     }
 
-    private fun run(call: PluginCall, op: (BridgeArgs) -> Map<String, Any>) {
+    private fun run(call: PluginCall, op: (BridgeArgs) -> Map<String, Any>, on: ExecutorService = executor) {
         val data = call.data
         val args = BridgeArgs { name -> data.opt(name).takeUnless { it == null || it == JSONObject.NULL } }
+        runOn(on, call) { op(args) }
+    }
+
+    private fun runOn(on: ExecutorService, call: PluginCall, op: () -> Map<String, Any>) {
         try {
-            executor.execute {
+            on.execute {
                 try {
-                    val result = op(args)
+                    val result = op()
                     if (result.isEmpty()) call.resolve() else call.resolve(result.toJSObject())
                 } catch (e: NativeException) {
                     call.reject(e.message, e.code.name)

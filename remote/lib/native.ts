@@ -21,7 +21,21 @@ export type NativeErrorCode =
   /** The handle was closed or aborted (or its close failed). */
   | 'CLOSED'
   /** Any other I/O or provider failure. */
-  | 'IO';
+  | 'IO'
+  /** The user backed out of the camera or picker (or it returned nothing). */
+  | 'CANCELLED'
+  /** No app handles the camera or picker intent. */
+  | 'NO_APP'
+  /** A picked image is over 40 MB. */
+  | 'TOO_LARGE'
+  /** Not a jpeg, png, webp, heic or heif image. */
+  | 'UNSUPPORTED'
+  /** The segmenter failed on both GPU and CPU. */
+  | 'SEG_FAILED'
+  /** The segmenter model is missing from the APK. */
+  | 'MODEL_MISSING'
+  /** Unknown or closed segmenter session handle. */
+  | 'NO_SESSION';
 
 export const NATIVE_ERROR_CODES: readonly NativeErrorCode[] = [
   'PATH_INVALID',
@@ -32,6 +46,13 @@ export const NATIVE_ERROR_CODES: readonly NativeErrorCode[] = [
   'BAD_HANDLE',
   'CLOSED',
   'IO',
+  'CANCELLED',
+  'NO_APP',
+  'TOO_LARGE',
+  'UNSUPPORTED',
+  'SEG_FAILED',
+  'MODEL_MISSING',
+  'NO_SESSION',
 ];
 
 export type InstallResult = 'INSTALLED' | 'ALREADY_INSTALLED';
@@ -75,6 +96,15 @@ export interface KopernikadrNativePlugin {
 
   /** Startup sweep: every file in `exports/` without a live handle + our own pending gallery rows. */
   videoCleanupAbandoned(): Promise<{ deletedFiles: number; deletedRows: number }>;
+
+  /**
+   * Opens the system image picker; resolves with the picked image copied to `tmp/pick-<uuid>.<ext>`
+   * (jpeg / png / webp / heic / heif, ≤ 40 MB). Rejects `CANCELLED`, `NO_APP`, `TOO_LARGE`, `UNSUPPORTED`.
+   */
+  pickImage(): Promise<{ path: string; mime: string }>;
+
+  /** Debug builds only: imports a file from `/sdcard/Download/` like a pick would (scripted tablet runs). */
+  __testImportImage(options: { path: string }): Promise<{ path: string; mime: string }>;
 
   /** Debug builds only: inserts an empty pending gallery row (the emulator cleanup check). */
   __testInsertPending(options?: { displayName?: string }): Promise<{ uri: string }>;

@@ -431,21 +431,21 @@ Then the picker opens on "Moje" with the new sticker first.
 - Modify: `KopernikadrNativePlugin.kt` (segmenter executor, `pickImage`, `@ActivityCallback`, `__testImportImage` in debug), `NativeApi.kt`, `NativeErrors.kt`, `remote/lib/native.ts`, `remote/lib/native.test.ts`
 - Create tests: `remote/android/app/src/test/.../ImageImportTest.kt`, `ActivityResultsTest.kt`, `NativeApiImageTest.kt`
 
-- [ ] Add the dedicated segmenter `ScheduledExecutorService`, shut down in `handleOnDestroy`, and
+- [x] Add the dedicated segmenter `ScheduledExecutorService`, shut down in `handleOnDestroy`, and
       document it in the KDoc.
-- [ ] `pickImage` via `PickVisualMedia().createIntent(...)` and `startActivityForResult(call, intent,
+- [x] `pickImage` via `PickVisualMedia().createIntent(...)` and `startActivityForResult(call, intent,
       "pickResult")`. The copy runs on the segmenter executor with a byte-counted 40 MB cap. Mime check
       (heic and heif are both accepted).
-- [ ] `ActivityResults`: OK / cancel / empty / no-app / null-call → outcome. A null call (process
+- [x] `ActivityResults`: OK / cancel / empty / no-app / null-call → outcome. A null call (process
       death) is ignored.
-- [ ] Add the new error codes to `NativeErrors.kt` and `native.ts`.
-- [ ] Debug-only `__testImportImage({path})`: copies a file from `/sdcard/Download/` to `tmp/` like a
+- [x] Add the new error codes to `NativeErrors.kt` and `native.ts`.
+- [x] Debug-only `__testImportImage({path})`: copies a file from `/sdcard/Download/` to `tmp/` like a
       pick would, for scripted tablet runs.
-- [ ] Tests:
+- [x] Tests:
   - `ImageImport` copy, cap, unsupported mime;
   - `ActivityResults` mapping, including the null call;
   - `native.ts` error-code parsing.
-- [ ] Run tests (`npm test`, `:app:testDebugUnitTest`); they must pass before Task 5.
+- [x] Run tests (`npm test`, `:app:testDebugUnitTest`); they must pass before Task 5.
 
 ### Task 5: StickerMaker (source + style) and the "Moje" tab
 **Files:**

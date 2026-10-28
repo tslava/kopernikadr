@@ -1,5 +1,9 @@
 package pl.slava.kopernikadr.remote.native
 
+import java.io.File
+import java.io.IOException
+import java.io.InputStream
+
 /**
  * The `KopernikadrNative` API (`remote/lib/native.ts`) over plain arguments and results, so the
  * whole bridge contract is JVM-testable. [KopernikadrNativePlugin] only adapts `PluginCall` to
@@ -10,6 +14,9 @@ class NativeApi(
     private val files: AtomicFiles,
     private val writer: VideoWriter,
     private val gallery: GalleryPublisher,
+    private val images: ImageImport,
+    /** Folders the debug-only [testImportImage] may read from (empty: it refuses everything). */
+    private val testImportRoots: List<File> = emptyList(),
     private val log: (String) -> Unit = {},
 ) {
     fun writeTextAtomic(a: BridgeArgs): Map<String, Any> {
@@ -66,4 +73,24 @@ class NativeApi(
     /** Debug builds only (the plugin checks): a pending gallery row as a killed publish leaves it. */
     fun testInsertPending(a: BridgeArgs): Map<String, Any> =
         mapOf("uri" to gallery.insertPendingForTest(a.optString("displayName") ?: "test-pending"))
+
+    /** A picked image (stream from the picker) copied to `tmp/`; runs on the segmenter executor. */
+    fun importPicked(mime: String?, input: InputStream): Map<String, Any> {
+        val r = images.importStream(mime, input)
+        return mapOf("path" to r.path, "mime" to r.mime)
+    }
+
+    /** Debug builds only (the plugin checks): imports a file from a test folder like a pick would. */
+    fun testImportImage(a: BridgeArgs): Map<String, Any> {
+        val src = try {
+            File(a.string("path")).canonicalFile
+        } catch (e: IOException) {
+            raise(NativeErrorCode.BAD_ARGUMENT, "bad path: ${e.message}")
+        }
+        if (testImportRoots.none { src.path.startsWith(it.canonicalPath + File.separator) }) {
+            raise(NativeErrorCode.PATH_INVALID, "path is outside the test import folders")
+        }
+        val r = images.importFile(src)
+        return mapOf("path" to r.path, "mime" to r.mime)
+    }
 }

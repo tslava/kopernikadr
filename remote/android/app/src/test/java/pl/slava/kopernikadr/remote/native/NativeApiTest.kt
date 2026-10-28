@@ -30,6 +30,7 @@ class NativeApiTest {
             files = AtomicFiles(guard, DirSync.NONE, disk),
             writer = VideoWriter(guard, DirSync.NONE, ids = { "h${++n}" }, disk = disk),
             gallery = GalleryPublisher(store, "pkg", temp.newFolder("sdcard"), disk, 0),
+            images = ImageImport(guard, ids = { "i1" }),
             log = { logs += it },
         )
     }

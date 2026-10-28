@@ -27,6 +27,27 @@ enum class NativeErrorCode {
 
     /** Any other I/O failure. */
     IO,
+
+    /** The user backed out of the camera or picker, or it returned nothing. */
+    CANCELLED,
+
+    /** No app on the tablet handles the camera or picker intent. */
+    NO_APP,
+
+    /** A picked image is over the byte cap. */
+    TOO_LARGE,
+
+    /** Not a jpeg, png, webp, heic or heif image. */
+    UNSUPPORTED,
+
+    /** The segmenter failed to run (both delegates). */
+    SEG_FAILED,
+
+    /** The segmenter model asset is not in the APK. */
+    MODEL_MISSING,
+
+    /** Unknown or closed segmenter session handle. */
+    NO_SESSION,
 }
 
 class NativeException(val code: NativeErrorCode, message: String, cause: Throwable? = null) : Exception(message, cause)
