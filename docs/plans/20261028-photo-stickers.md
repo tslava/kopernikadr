@@ -349,9 +349,9 @@ Then the picker opens on "Moje" with the new sticker first.
 **Files:**
 - Create: `remote/lib/stickers/stickerize.ts`, `remote/lib/stickers/stickerize.test.ts`
 
-- [ ] Implement `cutout`, `trimToContent`, `padSquare`, `distanceToInside`, `outline`, `shadow`,
+- [x] Implement `cutout`, `trimToContent`, `padSquare`, `distanceToInside`, `outline`, `shadow`,
       `comic`, the presets `naklejka` and `komiks`, and the thumbnail downscale. Cap the output at 1024 px.
-- [ ] Tests on tiny synthetic images:
+- [x] Tests on tiny synthetic images:
   - cutout alpha from the mask;
   - trim bbox;
   - square padding keeps the centre;
@@ -361,7 +361,7 @@ Then the picker opens on "Moje" with the new sticker first.
   - an empty mask → `null` ("nothing cut");
   - a full-image mask still works;
   - an already transparent PNG goes through trim, pad and style unchanged in shape.
-- [ ] Run tests (`cd remote && npm test`); they must pass before Task 2.
+- [x] Run tests (`cd remote && npm test`); they must pass before Task 2.
 
 ### Task 2: Sticker library store
 **Files:**
