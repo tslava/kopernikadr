@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile } from './lib.mjs';
+import { parseArgs, projectFrames, expectedGalleryName, pickPage, expectedDurationS, newestGalleryRow, parseStickerArgs, assertTestProject, myStickers, pointInRect, movieStickerFile, newStickerId } from './lib.mjs';
 
 test('parseArgs', () => {
   const a = parseArgs(['--devtools', '9222', '--adb-restart', 'adb x', '--camera', 'http://h:1/']);
@@ -77,4 +77,12 @@ test('myStickers, pointInRect, movieStickerFile', () => {
   assert.deepEqual(myStickers({}), []);
   assert.deepEqual(pointInRect({ left: 10, top: 20, width: 100, height: 50 }, 0.5, 0.2), { x: 60, y: 30 });
   assert.equal(movieStickerFile(PID, u), `files/kopernikadr/projects/${PID}/stickers/${u}.webp`);
+});
+
+test('newStickerId finds only the sticker made by the run', () => {
+  assert.equal(newStickerId(['a', 'b'], ['a', 'b']), null); // the old tiles behind a still-saving maker
+  assert.equal(newStickerId([], []), null);
+  assert.equal(newStickerId(['a', 'b'], ['c', 'a', 'b']), 'c');
+  assert.equal(newStickerId([], ['c']), 'c');
+  assert.throws(() => newStickerId(['a'], ['x', 'y', 'a']), /more than one/);
 });

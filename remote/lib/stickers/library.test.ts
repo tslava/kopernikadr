@@ -111,16 +111,42 @@ describe('StickerLibrary', () => {
     expect(await ids(lib)).toEqual([b]);
   });
 
-  it('a corrupt index is an empty list with a warning; the files stay', async () => {
+  it('a corrupt index lists empty; the next add keeps a corrupt copy and the files stay', async () => {
     const { fs, lib, warn } = setup();
     const a = await lib.add(blob(1), blob(1));
     fs.files.set(INDEX, '{not json');
     expect(await lib.list()).toEqual([]);
     expect(warn).toHaveBeenCalled();
-    expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(true);
+    expect([...fs.files.keys()].filter((k) => k.startsWith(`${INDEX}.corrupt-`))).toEqual([]); // reading alone writes nothing
     const b = await lib.add(blob(2), blob(2));
     expect(await ids(lib)).toEqual([b]);
+    const kept = [...fs.files.entries()].filter(([k]) => k.startsWith(`${INDEX}.corrupt-`));
+    expect(kept).toHaveLength(1);
+    expect(kept[0]![1]).toBe('{not json');
     expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(true);
+  });
+
+  it('an unreadable index (I/O error) is an error, never an empty library: add and remove leave it untouched', async () => {
+    const { fs, lib } = setup();
+    const a = await lib.add(blob(1), blob(1));
+    const before = fs.files.get(INDEX);
+    fs.failOn({ op: 'readText', path: INDEX, times: 3 });
+    await expect(lib.list()).rejects.toThrow(/injected/);
+    await expect(lib.add(blob(2), blob(2))).rejects.toThrow(/injected/);
+    await expect(lib.remove(a)).rejects.toThrow(/injected/);
+    expect(fs.files.get(INDEX)).toBe(before);
+    expect(fs.binaries.has(`stickers/${a}.webp`)).toBe(true);
+    expect([...fs.binaries.keys()].filter((k) => k.startsWith('stickers/'))).toHaveLength(2); // no orphan from the failed add
+    fs.clearFailures();
+    expect(await ids(lib)).toEqual([a]);
+  });
+
+  it('a failed corrupt-copy blocks the mutation (the bad index is not overwritten)', async () => {
+    const { fs, lib } = setup();
+    fs.files.set(INDEX, '{not json');
+    fs.failOn({ op: 'writeTextAtomic', path: /index\.json\.corrupt-/, times: 1 });
+    await expect(lib.add(blob(1), blob(1))).rejects.toThrow(/injected/);
+    expect(fs.files.get(INDEX)).toBe('{not json');
   });
 
   it('drops index rows with a bad id', async () => {

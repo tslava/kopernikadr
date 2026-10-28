@@ -90,3 +90,15 @@ export function pointInRect(rect, nx, ny) {
 
 /** Path of a movie's copy of a library sticker, relative to the app's data dir (for `run-as`). */
 export const movieStickerFile = (projectId, uuid) => `files/kopernikadr/projects/${projectId}/stickers/${uuid}.webp`;
+
+/**
+ * The one library sticker id that is in `nowIds` but not in `beforeIds` (ids as listed in the "Moje"
+ * grid). `null` while there is none yet; throws when several appeared (something else is adding), so a
+ * cleanup never deletes a sticker that was not made by the run.
+ */
+export function newStickerId(beforeIds, nowIds) {
+  const known = new Set(beforeIds);
+  const fresh = [...new Set(nowIds)].filter((id) => !known.has(id));
+  if (fresh.length > 1) throw new Error(`more than one new sticker appeared: ${fresh.join(', ')}`);
+  return fresh[0] ?? null;
+}

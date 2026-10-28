@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useReducer, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { reduce, START, type Brush, type MakerNotice } from '@/lib/app/stickerMakerModel';
+import { armMakerBack, createRequestGate, reduce, START, type Brush, type MakerNotice } from '@/lib/app/stickerMakerModel';
 import type { Translate } from '@/lib/i18n';
 import { KopernikadrNative, nativeErrorCode } from '@/lib/native';
 import { removeStoreFile } from '@/lib/stickers/appLibrary';
@@ -46,6 +46,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
   const photoRef = useRef<Img | null>(null);
   const lastCut = useRef<Img | null>(null);
   const [preview, setPreview] = useState<Img | null>(null);
+  const gate = useRef(createRequestGate());
   const stepRef = useRef(state.step);
   stepRef.current = state.step;
   useEffect(() => {
@@ -88,17 +89,24 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       remove: removeStoreFile,
       uuid: () => crypto.randomUUID(),
     });
-    runCut(client, cutStrokes, reopen).then(
+    runCut(client, cutStrokes, reopen, () => !stale).then(
       (r) => {
         if (stale) return;
-        const cut = cutout(img, r.mask, r.width, r.height);
-        lastCut.current = cut;
-        setPreview(composePreview(img, r.mask, r.width, r.height));
-        dispatch({ type: 'cutDone', coverage: coverage(r.mask), empty: cut === null });
+        try {
+          const cut = cutout(img, r.mask, r.width, r.height);
+          lastCut.current = cut;
+          setPreview(composePreview(img, r.mask, r.width, r.height));
+          dispatch({ type: 'cutDone', coverage: coverage(r.mask), empty: cut === null });
+        } catch (e) {
+          console.error('cut preview', e);
+          dispatch({ type: 'cutFailed' }); // never leave the spinner up
+        }
       },
       (e) => {
-        if (stale || e instanceof SegSupersededError) return;
-        console.error('segmentation', e);
+        if (stale) return;
+        // a "superseded" for the newest run is not a newer stroke (that would have made this one stale):
+        // fail visibly (retry button) instead of leaving the spinner up for ever
+        console.error('segmentation', e instanceof SegSupersededError ? 'run cancelled unexpectedly' : e);
         dispatch({ type: 'cutFailed' });
       },
     );
@@ -106,7 +114,12 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       stale = true;
     };
   }, [cutStrokes, attempt]);
-  useEffect(() => overlays?.push(() => dispatch({ type: 'cancel' })), [overlays]);
+  // Back re-registers itself until the maker really closes (see armMakerBack)
+  useEffect(() => (overlays ? armMakerBack(overlays, () => stepRef.current, () => dispatch({ type: 'cancel' })) : undefined), [overlays]);
+  // a pick that was cancelled (or replaced) while it loads is stale
+  useEffect(() => {
+    if (state.step !== 'loading') gate.current.invalidate();
+  }, [state.step]);
   useEffect(() => {
     if (state.step === 'closed') onClose();
     else if (state.step === 'done') onDone(state.id);
@@ -122,13 +135,29 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
    */
   const onSource = async (get: () => Promise<{ path: string }>) => {
     dispatch({ type: 'pick' });
+    const req = gate.current.begin();
+    // stale = unmounted, cancelled or replaced by a newer pick; a stale request never touches the state
+    const stale = () => !live.current || !gate.current.current(req) || stepRef.current !== 'loading';
+    // a newer pick that is loading owns the native session (its `open` replaces ours); otherwise free it
+    const releaseIfIdle = () => {
+      if (stepRef.current !== 'loading') void seg().close();
+    };
     let path: string | undefined;
     try {
       ({ path } = await get());
+      if (stale()) {
+        void removeStoreFile(path);
+        releaseIfIdle();
+        return;
+      }
       const opened = await seg().open(path);
+      if (stale()) {
+        releaseIfIdle();
+        return;
+      }
       const img = await decodeImage(await storeFileUrl(opened.image));
-      if (!live.current || stepRef.current !== 'loading') {
-        void seg().close(); // the kid backed out while the picture loaded
+      if (stale()) {
+        releaseIfIdle(); // the kid backed out (or asked for another picture) while the picture loaded
         return;
       }
       if (opened.hasAlpha) {
@@ -145,8 +174,12 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       }
     } catch (e) {
       if (path) void removeStoreFile(path); // `segOpen` deletes it only on success; the sweep does the rest
+      if (stale()) {
+        releaseIfIdle();
+        return;
+      }
       void seg().close();
-      if (live.current) dispatch({ type: 'pickFailed', code: e instanceof SegError ? (e.code === 'UNKNOWN' ? undefined : e.code) : nativeErrorCode(e) });
+      dispatch({ type: 'pickFailed', code: e instanceof SegError ? (e.code === 'UNKNOWN' ? undefined : e.code) : nativeErrorCode(e) });
     }
   };
 

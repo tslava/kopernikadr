@@ -175,14 +175,16 @@ class KopernikadrNativePlugin : Plugin() {
     }
 
     /**
-     * Result of [pickImage]. [call] is null when the process died while the picker was in front;
+     * Result of [pickImage]. [call] is null (or a dangling call, Capacitor 8) when the process died while the picker was in front;
      * then there is nobody to answer and the app just opens on its default route.
      */
     @ActivityCallback
     private fun pickResult(call: PluginCall?, result: ActivityResult) {
         val uri = result.data?.data ?: result.data?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-        val outcome = ActivityResults.outcome(call != null, result.resultCode, uri != null)
-        if (call == null) return
+        val outcome = ActivityResults.outcome(
+            ActivityResults.callLive(call != null, call?.callbackId), result.resultCode, uri != null,
+        )
+        if (call == null || outcome == ActivityResults.Outcome.IGNORE) return
         ActivityResults.errorOf(outcome)?.let {
             call.reject(it.name.lowercase(), it.name)
             return
@@ -225,8 +227,13 @@ class KopernikadrNativePlugin : Plugin() {
     @ActivityCallback
     private fun cameraResult(call: PluginCall?, result: ActivityResult) {
         val file = capturePhotoFile()
-        val outcome = ActivityResults.cameraOutcome(call != null, result.resultCode, file.length())
-        if (call == null) return
+        val outcome = ActivityResults.cameraOutcome(
+            ActivityResults.callLive(call != null, call?.callbackId), result.resultCode, file.length(),
+        )
+        if (call == null || outcome == ActivityResults.Outcome.IGNORE) {
+            file.delete() // nobody to import it for: do not keep the photo
+            return
+        }
         ActivityResults.errorOf(outcome)?.let {
             file.delete()
             call.reject(it.name.lowercase(), it.name)

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { reopenFrom, runCut, type ReopenIO } from './cutSession';
-import { FakeSegClient, SegError, type SegMaskResult, type SegStrokeArg } from './segClient';
+import { FakeSegClient, SegError, SegSupersededError, type SegMaskResult, type SegStrokeArg } from './segClient';
 import type { Img } from './stickerize';
 
 const strokes: SegStrokeArg[] = [{ mode: 'add', points: [[0.5, 0.5]] }];
@@ -46,6 +46,24 @@ describe('runCut', () => {
   });
 });
 
+describe('runCut with a newer run', () => {
+  it('an obsolete run does not reopen and does not retry', async () => {
+    const seg = new FakeSegClient({ run: () => { throw new SegError('NO_SESSION', 'gone'); } });
+    const reopen = vi.fn(async () => undefined);
+    await expect(runCut(seg, strokes, reopen, () => false)).rejects.toBeInstanceOf(SegSupersededError);
+    expect(reopen).not.toHaveBeenCalled();
+    expect(seg.runs).toHaveLength(1);
+  });
+
+  it('a run that became obsolete during the reopen does not retry', async () => {
+    let current = true;
+    const seg = new FakeSegClient({ run: () => { throw new SegError('NO_SESSION', 'gone'); } });
+    const reopen = vi.fn(async () => { current = false; });
+    await expect(runCut(seg, strokes, reopen, () => current)).rejects.toBeInstanceOf(SegSupersededError);
+    expect(seg.runs).toHaveLength(1);
+  });
+});
+
 describe('reopenFrom', () => {
   const io = (over: Partial<ReopenIO> = {}) => {
     const written: string[] = [];
@@ -73,6 +91,14 @@ describe('reopenFrom', () => {
     const seg = new FakeSegClient({ open: () => { throw new SegError('UNSUPPORTED', 'x'); } });
     const { base, removed } = io();
     await expect(reopenFrom(seg, () => photo, base)()).rejects.toMatchObject({ code: 'UNSUPPORTED' });
+    expect(removed).toEqual(['tmp/seg-src-u1.png']);
+  });
+
+  it('an obsolete reopen never opens (open would cancel the newest run) and drops its file', async () => {
+    const seg = new FakeSegClient();
+    const { base, removed } = io();
+    await expect(reopenFrom(seg, () => photo, base)(() => false)).rejects.toBeInstanceOf(SegSupersededError);
+    expect(seg.opened).toEqual([]);
     expect(removed).toEqual(['tmp/seg-src-u1.png']);
   });
 

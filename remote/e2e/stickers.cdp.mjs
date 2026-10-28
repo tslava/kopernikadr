@@ -16,7 +16,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
-import { assertTestProject, movieStickerFile, myStickers, parseStickerArgs, pickPage, pointInRect } from './lib.mjs';
+import { assertTestProject, movieStickerFile, myStickers, newStickerId, parseStickerArgs, pickPage, pointInRect } from './lib.mjs';
 
 const sh = promisify(exec);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -142,8 +142,23 @@ async function openMaker() {
   await waitFor('maker', `!!document.querySelector('[role=dialog][aria-label=${J(T.make)}]')`, 5_000);
 }
 
-async function waitMineTile(prevCount) {
-  await waitFor('picker back with a new "Moje" tile', `document.querySelectorAll('.picker-grid.mine [data-sticker]').length > ${prevCount}`, 30_000);
+const mineIds = () => ev(`[...document.querySelectorAll('.picker-grid.mine [data-sticker]')].map((e) => e.getAttribute('data-sticker'))`).catch(() => []);
+
+/** Ids of the "Moje" tiles now, recorded before saving so only the sticker made by the run is ever touched. */
+const recordMineIds = mineIds;
+
+/** Waits until the maker has closed (saving finished) and a tile that was not there before shows; returns its id. */
+async function waitNewMineTile(beforeIds) {
+  const t0 = Date.now();
+  for (;;) {
+    const makerOpen = await ev(`!!document.querySelector('[role=dialog][aria-label=${J(T.make)}]')`);
+    if (!makerOpen) {
+      const id = newStickerId(beforeIds, await mineIds());
+      if (id) return id;
+    }
+    if (Date.now() - t0 > 30_000) throw new Error('timeout: no new "Moje" tile after the maker closed');
+    await sleep(300);
+  }
 }
 
 // ---- steps ------------------------------------------------------------------------------------
@@ -192,12 +207,11 @@ steps.push(['2 erase stroke, Cofnij, Dalej', async () => {
 steps.push(['3 Komiks, Zapisz, "Moje" tile, place, project.json + copy', async () => {
   await click('Komiks', `document.querySelector('[data-style=komiks]')`);
   await waitFor('Komiks selected', `document.querySelector('[data-style=komiks]').getAttribute('aria-checked') === 'true'`, 5_000);
-  const before = await ev(`document.querySelectorAll('.picker-grid.mine [data-sticker]').length`).catch(() => 0);
+  const before = await recordMineIds();
   const t0 = Date.now();
   await click('Zapisz', byTid('maker-save'));
-  await waitMineTile(before || 0);
+  ctx.uuid = await waitNewMineTile(before);
   ctx.timings.saveMs = Date.now() - t0;
-  ctx.uuid = await ev(`document.querySelector('.picker-grid.mine [data-sticker]').getAttribute('data-sticker')`); // newest first
   await ev(`document.querySelector('.picker-grid.mine [data-sticker=${J(ctx.uuid)}]').click(); true`);
   await waitFor('picker closed', `!document.querySelector('[role=dialog].picker')`, 10_000);
   let p;
@@ -235,10 +249,10 @@ steps.push(['5 transparent PNG skips the cut', async () => {
   await redirectPicker(args.png);
   await click('"Z galerii"', byTid('maker-gallery'));
   await waitFor('style step directly (no cut stage)', `!!document.querySelector('[data-style]') && !document.querySelector('[data-testid=cut-stage]')`, 30_000);
+  const before = await recordMineIds();
   await click('Zapisz', byTid('maker-save'));
-  await waitFor('new "Moje" tile', `!!document.querySelector('.picker-grid.mine [data-sticker]')`, 30_000);
-  // cleanup: the tile just made
-  const id = await ev(`document.querySelector('.picker-grid.mine [data-sticker]').getAttribute('data-sticker')`);
+  // cleanup: only the tile made by this run (existing stickers of the child are never touched)
+  const id = await waitNewMineTile(before);
   await ev(`document.querySelector('.mine-wrap:has([data-sticker=${J(id)}]) [data-testid=mine-del]').click(); true`);
   await click('confirm', byTid('mine-del-confirm'), 5_000);
   await waitFor('tile gone', `!document.querySelector('[data-sticker=${J(id)}]')`, 10_000);

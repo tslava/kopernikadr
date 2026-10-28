@@ -7,16 +7,28 @@
  * to write that picture back to `tmp/` as a PNG, `open` it again (the native side deletes it) and
  * retry the run once. Coordinates are normalized, so the same strokes stay valid.
  */
-import { SegError, type SegClient, type SegMaskResult, type SegStrokeArg } from './segClient';
+import { SegError, SegSupersededError, type SegClient, type SegMaskResult, type SegStrokeArg } from './segClient';
 import type { Img } from './stickerize';
 
-export async function runCut(seg: SegClient, strokes: SegStrokeArg[], reopen: () => Promise<void>): Promise<SegMaskResult> {
+/**
+ * `isCurrent` says whether this run is still the newest one. Only the newest run recovers: an obsolete
+ * one gives up with [SegSupersededError] before reopening (a reopen cancels a queued run, so an obsolete
+ * recovery would cancel the newest stroke's run) and again before retrying; the newer run recovers itself.
+ */
+export async function runCut(
+  seg: SegClient,
+  strokes: SegStrokeArg[],
+  reopen: (isCurrent: () => boolean) => Promise<void>,
+  isCurrent: () => boolean = () => true,
+): Promise<SegMaskResult> {
   try {
     return await seg.run(strokes);
   } catch (e) {
     if (!(e instanceof SegError) || e.code !== 'NO_SESSION') throw e;
   }
-  await reopen();
+  if (!isCurrent()) throw new SegSupersededError();
+  await reopen(isCurrent);
+  if (!isCurrent()) throw new SegSupersededError();
   return seg.run(strokes);
 }
 
@@ -29,12 +41,17 @@ export interface ReopenIO {
 }
 
 /** A `reopen` for [runCut]: `open`s a fresh session on a PNG of `photo`. */
-export function reopenFrom(seg: SegClient, photo: () => Img | null, io: ReopenIO): () => Promise<void> {
-  return async () => {
+export function reopenFrom(seg: SegClient, photo: () => Img | null, io: ReopenIO): (isCurrent?: () => boolean) => Promise<void> {
+  return async (isCurrent = () => true) => {
     const img = photo();
     if (!img) throw new SegError('NO_SESSION', 'no picture to reopen');
     const path = `tmp/seg-src-${io.uuid()}.png`;
     await io.write(path, await io.encodePng(img));
+    if (!isCurrent()) {
+      // `open` would cancel the newest queued run: the newer cut recovers itself
+      await io.remove(path);
+      throw new SegSupersededError();
+    }
     try {
       await seg.open(path);
     } catch (e) {

@@ -9,6 +9,15 @@ object ActivityResults {
     const val RESULT_OK = -1
     const val RESULT_CANCELED = 0
 
+    /** `PluginCall.CALLBACK_ID_DANGLING` (Capacitor 8): the call Capacitor restores after a process death. */
+    const val CALLBACK_ID_DANGLING = "-1"
+
+    /**
+     * Whether there is a caller to answer: a null call (older Capacitor) and a restored "dangling"
+     * call (Capacitor 8, its answer goes nowhere) are the same thing: discard the result.
+     */
+    fun callLive(present: Boolean, callbackId: String?): Boolean = present && callbackId != CALLBACK_ID_DANGLING
+
     enum class Outcome {
         /** No saved call: the process died while the other app was in front. Nobody to answer. */
         IGNORE,

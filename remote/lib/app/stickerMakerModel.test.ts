@@ -1,5 +1,53 @@
 import { describe, expect, it } from 'vitest';
-import { noticeForPick, reduce, START, WIDE_MASK, type CutState, type MakerEvent, type MakerState } from './stickerMakerModel';
+import { createOverlayStack } from './overlays';
+import { armMakerBack, createRequestGate, noticeForPick, reduce, START, WIDE_MASK, type CutState, type MakerEvent, type MakerState } from './stickerMakerModel';
+
+describe('createRequestGate', () => {
+  it('only the newest request is current; invalidate makes all stale', () => {
+    const g = createRequestGate();
+    const a = g.begin();
+    expect(g.current(a)).toBe(true);
+    const b = g.begin(); // A cancelled, B requested while A still decodes
+    expect(g.current(a)).toBe(false);
+    expect(g.current(b)).toBe(true);
+    g.invalidate();
+    expect(g.current(b)).toBe(false);
+  });
+});
+
+describe('armMakerBack', () => {
+  const setup = (from: MakerState) => {
+    const overlays = createOverlayStack();
+    let s = from;
+    const un = armMakerBack(overlays, () => s.step, () => { s = reduce(s, { type: 'cancel' }); });
+    return { overlays, un, get s() { return s; } };
+  };
+
+  it('keeps the registration while Back only returns to the source step', () => {
+    const t = setup({ step: 'style', style: 'naklejka', notice: null });
+    expect(t.overlays.closeTop()).toBe(true);
+    expect(t.s.step).toBe('source');
+    expect(t.overlays.size).toBe(1); // the next Back must still reach the maker, not the picker below
+    expect(t.overlays.closeTop()).toBe(true);
+    expect(t.s.step).toBe('closed');
+    expect(t.overlays.size).toBe(0);
+  });
+
+  it('keeps the registration when Back is ignored while saving', () => {
+    const t = setup({ step: 'saving', style: 'naklejka' });
+    t.overlays.closeTop();
+    expect(t.s.step).toBe('saving');
+    expect(t.overlays.size).toBe(1);
+  });
+
+  it('unregisters the live registration on unmount', () => {
+    const t = setup({ step: 'loading' });
+    t.overlays.closeTop();
+    expect(t.overlays.size).toBe(1);
+    t.un();
+    expect(t.overlays.size).toBe(0);
+  });
+});
 
 const run = (events: MakerEvent[], from: MakerState = START): MakerState => events.reduce(reduce, from);
 

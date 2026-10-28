@@ -70,6 +70,42 @@ export type MakerEvent =
 
 export const START: MakerState = { step: 'source', notice: null };
 
+/**
+ * Request-generation token for the picks: each pick `begin`s a new generation, a request that finds
+ * `current(token)` false after any await is stale (cancelled or replaced) and must not touch the state.
+ */
+export function createRequestGate(): { begin(): number; current(token: number): boolean; invalidate(): void } {
+  let n = 0;
+  return {
+    begin: () => ++n,
+    current: (token) => token === n,
+    invalidate: () => void n++,
+  };
+}
+
+/**
+ * Android Back for the maker: `closeTop` pops the registration before it calls us, so we arm again
+ * unless this Back really closes the maker (cancel on the source step, or already closed). Cancelling
+ * a deeper step, or Back while saving (ignored by the model), keeps the maker on top of the picker.
+ * Returns the unregister function of whichever registration is live.
+ */
+export function armMakerBack(
+  overlays: { push(close: () => void): () => void },
+  step: () => MakerState['step'],
+  cancel: () => void,
+): () => void {
+  let unregister = () => {};
+  const arm = () => {
+    unregister = overlays.push(() => {
+      const closing = step() === 'source' || step() === 'closed' || step() === 'done';
+      cancel();
+      if (!closing) arm();
+    });
+  };
+  arm();
+  return () => unregister();
+}
+
 /** A share of the picture above which the segmenter probably took the whole sheet. */
 export const WIDE_MASK = 0.55;
 

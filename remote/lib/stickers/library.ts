@@ -99,36 +99,37 @@ export class StickerLibrary {
     return run;
   }
 
-  /** Index rows as stored (a corrupt or unreadable index is an empty list, files stay). */
-  private async readRows(): Promise<LibraryItem[]> {
-    let text: string | null;
-    try {
-      text = await this.fs.readText(INDEX);
-    } catch (e) {
-      this.warn('sticker index unreadable', e);
-      return [];
-    }
+  /**
+   * Index rows as stored. A missing index is an empty library. An unreadable one (I/O error) THROWS:
+   * treating it as empty would let the next write replace a valid index and orphan every sticker. A
+   * readable but corrupt index is an empty list; before a mutation (`keepCorrupt`) the bad text is
+   * kept as `index.json.corrupt-<ts>` (the project store's convention) so nothing is lost silently.
+   */
+  private async readRows(keepCorrupt: boolean): Promise<LibraryItem[]> {
+    const text = await this.fs.readText(INDEX);
     if (text === null) return [];
     const rows = parseIndex(text);
-    if (!rows) {
-      this.warn('sticker index corrupt, starting empty');
-      return [];
-    }
-    return rows;
+    if (rows) return rows;
+    this.warn('sticker index corrupt, starting empty');
+    if (keepCorrupt) await this.fs.writeTextAtomic(`${INDEX}.corrupt-${this.now()}`, text);
+    return [];
   }
 
-  /** Newest first; rows whose WebP is missing are hidden. */
-  async list(): Promise<LibraryItem[]> {
-    const rows = await this.readRows();
+  private async visible(rows: LibraryItem[]): Promise<LibraryItem[]> {
     if (rows.length === 0) return rows;
     const present = new Set(await this.fs.list(STICKERS_DIR));
     return rows.filter((r) => present.has(`${r.id}.webp`));
   }
 
+  /** Newest first; rows whose WebP is missing are hidden. Rejects when the index cannot be read. */
+  async list(): Promise<LibraryItem[]> {
+    return this.visible(await this.readRows(false));
+  }
+
   /** Stores a new sticker (+ thumbnail) and returns its id. Throws `StickerLibraryFullError` at 200. */
   add(webp: Blob, thumb: Blob): Promise<string> {
     return this.serial(async () => {
-      const rows = await this.list();
+      const rows = await this.visible(await this.readRows(true));
       if (rows.length >= STICKER_LIMIT) throw new StickerLibraryFullError();
       const id = this.uuid();
       await this.fs.mkdir(STICKERS_DIR);
@@ -150,7 +151,7 @@ export class StickerLibrary {
   remove(id: string): Promise<void> {
     return this.serial(async () => {
       if (!LIBRARY_ID_RE.test(id)) return;
-      const rows = await this.readRows();
+      const rows = await this.readRows(true);
       if (rows.some((r) => r.id === id)) {
         await this.fs.writeTextAtomic(INDEX, JSON.stringify({ v: 1, items: rows.filter((r) => r.id !== id) }));
       }

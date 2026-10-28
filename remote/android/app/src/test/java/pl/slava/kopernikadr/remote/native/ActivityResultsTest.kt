@@ -31,6 +31,15 @@ class ActivityResultsTest {
     }
 
     @Test
+    fun danglingCallbackIsNotALiveCall() {
+        assertEquals(false, ActivityResults.callLive(true, "-1"))
+        assertEquals(false, ActivityResults.callLive(false, null))
+        assertEquals(true, ActivityResults.callLive(true, "42"))
+        assertEquals(Outcome.IGNORE, outcome(call = ActivityResults.callLive(true, "-1")))
+        assertEquals(Outcome.IGNORE, ActivityResults.cameraOutcome(ActivityResults.callLive(true, "-1"), ActivityResults.RESULT_OK, 1234))
+    }
+
+    @Test
     fun cameraNeedsANonEmptyPhoto() {
         assertEquals(Outcome.OK, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_OK, 1234))
         assertEquals(Outcome.CANCELLED, ActivityResults.cameraOutcome(true, ActivityResults.RESULT_OK, 0))

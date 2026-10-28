@@ -32,6 +32,40 @@ describe('writeBinary', () => {
   });
 });
 
+describe('tmp cleanup on every failure', () => {
+  it('removes a partially written tmp file (write throws after writing)', async () => {
+    const { fs, io } = setup();
+    const w = io.writeBytes.bind(io);
+    io.writeBytes = async (p, b) => {
+      await w(p, b);
+      throw new Error('ENOSPC');
+    };
+    await expect(createBinaryFiles(fs, io).writeBinary('stickers/a.webp', blob(1))).rejects.toThrow(/ENOSPC/);
+    expect(tmpLeft(fs)).toEqual([]);
+  });
+
+  it('removes tmp when hashing fails', async () => {
+    const { fs, io } = setup();
+    io.sha256 = async () => {
+      throw new Error('digest');
+    };
+    await expect(createBinaryFiles(fs, io).writeBinary('stickers/a.webp', blob(1))).rejects.toThrow(/digest/);
+    expect(tmpLeft(fs)).toEqual([]);
+  });
+
+  it('removes a partial tmp when the copy throws after writing', async () => {
+    const { fs, io } = setup();
+    fs.binaries.set('stickers/a.webp', new Uint8Array([1]));
+    const c = io.copy.bind(io);
+    io.copy = async (f, t) => {
+      await c(f, t);
+      throw new Error('ENOSPC');
+    };
+    await expect(createBinaryFiles(fs, io).copyFile('stickers/a.webp', 'p/a.webp')).rejects.toThrow(/ENOSPC/);
+    expect(tmpLeft(fs)).toEqual([]);
+  });
+});
+
 describe('copyFile', () => {
   it('copies a file via tmp and keeps the source', async () => {
     const { fs, bin } = setup();

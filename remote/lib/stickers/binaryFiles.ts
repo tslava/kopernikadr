@@ -37,36 +37,37 @@ export interface BinaryIO {
 const dirOf = (path: string): string => path.slice(0, Math.max(0, path.lastIndexOf('/')));
 
 export function createBinaryFiles(fs: FileAdapter, io: BinaryIO): BinaryFiles {
-  async function install(tmp: string, dest: string, bytes: Uint8Array): Promise<Installed> {
-    const info: Installed = { bytes: bytes.length, sha256: await io.sha256(bytes) };
+  /** Runs `job` and removes `tmp` on any failure (a partial write or copy included). */
+  async function staged<T>(tmp: string, job: () => Promise<T>): Promise<T> {
     try {
-      const dir = dirOf(dest);
-      if (dir) await fs.mkdir(dir);
-      await io.installFile({ tmp, dest, ...info });
-      return info;
+      return await job();
     } catch (e) {
       await fs.remove(tmp).catch(() => undefined);
       throw e;
     }
   }
+  async function install(tmp: string, dest: string, bytes: Uint8Array): Promise<Installed> {
+    const info: Installed = { bytes: bytes.length, sha256: await io.sha256(bytes) };
+    const dir = dirOf(dest);
+    if (dir) await fs.mkdir(dir);
+    await io.installFile({ tmp, dest, ...info });
+    return info;
+  }
   return {
     async writeBinary(dest, blob) {
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const tmp = `tmp/${io.uuid()}.bin`;
-      await io.writeBytes(tmp, bytes);
-      return install(tmp, dest, bytes);
+      return staged(tmp, async () => {
+        await io.writeBytes(tmp, bytes);
+        return install(tmp, dest, bytes);
+      });
     },
     async copyFile(src, dest) {
       const tmp = `tmp/${io.uuid()}.bin`;
-      await io.copy(src, tmp);
-      let bytes: Uint8Array;
-      try {
-        bytes = await io.readBytes(tmp);
-      } catch (e) {
-        await fs.remove(tmp).catch(() => undefined);
-        throw e;
-      }
-      return install(tmp, dest, bytes);
+      return staged(tmp, async () => {
+        await io.copy(src, tmp);
+        return install(tmp, dest, await io.readBytes(tmp));
+      });
     },
   };
 }
