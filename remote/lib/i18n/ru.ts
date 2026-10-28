@@ -76,6 +76,7 @@ export const ru: Strings = {
   'tools.undo': 'Отменить',
   'tools.emoji': '+ Эмодзи',
   'sticker.del': 'Удалить наклейку',
+  'sticker.mineDel': 'Удалить из „Мои“',
   'sticker.from': 'Наклейка с этого кадра',
   'sticker.to': 'Наклейка по этот кадр',
   'sticker.selected': 'Выбранная наклейка',

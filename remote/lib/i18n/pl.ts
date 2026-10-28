@@ -74,6 +74,7 @@ export const pl = {
   'tools.undo': 'Cofnij',
   'tools.emoji': '+ Emoji',
   'sticker.del': 'Usuń naklejkę',
+  'sticker.mineDel': 'Usuń z „Moje”',
   'sticker.from': 'Naklejka od tego kadru',
   'sticker.to': 'Naklejka do tego kadru',
   'sticker.selected': 'Wybrana naklejka',

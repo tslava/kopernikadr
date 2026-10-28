@@ -73,10 +73,20 @@ export function createBinaryFiles(fs: FileAdapter, io: BinaryIO): BinaryFiles {
 
 const inData = (path: string) => ({ directory: Directory.Data, path: `${ROOT}/${path}` });
 
-function toBase64(bytes: Uint8Array): string {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
+/** Base64 of the bytes without a per-byte JS loop: the WebView encodes it (`readAsDataURL`); chunked btoa as a fallback. */
+async function toBase64(bytes: Uint8Array): Promise<string> {
+  if (typeof FileReader !== 'undefined' && typeof Blob !== 'undefined') {
+    const url = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error ?? new Error('base64: read failed'));
+      r.readAsDataURL(new Blob([bytes as BufferSource]));
+    });
+    return url.slice(url.indexOf(',') + 1);
+  }
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += 0x6000) parts.push(String.fromCharCode(...bytes.subarray(i, i + 0x6000)));
+  return btoa(parts.join(''));
 }
 
 function fromBase64(b64: string): Uint8Array {
@@ -95,7 +105,7 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
 export function createAppBinaryIO(): BinaryIO {
   return {
     async writeBytes(path, bytes) {
-      await Filesystem.writeFile({ ...inData(path), data: toBase64(bytes), recursive: true });
+      await Filesystem.writeFile({ ...inData(path), data: await toBase64(bytes), recursive: true });
     },
     async readBytes(path) {
       const r = await Filesystem.readFile(inData(path));

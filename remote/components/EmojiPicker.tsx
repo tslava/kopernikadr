@@ -133,7 +133,7 @@ export default function EmojiPicker({ t, lang, onPick, onClose, library, overlay
                     <button type="button" className="picker-item" data-sticker={m.id} aria-label={t('picker.mineItem', { n: i + 1 })} onClick={() => onPick(customEmoji(m.id))}>
                       {m.src && <img src={m.src} alt="" draggable={false} width={96} height={96} />}
                     </button>
-                    <button type="button" className="mine-del" data-testid="mine-del" aria-label={t('sticker.del')} title={t('sticker.del')} onClick={() => dispatchAsk({ type: 'ask', id: m.id })}>
+                    <button type="button" className="mine-del" data-testid="mine-del" aria-label={t('sticker.mineDel')} title={t('sticker.mineDel')} onClick={() => dispatchAsk({ type: 'ask', id: m.id })}>
                       <Icon name="close" />
                     </button>
                   </div>

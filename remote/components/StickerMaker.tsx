@@ -7,7 +7,8 @@ import { KopernikadrNative, nativeErrorCode } from '@/lib/native';
 import { removeStoreFile } from '@/lib/stickers/appLibrary';
 import { decodeImage, hasTransparency, storeFileUrl } from '@/lib/stickers/imageDecode';
 import { StickerLibraryFullError, type StickerLibrary } from '@/lib/stickers/library';
-import { encodePng, makeSticker, makeThumbnail, type Img, type StickerStyle } from '@/lib/stickers/stickerize';
+import { encodeStickerPngs, makeSticker, type Img, type StickerStyle } from '@/lib/stickers/stickerize';
+import { StyleCache } from '@/lib/stickers/styleCache';
 import type { OverlayStack } from '@/lib/app/overlays';
 import Icon from './Icon';
 
@@ -27,16 +28,14 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
   onClose: () => void;
 }) {
   const [state, dispatch] = useReducer(reduce, START);
-  const cut = useRef<Img | null>(null);
-  // styled stickers are computed once per picture; a chip tap only swaps the preview
-  const made = useRef(new Map<StickerStyle, Img>());
+  // styled stickers are computed once per picture and style; a chip tap and "Zapisz" only reuse them
+  const cache = useRef(new StyleCache(makeSticker));
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
     return () => {
       live.current = false;
-      cut.current = null;
-      made.current.clear();
+      cache.current.clear();
     };
   }, []);
   useEffect(() => overlays?.push(() => dispatch({ type: 'cancel' })), [overlays]);
@@ -45,13 +44,7 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
     else if (state.step === 'done') onDone(state.id);
   }, [state, onClose, onDone]);
 
-  const styled = (style: StickerStyle): Img | null => {
-    const hit = made.current.get(style);
-    if (hit) return hit;
-    const img = cut.current ? makeSticker(cut.current, style) : null;
-    if (img) made.current.set(style, img);
-    return img;
-  };
+  const styled = (style: StickerStyle): Img | null => cache.current.get(style);
 
   const onGallery = async () => {
     dispatch({ type: 'pick' });
@@ -64,8 +57,7 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
         void removeStoreFile(path); // the sweep would do it at the next start; the space is freed now
       }
       if (!live.current) return;
-      made.current.clear();
-      cut.current = img;
+      cache.current.setSource(img);
       const alpha = hasTransparency(img);
       if (alpha && !styled('naklejka')) dispatch({ type: 'empty' });
       else dispatch({ type: 'picked', hasAlpha: alpha });
@@ -83,7 +75,8 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
       return;
     }
     try {
-      const id = await library.add(await encodePng(sticker), await encodePng(makeThumbnail(sticker)));
+      const { png, thumb } = await encodeStickerPngs(sticker);
+      const id = await library.add(png, thumb);
       if (live.current) dispatch({ type: 'saved', id });
     } catch (e) {
       console.error('sticker save', e);
@@ -127,6 +120,7 @@ export default function StickerMaker({ t, library, overlays, onDone, onClose }: 
                   disabled={state.step === 'saving'}
                   onClick={() => dispatch({ type: 'style', style: s })}
                 >
+                  {state.style === s && <span className="maker-check" aria-hidden="true">✓</span>}
                   {t(s === 'naklejka' ? 'maker.styleNaklejka' : 'maker.styleKomiks')}
                 </button>
               ))}

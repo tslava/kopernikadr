@@ -164,6 +164,60 @@ describe('comic', () => {
   });
 });
 
+describe('comic on a noisy photo-like texture', () => {
+  // a blue blob with +-25 grain per channel, on a transparent margin (deterministic noise)
+  let seed = 7;
+  const rnd = (): number => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff) * 2 - 1;
+  const SIZE = 160, PAD = 20;
+  const blob = make(SIZE, SIZE, (x, y) =>
+    x >= PAD && x < SIZE - PAD && y >= PAD && y < SIZE - PAD
+      ? [90 + rnd() * 25, 120 + rnd() * 25, 200 + rnd() * 25, 255]
+      : [0, 0, 0, 0]);
+  const hueOf = (r: number, g: number, b: number): number => {
+    const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+    if (d === 0) return 0;
+    const h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return h * 60;
+  };
+
+  it('texture does not become black blotches', () => {
+    const out = comic(blob, { levels: 5, edgePx: 1 });
+    let opaque = 0, dark = 0;
+    for (let i = 0; i < out.data.length; i += 4) {
+      if (out.data[i + 3] < 128) continue;
+      opaque++;
+      if (0.299 * out.data[i] + 0.587 * out.data[i + 1] + 0.114 * out.data[i + 2] < 60) dark++;
+    }
+    expect(opaque).toBeGreaterThan(10000);
+    expect(dark / opaque).toBeLessThan(0.1);
+  });
+
+  it('keeps the hue of a coloured object', () => {
+    const out = comic(blob, { levels: 5, edgePx: 1 });
+    let sx = 0, sy = 0, n = 0;
+    for (let i = 0; i < out.data.length; i += 4) {
+      if (out.data[i + 3] < 128 || out.data[i] === 30 && out.data[i + 1] === 30) continue; // skip line pixels
+      const a = (hueOf(out.data[i], out.data[i + 1], out.data[i + 2]) * Math.PI) / 180;
+      sx += Math.cos(a); sy += Math.sin(a); n++;
+    }
+    expect(n).toBeGreaterThan(5000);
+    const mean = ((Math.atan2(sy, sx) * 180) / Math.PI + 360) % 360;
+    const want = hueOf(90, 120, 200);
+    expect(Math.abs(mean - want)).toBeLessThan(15);
+  });
+
+  it('komiks on the same texture is still mostly the object colour', () => {
+    const out = makeSticker(blob, 'komiks')!;
+    let blue = 0, opaque = 0;
+    for (let i = 0; i < out.data.length; i += 4) {
+      if (out.data[i + 3] < 250) continue;
+      opaque++;
+      if (out.data[i + 2] > out.data[i] + 20) blue++;
+    }
+    expect(blue / opaque).toBeGreaterThan(0.7);
+  });
+});
+
 describe('downscale / presets', () => {
   it('downscale keeps colour of semi-transparent areas (no bleed from transparent pixels)', () => {
     const out = downscale(make(4, 4, (x) => (x < 2 ? [255, 0, 0, 255] : [0, 0, 0, 0])), 2);

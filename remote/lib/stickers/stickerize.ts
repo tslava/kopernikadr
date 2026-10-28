@@ -199,33 +199,92 @@ function boxBlur(src: Float32Array, w: number, h: number, r: number): Float32Arr
   return out;
 }
 
+/** RGB (0..255) -> [h 0..360, s 0..1, v 0..1]. */
+function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d > 0) {
+    if (max === r) h = ((g - b) / d + 6) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  return [h * 60, max === 0 ? 0 : d / max, max / 255];
+}
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const f = (n: number): number => {
+    const k = (n + h / 60) % 6;
+    return (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255;
+  };
+  return [f(5), f(3), f(1)];
+}
+
+/** Gradients weaker than this (Sobel of a 0..255 luminance, a full black/white step is ~1020) are never lines. */
+const EDGE_FLOOR = 90;
+/** Share of opaque pixels allowed to become line: only the strongest edges. */
+const EDGE_SHARE = 0.06;
+const SATURATION_BOOST = 1.2;
+
 /**
- * Cartoon look: each colour channel is posterized to `levels` steps, and a dark line (`edgePx` thick)
- * is drawn where the luminance edge (Sobel) is strong. The silhouette edge is left to `outline`.
+ * Cartoon look: hue is kept, brightness is posterized to `levels` steps and saturation is lifted a
+ * little (so the object stays the same colour, only flatter). A dark line (`edgePx` thick) is drawn on
+ * the strongest edges of the *smoothed* luminance (Sobel; blur radius ~1.5% of the side kills fabric
+ * texture and noise, and only the top ~6% of gradients count). The silhouette edge is left to `outline`.
+ * `edgeThreshold` overrides the adaptive threshold (absolute Sobel magnitude).
  */
 export function comic(img: Img, opts: { levels: number; edgePx: number; edgeThreshold?: number }): Img {
   const { width: w, height: h } = img;
   const levels = Math.max(2, Math.round(opts.levels));
   const out: Img = { width: w, height: h, data: new Uint8ClampedArray(img.data) };
+  // posterize a lightly smoothed copy (alpha-weighted), so fabric speckle does not become confetti
+  const soft = Math.max(1, Math.round(Math.max(w, h) * 0.006));
+  const wgt = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) wgt[i] = img.data[i * 4 + 3] / 255;
+  const bw = boxBlur(boxBlur(wgt, w, h, soft), w, h, soft);
+  const chan: Float32Array[] = [0, 1, 2].map((c) => {
+    const p = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) p[i] = img.data[i * 4 + c] * wgt[i];
+    return boxBlur(boxBlur(p, w, h, soft), w, h, soft);
+  });
   for (let i = 0; i < w * h; i++) {
-    for (let c = 0; c < 3; c++) {
-      const v = out.data[i * 4 + c];
-      out.data[i * 4 + c] = Math.round((Math.round((v / 255) * (levels - 1)) * 255) / (levels - 1));
-    }
+    const k = bw[i] > 1e-3 ? 1 / bw[i] : 0;
+    const [hue, sat, val] = rgbToHsv(chan[0][i] * k, chan[1][i] * k, chan[2][i] * k);
+    const q = Math.round(val * (levels - 1)) / (levels - 1);
+    const rgb = hsvToRgb(hue, Math.min(1, sat * SATURATION_BOOST), q);
+    for (let c = 0; c < 3; c++) out.data[i * 4 + c] = rgb[c];
   }
+  // alpha-weighted luminance, blurred: transparent pixels (colour 0) do not pull the silhouette dark
+  const radius = Math.max(1, Math.round(Math.max(w, h) * 0.015));
   const lum = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) lum[i] = 0.299 * img.data[i * 4] + 0.587 * img.data[i * 4 + 1] + 0.114 * img.data[i * 4 + 2];
-  const at = (x: number, y: number): number => lum[Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
-  const thr = opts.edgeThreshold ?? 120;
-  const edge = new Uint8Array(w * h);
+  const alpha = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const a = img.data[i * 4 + 3] / 255;
+    alpha[i] = a;
+    lum[i] = (0.299 * img.data[i * 4] + 0.587 * img.data[i * 4 + 1] + 0.114 * img.data[i * 4 + 2]) * a;
+  }
+  const bl = boxBlur(boxBlur(lum, w, h, radius), w, h, radius);
+  const ba = boxBlur(boxBlur(alpha, w, h, radius), w, h, radius);
+  for (let i = 0; i < w * h; i++) bl[i] = ba[i] > 1e-3 ? bl[i] / ba[i] : 0;
+  const at = (x: number, y: number): number => bl[Math.max(0, Math.min(h - 1, y)) * w + Math.max(0, Math.min(w - 1, x))];
+  const mag = new Float32Array(w * h);
+  const values: number[] = [];
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (img.data[(y * w + x) * 4 + 3] < 128) continue;
       const gx = at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1);
       const gy = at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1);
-      if (Math.hypot(gx, gy) >= thr) edge[y * w + x] = 1;
+      const m = Math.hypot(gx, gy);
+      mag[y * w + x] = m;
+      values.push(m);
     }
   }
+  let thr = opts.edgeThreshold ?? EDGE_FLOOR;
+  if (opts.edgeThreshold === undefined && values.length > 0) {
+    values.sort((a, b) => a - b);
+    thr = Math.max(EDGE_FLOOR, values[Math.min(values.length - 1, Math.floor(values.length * (1 - EDGE_SHARE)))]);
+  }
+  const edge = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) if (mag[i] >= thr && mag[i] > 0) edge[i] = 1;
   const grow = Math.max(0, Math.round(opts.edgePx) - 1);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -283,7 +342,7 @@ export function naklejka(img: Img): Img {
 /** The "Komiks" look: fewer colours, dark lines inside, a black border (2%) and the same shadow. */
 export function komiks(img: Img): Img {
   const side = Math.max(img.width, img.height);
-  const flat = comic(img, { levels: 5, edgePx: Math.max(1, Math.round(side * 0.006)) });
+  const flat = comic(img, { levels: 5, edgePx: Math.max(1, Math.round(side * 0.002)) });
   return dropShadow(outline(flat, { radiusPx: side * 0.02, color: [20, 20, 20] }), side);
 }
 
@@ -303,11 +362,24 @@ export function makeThumbnail(sticker: Img): Img {
   return downscale(sticker, THUMB_PX);
 }
 
-/** PNG bytes of an image (browser only: OffscreenCanvas). */
-export async function encodePng(img: Img): Promise<Blob> {
+/**
+ * The sticker PNG and its `THUMB_PX` thumbnail in one go (browser only: OffscreenCanvas). The big
+ * canvas is filled once; the thumbnail is the same canvas drawn scaled (native resampling, no JS
+ * pixel loop) and both PNGs are encoded natively with `convertToBlob`, in parallel.
+ */
+export async function encodeStickerPngs(img: Img): Promise<{ png: Blob; thumb: Blob }> {
   const canvas = new OffscreenCanvas(img.width, img.height);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('stickerize: no 2d context');
   ctx.putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
-  return canvas.convertToBlob({ type: 'image/png' });
+  const scale = Math.min(1, THUMB_PX / Math.max(img.width, img.height));
+  const tw = Math.max(1, Math.round(img.width * scale)), th = Math.max(1, Math.round(img.height * scale));
+  const small = new OffscreenCanvas(tw, th);
+  const sctx = small.getContext('2d');
+  if (!sctx) throw new Error('stickerize: no 2d context');
+  sctx.imageSmoothingEnabled = true;
+  sctx.imageSmoothingQuality = 'high';
+  sctx.drawImage(canvas, 0, 0, tw, th);
+  const [png, thumb] = await Promise.all([canvas.convertToBlob({ type: 'image/png' }), small.convertToBlob({ type: 'image/png' })]);
+  return { png, thumb };
 }
