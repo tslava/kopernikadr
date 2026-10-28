@@ -19,6 +19,13 @@ AI → the rest by priority.**
   idle, a parent screen (3 s hold on the title) with quarantine show/clear. Tablet: the same
   quarantine section on the Diagnostics screen, and "O aplikacji" with the OpenMoji attribution.
 
+## Done: "Zrób naklejkę" (2026-10-28)
+- A sticker from a photo of a toy (tablet camera or gallery): the on-device cut-out (MediaPipe
+  Interactive Segmenter: tap or stroke, "Dodaj"/"Usuń" brushes), the styles "Naklejka" and "Komiks", a
+  new "Moje" tab in the emoji picker, then it works like an emoji (place, drag, scale, rotate, range,
+  export). A PNG/WebP with transparency skips the cut. Details: ARCHITECTURE §5.4a; tablet run:
+  `docs/diagnostics/20261028-photo-stickers.md`.
+
 ## Next: stage 3b
 - Insert a frame in the middle and reshoot frame N.
 - Copy and paste frames; reverse a range.
@@ -66,6 +73,16 @@ view.
 | Camera moves | Zoom / pan / shake across the 3264×2448 frame. The export is 1440×1080, so there is >2× headroom with no quality loss |
 | Transitions, speed | Fade, iris, wipe; speed up / slow down a range, reverse, boomerang |
 | Guided tricks | "Vanish" (remove object + auto puff), "Flight" (draw a path, per-frame markers), "Explosion" (flash + shake + BAM + sound) |
+
+## Later: after "Zrób naklejkę"
+| Feature | Notes |
+|---|---|
+| Sticker styles "Pufy" and "Błysk" | Puffy and shiny looks for the sticker, next to "Naklejka" and "Komiks" |
+| A movie frame as the sticker source | Cut a toy out of a frame already shot, in addition to camera and gallery |
+| Cloud "cartoon" | Redraw a photo as a cartoon in the cloud (a cloud AI feature, same rules as below) |
+| "Get into the cartoon" | Selfie segmentation (MediaPipe): cut the kid out of a photo to put her into the movie |
+| Hand in frame | Warn or auto-skip when a hand is in the shot, with MediaPipe hands (on-device) |
+| Clap to shoot | Take the shot on a clap, with the MediaPipe audio classifier (on-device) |
 
 ## Cloud AI (after the effects layer)
 | Feature | Notes |

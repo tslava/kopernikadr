@@ -13,7 +13,9 @@ with a range) + export again with the gallery file's duration checked against Su
 1. Fake camera on the Mac (the emulator reaches it as `10.0.2.2:8765`):
    `node protocol/tools/probe-client/fake-camera.mjs --port 8765`
    (it listens on 127.0.0.1, which the emulator reaches via 10.0.2.2).
-2. Build and install the debug APK, start the app once:
+2. Build and install the debug APK, start the app once. The build needs the segmenter model (not in the
+   repo): `npm run android:debug` fetches it (`npm run models` does only that; the Gradle `checkSegModel`
+   fails with a hint otherwise):
    ```
    cd remote && npm ci && npm run android:debug
    adb install -r android/app/build/outputs/apk/debug/app-debug.apk

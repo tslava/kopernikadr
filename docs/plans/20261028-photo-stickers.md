@@ -621,20 +621,20 @@ Then the picker opens on "Moje" with the new sticker first.
   - a plain `./gradlew-jbr assembleDebug` without the model fails with the fetch hint.
 
 ### Task 12: [Final] Update documentation
-- [ ] `docs/ARCHITECTURE.md`:
+- [x] `docs/ARCHITECTURE.md`:
   - the custom-sticker storage and reference (`my:<uuid>`, copy-on-place, no GC);
   - the §5.4 binary exception (tmp + `installFile`) and the downgrade caveat (the 3a app cannot
     export `my:` stickers);
   - the native segmenter, its executor and the GPU marker;
   - the activity-result / process-death policy.
-- [ ] `docs/ROADMAP.md`:
+- [x] `docs/ROADMAP.md`:
   - "Zrób naklejkę" done;
   - add the later items: Pufy/Błysk styles, the movie frame as source, cloud "cartoon", "get into
     the cartoon" (selfie segmentation), hand-in-frame (MediaPipe hands), clap-to-shoot (MediaPipe
     audio).
-- [ ] The "O aplikacji" screen: MediaPipe (Apache 2.0) and the MagicTouch model credit.
+- [x] The "O aplikacji" screen: MediaPipe (Apache 2.0) and the MagicTouch model credit.
       `README.md` / `remote/e2e/README.md`: the model fetch step.
-- [ ] Move this plan to `docs/plans/completed/`.
+- [ ] Move this plan to `docs/plans/completed/`. (moved by the orchestrator after the Codex review)
 
 ## Post-Completion
 *Requires the owner or the kid; informational only.*

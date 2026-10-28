@@ -268,4 +268,5 @@ export const pl = {
   'about.version': 'Kopernikadr, wersja {v}',
   'about.openmoji': 'OpenMoji – the open-source emoji and icon project. License: CC BY-SA 4.0',
   'about.license': 'https://creativecommons.org/licenses/by-sa/4.0/',
+  'about.mediapipe': 'MediaPipe (Apache 2.0). Model MagicTouch (Apache 2.0), Google.',
 } as const;
