@@ -36,9 +36,18 @@ export interface SegClient {
   open(path: string, maxSide?: number): Promise<SegImage>;
   /** The whole stroke list every time (the native side keeps no stroke state). */
   run(strokes: SegStrokeArg[]): Promise<SegMaskResult>;
+  /**
+   * Starts the engine in the background (creating it and binding the picture is 4-8 s on a tablet): a
+   * tiny dummy run in the picture centre whose result is discarded. It goes through the same queue,
+   * so a real `run` made meanwhile waits for it and then reuses the warm engine. Never rejects.
+   */
+  warm(): Promise<void>;
   /** Idempotent; never rejects. */
   close(): Promise<void>;
 }
+
+/** The warm-up stroke: one point in the middle of the picture. */
+export const WARM_STROKE: SegStrokeArg = { mode: 'add', points: [[0.5, 0.5]] };
 
 export class SegError extends Error {
   constructor(
@@ -154,6 +163,20 @@ export function createSegClient(deps: SegDeps = appDeps()): SegClient {
       });
     },
 
+    warm() {
+      // not a `queued` run: it neither supersedes nor is superseded by the kid's strokes
+      return enqueue(async () => {
+        const h = handle;
+        if (h === undefined) return;
+        try {
+          await deps.native.segRun({ handle: h, strokes: [WARM_STROKE] });
+        } catch (e) {
+          // the real run will meet the same failure (and report it); a gone session is dropped like in `run`
+          if (toSegError(e).code === 'NO_SESSION' && handle === h) handle = undefined;
+        }
+      });
+    },
+
     close() {
       queued?.cancel();
       return enqueue(closeNow);
@@ -166,6 +189,7 @@ export class FakeSegClient implements SegClient {
   readonly opened: string[] = [];
   readonly runs: SegStrokeArg[][] = [];
   closes = 0;
+  warms = 0;
 
   constructor(
     private readonly script: {
@@ -184,6 +208,10 @@ export class FakeSegClient implements SegClient {
     return this.script.run
       ? this.script.run(strokes)
       : { mask: new Uint8Array(16), width: 4, height: 4, ms: 1, delegate: 'cpu' };
+  }
+
+  async warm(): Promise<void> {
+    this.warms++;
   }
 
   async close(): Promise<void> {

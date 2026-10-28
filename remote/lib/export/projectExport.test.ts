@@ -13,6 +13,7 @@ import {
   exportGate,
   sanitizeName,
   SpriteLoadError,
+  classifyFailure,
   type ExportDeps,
   type ExportState,
 } from './projectExport';
@@ -51,6 +52,15 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 const tick = () => new Promise<void>((r) => setTimeout(r, 5));
+
+describe('classifyFailure for sprites', () => {
+  it('a missing custom sticker gets its own reason; an OpenMoji failure stays generic', () => {
+    const mk = (failed: string[]) => new SpriteLoadError(Object.assign(new Error('sprites failed to load'), { failed }));
+    expect(classifyFailure(mk(['my:0123abcd-0123-4abc-8abc-0123456789ab', '1F436']))).toBe('stickerMissing');
+    expect(classifyFailure(mk(['1F436']))).toBe('sprite');
+    expect(classifyFailure(mk([]))).toBe('sprite');
+  });
+});
 
 describe('sanitizeName', () => {
   it('transliterates Polish letters', () => {
@@ -707,7 +717,7 @@ describe('export controller: stickers', () => {
     const r = rig(withCustom(), { sprites: cache });
     await r.ctl.start();
     const s = r.ctl.state.get() as { phase: string; reason: string; detail: string };
-    expect(s).toMatchObject({ phase: 'failed', reason: 'sprite' });
+    expect(s).toMatchObject({ phase: 'failed', reason: 'stickerMissing' });
     expect(s.detail).toContain(MY);
     expect(r.log).not.toContain('open');
   });

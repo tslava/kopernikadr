@@ -179,6 +179,7 @@ export const pl = {
   'export.close': 'Zamknij',
   'export.retry': 'Spróbuj jeszcze raz',
   'export.errSprite': 'Nie udało się wczytać jednej z naklejek. Film nie został zapisany.',
+  'export.errStickerMissing': 'Brakuje obrazka jednej naklejki (na filmie ma znak „?”). Usuń ją i spróbuj jeszcze raz.',
   'export.errFrame': 'Nie udało się wczytać jednej z klatek. Film nie został zapisany.',
   'export.errCodec': 'Ten tablet nie potrafi zapisać filmu.',
   'export.errSpace': 'Za mało miejsca na tablecie. Zwolnij miejsce i spróbuj jeszcze raz.',

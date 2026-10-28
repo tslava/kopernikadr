@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSegClient, FakeSegClient, SegError, SegSupersededError, type SegDeps } from './segClient';
+import { createSegClient, FakeSegClient, SegError, SegSupersededError, WARM_STROKE, type SegDeps } from './segClient';
 
 const stroke = (x: number) => ({ mode: 'add' as const, points: [[x, 0.5]] as [number, number][] });
 
@@ -89,6 +89,44 @@ describe('segClient', () => {
     await third;
     expect(t.state.runs).toBe(2);
     expect(t.log.filter((l) => l.startsWith('end'))).toEqual(['end run1 h1 [0.1]', 'end run2 h1 [0.3]']);
+  });
+
+  it('warm runs a dummy centre stroke, reads no mask, and a real run waits for it', async () => {
+    const t = setup();
+    let reads = 0;
+    const read = t.deps.readBytes;
+    t.deps.readBytes = async (p) => (reads++, read(p));
+    const c = createSegClient(t.deps);
+    await c.open('tmp/p.jpg');
+    const w = c.warm();
+    await new Promise((r) => setTimeout(r, 0));
+    const real = c.run([stroke(0.3)]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(t.log.filter((l) => l.startsWith('start'))).toEqual(['start run1']); // the real run has not started
+    await t.release();
+    await w;
+    expect(reads).toBe(0);
+    await t.release();
+    const r = await real;
+    expect(r.width).toBe(4);
+    expect(t.log.filter((l) => l.startsWith('end'))).toEqual(['end run1 h1 [0.5]', 'end run2 h1 [0.3]']);
+    expect(WARM_STROKE.points).toEqual([[0.5, 0.5]]);
+  });
+
+  it('a warm is not superseded by a run, ignores its own failure and a missing session', async () => {
+    const t = setup();
+    const c = createSegClient(t.deps);
+    await c.warm(); // no session: nothing happens
+    expect(t.state.runs).toBe(0);
+    await c.open('tmp/p.jpg');
+    t.state.failRun = nativeError('SEG_FAILED');
+    const w = c.warm();
+    await t.release();
+    await expect(w).resolves.toBeUndefined();
+    t.state.failRun = undefined;
+    const real = c.run([stroke(0.7)]);
+    await t.release();
+    await expect(real).resolves.toMatchObject({ width: 4 });
   });
 
   it('never starts two native calls at once', async () => {

@@ -32,7 +32,7 @@ import ExportDialog from './ExportDialog';
 import FrameStrip from './FrameStrip';
 import Icon from './Icon';
 import UndoToast from './UndoToast';
-import { FPS_CHOICES } from '@/lib/projects/model';
+import { FPS_CHOICES, isCustomSticker } from '@/lib/projects/model';
 
 /** For export (Task 18): closes the ring buffer and pauses. Playing again reloads it. */
 export interface PlayViewHandle {
@@ -118,10 +118,13 @@ export default function PlayView({ t, id, onBack, project = null, frameUrl, urls
         () => {
           if (shownRef.current === entryId) paintStickers.current(entryId);
         },
-        () => {}, // unknown emoji: skipped
+        // unknown emoji: skipped; a custom sticker whose picture is missing gets the "?" placeholder
+        () => {
+          if (isCustomSticker(st.emoji) && shownRef.current === entryId) paintStickers.current(entryId);
+        },
       );
     }
-    drawStickers(ctx, stickersRef.current, entryId, (hex) => cache.get(hex, bucket));
+    drawStickers(ctx, stickersRef.current, entryId, (hex) => cache.get(hex, bucket), (hex) => cache.hasFailed(hex, bucket));
   };
   useEffect(() => () => sprites.current?.clear(), []);
 

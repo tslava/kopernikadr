@@ -130,7 +130,7 @@ export function exportGate(project: Project, confirmedSkip = false, link?: Camer
 
 // --- the state machine -------------------------------------------------------------------------
 
-export type ExportFailure = 'frame' | 'sprite' | 'codec' | 'space' | 'unknown';
+export type ExportFailure = 'frame' | 'sprite' | 'stickerMissing' | 'codec' | 'space' | 'unknown';
 
 export type ExportState =
   | { phase: 'idle' }
@@ -173,7 +173,7 @@ export class SpriteLoadError extends Error {
 
 export function classifyFailure(e: unknown): ExportFailure {
   if (e instanceof ExportFrameError) return 'frame';
-  if (e instanceof SpriteLoadError) return 'sprite';
+  if (e instanceof SpriteLoadError) return e.failed.some((id) => id.startsWith('my:')) ? 'stickerMissing' : 'sprite';
   if (e instanceof NoCodecError) return 'codec';
   if ((e as { code?: unknown } | null)?.code === 'NO_SPACE') return 'space';
   return 'unknown';

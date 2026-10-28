@@ -140,6 +140,8 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
         photoRef.current = img;
         setPhoto(img);
         dispatch({ type: 'picked', hasAlpha: false });
+        // hide the engine start (seconds on a tablet) behind the kid aiming; a first tap queues behind it
+        void seg().warm();
       }
     } catch (e) {
       if (path) void removeStoreFile(path); // `segOpen` deletes it only on success; the sweep does the rest

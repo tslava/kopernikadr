@@ -587,6 +587,14 @@ Then the picker opens on "Moje" with the new sticker first.
       the kid's. (deferred to the orchestrator's tablet run)
 
 ### Task 11: Verify acceptance criteria
+- [x] ➕ Tablet findings: a missing `my:` sticker file is visible and fixable. Playback/editing draws a
+      "?" placeholder (`stickerPaint` in `lib/render/compose.ts`, stage only); the EditTools chip
+      shows the same "?" on an `<img>` error; the export fails loud with `export.errStickerMissing`
+      (pl/ru) when a failed id is `my:`.
+- [x] ➕ The segmenter warm-up is hidden: `SegClient.warm()` queues a dummy centre-stroke run (result
+      discarded, no mask read) right after the cut step opens; the first real tap waits behind it in
+      the serialized queue (the "Chwilka…" spinner shows then). Client-side only: the dummy run also
+      warms the first inference, which a native `segWarm` would not.
 - [ ] Every Overview requirement is implemented. Both sources work. Both styles work. A PNG with alpha
       skips the cut. "Moje" add and delete work. Movies survive a library delete.
 - [ ] Edge cases:

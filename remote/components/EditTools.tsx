@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { EditTool, ToolStates } from '@/lib/app/editController';
 import type { Translate } from '@/lib/i18n';
 import Icon, { type IconName } from './Icon';
@@ -48,7 +49,7 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk =
     </div>
     {sticker && (
       <div className="edit-tools sticker-tools" role="toolbar" aria-label={t('sticker.selected')}>
-        <span className="sticker-chip">{sticker.src && <img src={sticker.src} alt="" draggable={false} />}</span>
+        <StickerChip key={sticker.src ?? ''} src={sticker.src} />
         <button type="button" className="tool-btn" data-tool="stickerFrom" aria-label={t('sticker.from')} onClick={sticker.onFrom}>
           <Icon name="trimStart" />
           <span>{t('tools.startHere')}</span>
@@ -64,5 +65,16 @@ export default function EditTools({ t, states, isOff, onTool, onEmoji, emojiOk =
       </div>
     )}
     </>
+  );
+}
+
+/** The selected sticker's picture; a picture that fails to load (a custom sticker's file is gone) shows the same "?" as the stage. */
+function StickerChip({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className={`sticker-chip${broken ? ' missing' : ''}`}>
+      {src && !broken && <img src={src} alt="" draggable={false} onError={() => setBroken(true)} />}
+      {broken && <span className="sticker-missing" aria-hidden="true">?</span>}
+    </span>
   );
 }

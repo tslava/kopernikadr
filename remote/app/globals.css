@@ -149,6 +149,8 @@ button { min-height: 64px; }
 .sticker-tools .tool-btn:not(.danger) { border-color: #5b8def; }
 .sticker-chip { width: 72px; height: 72px; display: flex; align-items: center; justify-content: center; border: 2px solid #5b8def; border-radius: 16px; background: var(--panel); }
 .sticker-chip img { width: 56px; height: 56px; }
+.sticker-chip.missing { border-style: dashed; background: rgba(255, 255, 255, 0.55); }
+.sticker-missing { font-size: 40px; font-weight: 700; line-height: 1; color: rgba(60, 60, 80, 0.9); }
 .picker { min-width: 0; width: 640px; max-height: 680px; gap: 12px; }
 .picker-head { display: flex; align-items: center; justify-content: space-between; }
 .picker-head h2 { margin: 0; font-size: 26px; }
