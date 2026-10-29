@@ -524,26 +524,17 @@ A sticker made from a photo of a toy. Plan: `docs/plans/20261028-photo-stickers.
 - **Downgrade caveat.** The 3a app opens and plays a movie with `my:` stickers (an unknown sprite is
   skipped) but **cannot export it** (`SpriteLoadError`). Install the new build again to export. Accepted:
   there is one tablet and it gets the new build.
-- **Auto-enhance** ("✨ Popraw" / «✨ Улучшить», `autoEnhance(img, style)` in `stickerize.ts`, 2026-10-29). Tablet
-  photos of toys are dim, noisy (sensor grain, JPEG blocks, chroma blotches) and soft, so a pure offline
-  correction runs on the cut-out BEFORE the style (outline, shadow, comic). Statistics and processing use only
-  opaque pixels (alpha >= 128, every blur is mask-normalised so transparency does not bleed in); alpha and
-  transparent RGB are never touched. Pipeline in YCbCr: (1) denoise first, edge-preserving, with guided filters
-  (He et al., box filters, O(N); the coefficients are computed at half resolution and sampled back bilinearly):
-  chroma hard (radius 0.5% of the long side, eps 40^2), luma gently (radius ~0.25%, eps 12^2, 30% of the original
-  detail mixed back so fabric keeps its texture and nothing looks waxy); (2) shadows: a local gain from the
-  luma blurred at 5% of the side, up to +40% where the local mean is dark, nothing from mid-tones up, bright
-  pixels inside a dark area lifted less; (3) levels (0.5%/99.5% percentiles to 248, gain <= 1.6, skipped when the
-  range already covers >= 90%) and gamma (0.8..1.25, none for a median in 0.42..0.58, darkening at half strength),
-  measured AFTER the shadow lift so the two do not add up; one curve on luminance, the chroma follows by the same
-  ratio (hue kept, ratio capped so no channel passes 255); (4) saturation +10%; (5) sharpen last: unsharp mask on
-  luma only, radius ~0.2%, amount 0.35, soft threshold 6/255 (only the excess over it counts), so grain is not
-  re-amplified. **Per style:** Naklejka gets all five steps; Komiks gets denoise + shadow lift + a brightening-only
-  gamma (0.65..1), no levels stretch (stretched highlights split the cream parts into patches after posterize), no
-  saturation and no sharpen (`comic` has its own boost and posterizes). `makeSticker` passes the style. About
-  190 ms (Naklejka) / 160 ms (Komiks) at 1024 px on a dev machine. The chip is a single toggle (ON for a photo,
-  OFF for an image that came with transparency: finished art); `StyleCache` keys by (enhance, style), so each
-  combination is computed once and "Zapisz" reuses it.
+- **Auto-enhance** ("✨ Popraw" / «✨ Улучшить», `autoEnhance` in `stickerize.ts`, 2026-10-29). Tablet photos of
+  toys are dim, flat and soft, so a pure offline correction runs on the cut-out BEFORE the style
+  (outline, shadow, comic). Statistics come only from opaque pixels (alpha >= 128); alpha is never touched.
+  Levels: luminance 0.5%/99.5% percentiles stretched linearly (gain <= 2, skipped when the range is already
+  >= 90% of 0..255, the black point is lowered only partly so a bright toy does not darken); brightness: a
+  gamma moves the median luminance toward 0.5 (0.7..1.4, none inside 0.42..0.58, darkening at half strength).
+  The curve acts on luminance and the channels follow by the same ratio, so the hue is kept. Then saturation
+  +12% away from luma, and an unsharp mask on luminance (two box passes, radius 0.15% of the long side, at
+  least 1 px, amount 0.6, threshold 3/255) blurred only over opaque pixels, so no halo bleeds from transparency.
+  About 35 ms at 1024 px. The chip is a toggle (ON for a photo, OFF for an image that came with transparency:
+  finished art); `StyleCache` keys by (enhance, style), so each combination is computed once and "Zapisz" reuses it.
 - **Native segmenter** (`native/SegSession.kt`, `SegEngine.kt`; MediaPipe Interactive Segmenter,
   `tasks-vision` 1.1.1, the stroke API, MagicTouch model).
   - API: `segOpen({path, maxSide:1024})` decodes with `ImageDecoder` (EXIF and downscale in one call) to

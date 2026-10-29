@@ -331,7 +331,7 @@ describe('autoEnhance', () => {
     const [lo0, med0, hi0] = stats(src);
     const out = autoEnhance(src);
     const [lo1, med1, hi1] = stats(out);
-    expect(hi1 - lo1).toBeGreaterThan((hi0 - lo0) * 1.2); // gentler than before: gain <= 1.6
+    expect(hi1 - lo1).toBeGreaterThan((hi0 - lo0) * 1.5);
     expect(med1).toBeGreaterThan(med0 + 15);
     for (let i = 3; i < src.data.length; i += 4) expect(out.data[i]).toBe(src.data[i]);
   });
@@ -341,7 +341,7 @@ describe('autoEnhance', () => {
     const out = autoEnhance(src);
     let maxd = 0;
     for (let i = 0; i < src.data.length; i += 4) for (let c = 0; c < 3; c++) maxd = Math.max(maxd, Math.abs(out.data[i + c] - src.data[i + c]));
-    expect(maxd).toBeLessThanOrEqual(12); // grey: only the smoother and the unsharp mask on the gradient's steps can move it
+    expect(maxd).toBeLessThanOrEqual(8); // grey: only the unsharp mask on the gradient's steps can move it
   });
 
   it('statistics ignore transparent pixels (their RGB is garbage) and alpha is preserved exactly', () => {
@@ -379,100 +379,6 @@ describe('autoEnhance', () => {
     expect(maxGrad(out)).toBeGreaterThan(maxGrad(src) * 1.05);
   });
 
-  // deterministic pseudo-random noise (mulberry32), roughly gaussian via a sum of 4 uniforms
-  const rng = (seed: number) => () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  const gauss = (r: () => number, sigma: number) => (r() + r() + r() + r() - 2) * sigma * 1.732;
-  const stdOf = (vals: number[]) => {
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    return Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
-  };
-  const meanOf = (vals: number[]) => vals.reduce((a, b) => a + b, 0) / vals.length;
-  /** Values of `f(luma, r, g, b)` over the opaque pixels of the window [x0,x1) x [y0,y1). */
-  const window = (img: Img, x0: number, x1: number, y0: number, y1: number, f: (i: number) => number): number[] => {
-    const v: number[] = [];
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) v.push(f((y * img.width + x) * 4));
-    return v;
-  };
-
-  it('denoise: a flat noisy patch loses >= 40% of its std-dev; a step edge stays sharp', () => {
-    const r = rng(1);
-    const n = 256;
-    // (rows at the top and bottom are black and white so the levels stay out of the way)
-    // left half flat 120, right half flat 200 (a hard step), luma noise sigma 8; wide range so levels stay out of it
-    const src = make(n, n, (x, y) => { const base = y < 4 ? 5 : y >= n - 4 ? 250 : x < n / 2 ? 120 : 200; const e = gauss(r, 8); return [base + e, base + e, base + e, 255]; });
-    const out = autoEnhance(src);
-    const lum = (img: Img) => (i: number) => lumOf(img.data, i);
-    const s0 = stdOf(window(src, 20, 100, 20, 236, lum(src)));
-    const s1 = stdOf(window(out, 20, 100, 20, 236, lum(out)));
-    expect(s1).toBeLessThan(s0 * 0.6);
-    // edge: the mean step between the 4 px on each side of the boundary (rows averaged)
-    const step = (img: Img) => meanOf(window(img, n / 2 + 1, n / 2 + 5, 20, 236, lum(img))) - meanOf(window(img, n / 2 - 5, n / 2 - 1, 20, 236, lum(img)));
-    const flatRef = autoEnhance(make(n, n, (x, y) => { const v = y < 4 ? 5 : y >= n - 4 ? 250 : x < n / 2 ? 120 : 200; return [v, v, v, 255]; }));
-    expect(step(out)).toBeGreaterThan(step(flatRef) * 0.8);
-  });
-
-  it('denoise: chroma noise and blotches are reduced', () => {
-    const r = rng(2);
-    const n = 96;
-    const src = make(n, n, () => { const e = gauss(r, 14); return [128 + e, 128 - e * 0.5, 128 - e * 0.5, 255]; });
-    const out = autoEnhance(src);
-    const cr = (img: Img) => (i: number) => img.data[i] - lumOf(img.data, i);
-    expect(stdOf(window(out, 8, 88, 8, 88, cr(out)))).toBeLessThan(stdOf(window(src, 8, 88, 8, 88, cr(src))) * 0.5);
-  });
-
-  it('shadows: a dark region is lifted a lot, a mid-grey region of the same image hardly moves', () => {
-    // left third deep shadow (40), right two thirds mid-grey (128) and a bright patch (235) so levels are full-ish
-    const n = 192;
-    const src = make(n, n, (x, y) => {
-      const v = x < 64 ? 40 : y < 24 && x > 170 ? 235 : x > 110 && x < 140 && y > 150 ? 12 : 128;
-      return [v, v, v, 255];
-    });
-    const out = autoEnhance(src);
-    const lum = (img: Img) => (i: number) => lumOf(img.data, i);
-    const dark0 = meanOf(window(src, 4, 44, 60, 130, lum(src))), dark1 = meanOf(window(out, 4, 44, 60, 130, lum(out)));
-    const mid0 = meanOf(window(src, 85, 105, 60, 130, lum(src))), mid1 = meanOf(window(out, 85, 105, 60, 130, lum(out)));
-    expect(dark1).toBeGreaterThan(dark0 * 1.15);
-    expect(Math.abs(mid1 - mid0)).toBeLessThan(12);
-  });
-
-  it('highlights do not clip: a bright, textured region stays below 255', () => {
-    const r = rng(3);
-    const src = make(96, 96, (x, y) => {
-      if (x < 32) return [60, 60, 60, 255]; // a dark side drives the shadow lift and the levels
-      const v = 225 + gauss(r, 4) + (y % 8 < 4 ? 6 : 0);
-      return [v, v - 6, v - 14, 255];
-    });
-    const out = autoEnhance(src);
-    let clipped = 0, total = 0;
-    for (let y = 0; y < 96; y++) for (let x = 40; x < 96; x++) { total++; const q = (y * 96 + x) * 4; if (out.data[q] >= 255 || out.data[q + 1] >= 255 || out.data[q + 2] >= 255) clipped++; }
-    expect(clipped / total).toBeLessThan(0.02);
-  });
-
-  it('komiks: no levels stretch (a dim flat toy keeps its range), still denoised and brightened', () => {
-    const src = dim();
-    const nak = autoEnhance(src, 'naklejka');
-    const kom = autoEnhance(src, 'komiks');
-    const [lo0, , hi0] = stats(src);
-    const [loK, , hiK] = stats(kom);
-    const [loN, , hiN] = stats(nak);
-    expect(hiK - loK).toBeLessThan(hiN - loN);
-    expect(hiK - loK).toBeLessThan((hi0 - lo0) * 1.5);
-  });
-
-  it('alpha and the RGB of transparent pixels are never touched (soft alpha included)', () => {
-    const src = make(48, 48, (x, y) => [80 + x, 70, 60 + y, (x * 5) % 256]);
-    const out = autoEnhance(src);
-    for (let i = 0; i < src.data.length; i += 4) {
-      expect(out.data[i + 3]).toBe(src.data[i + 3]);
-      if (src.data[i + 3] < 128) expect([out.data[i], out.data[i + 1], out.data[i + 2]]).toEqual([src.data[i], src.data[i + 1], src.data[i + 2]]);
-    }
-  });
-
   it('output stays within 0..255 and a bright/dark extremes image does not wrap', () => {
     const src = make(64, 64, (x, y) => ((x + y) % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]));
     const out = autoEnhance(src);
@@ -493,7 +399,7 @@ describe('autoEnhance', () => {
     const ms = performance.now() - t0;
     console.log(`autoEnhance 1024x1024: ${ms.toFixed(0)} ms`);
     expect(out.width).toBe(1024);
-    expect(ms).toBeLessThan(2000); // loose for CI; the target on a dev machine is ~250 ms
+    expect(ms).toBeLessThan(2000); // loose for CI; the target on a dev machine is well under 300
   });
 
   it('makeSticker enhances before styling only when asked', () => {
