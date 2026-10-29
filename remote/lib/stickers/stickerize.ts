@@ -372,8 +372,8 @@ export const ENHANCE = {
   darkenShare: 0.5,
   /** Contrast: S-curve strength around mid-grey; the slope at 0.5 is 1 + contrast (0 = off). */
   contrast: 0.45,
-  /** Saturation: multiplier of the distance from luma (1.12 = +12%). */
-  saturation: 1.12,
+  /** Saturation: multiplier of the distance from luma (1.4 = +40%; owner pick 2026-10-29, 1.55 flattened red gloss). */
+  saturation: 1.4,
   /** Sharpness: box-blur radius as a share of the long side (at least 1 px), two passes. */
   sharpenRadius: 0.0015,
   /** Sharpness: unsharp-mask amount. */
@@ -412,7 +412,7 @@ export interface EnhanceOptions {
  *    darkening only at half strength, so a naturally bright toy stays bright);
  * 3. contrast: a normalised tanh S-curve around 0.5 on the luminance (always on, also when levels are
  *    skipped; not for 'komiks');
- * 4. saturation: +12% away from luma;
+ * 4. saturation: +40% away from luma (`ENHANCE.saturation`);
  * 5. sharpness: unsharp mask on luminance, box blur (2 passes) of radius ~0.15% of the long side,
  *    amount 0.6, threshold 3/255, blurred only over opaque pixels so no halo bleeds from transparency.
  */
