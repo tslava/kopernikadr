@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   MAX_STICKER_PX,
+  autoEnhance,
+  contrastCurve,
+  ENHANCE,
   THUMB_PX,
   comic,
   cutout,
@@ -300,5 +303,175 @@ describe('encodeStickerWebps', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('autoEnhance', () => {
+  const lumOf = (d: Uint8ClampedArray, i: number) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  /** [min, median, max] luminance of the opaque pixels. */
+  const stats = (img: Img): [number, number, number] => {
+    const v: number[] = [];
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] >= 128) v.push(lumOf(img.data, i));
+    v.sort((a, b) => a - b);
+    return [v[0], v[v.length >> 1], v[v.length - 1]];
+  };
+  const hue = (r: number, g: number, b: number): number => {
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d === 0) return 0;
+    const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  /** A dim, flat toy: values 50..110 in a gradient on a transparent border. */
+  const dim = (n = 64) => make(n, n, (x, y) => {
+    if (x < 4 || y < 4 || x >= n - 4 || y >= n - 4) return [0, 0, 0, 0];
+    const t = (x + y) / (2 * n);
+    return [50 + 60 * t, 45 + 55 * t, 40 + 50 * t, 255];
+  });
+
+  it('a dim, low-contrast toy gets a wider range and a higher median; alpha is untouched', () => {
+    const src = dim();
+    const [lo0, med0, hi0] = stats(src);
+    const out = autoEnhance(src);
+    const [lo1, med1, hi1] = stats(out);
+    expect(hi1 - lo1).toBeGreaterThan((hi0 - lo0) * 1.5);
+    expect(med1).toBeGreaterThan(med0 + 15);
+    for (let i = 3; i < src.data.length; i += 4) expect(out.data[i]).toBe(src.data[i]);
+  });
+
+  it('an already full-range image is (nearly) unchanged', () => {
+    const src = make(64, 64, (x, y) => { const v = Math.round((x / 63) * 255); return [v, v, v, 255]; }); // uniform histogram
+    const out = autoEnhance(src, { contrast: 0 });
+    let maxd = 0;
+    for (let i = 0; i < src.data.length; i += 4) for (let c = 0; c < 3; c++) maxd = Math.max(maxd, Math.abs(out.data[i + c] - src.data[i + c]));
+    expect(maxd).toBeLessThanOrEqual(8); // grey: only the unsharp mask on the gradient's steps can move it
+  });
+
+  it('statistics ignore transparent pixels (their RGB is garbage) and alpha is preserved exactly', () => {
+    const base = dim();
+    const noisy = make(64, 64, (x, y) => {
+      const i = (y * 64 + x) * 4;
+      return base.data[i + 3] === 0 ? [255, 255, 255, 0] : [base.data[i], base.data[i + 1], base.data[i + 2], 255];
+    });
+    const a = autoEnhance(base);
+    const b = autoEnhance(noisy);
+    for (let i = 0; i < a.data.length; i += 4) {
+      expect(b.data[i + 3]).toBe(noisy.data[i + 3]);
+      if (noisy.data[i + 3] === 255) expect([b.data[i], b.data[i + 1], b.data[i + 2]]).toEqual([a.data[i], a.data[i + 1], a.data[i + 2]]);
+      else expect([b.data[i], b.data[i + 1], b.data[i + 2]]).toEqual([255, 255, 255]); // not touched either
+    }
+  });
+
+  it('keeps the hue of a coloured blob (within 10 degrees)', () => {
+    const src = make(64, 64, (x, y) => (Math.hypot(x - 32, y - 32) < 26 ? [90 + (x % 5), 50, 40, 255] : [0, 0, 0, 0]));
+    const out = autoEnhance(src);
+    const i = (32 * 64 + 32) * 4;
+    const dh = Math.abs(hue(src.data[i], src.data[i + 1], src.data[i + 2]) - hue(out.data[i], out.data[i + 1], out.data[i + 2]));
+    expect(Math.min(dh, 360 - dh)).toBeLessThanOrEqual(10);
+    expect(out.data[i]).toBeGreaterThan(src.data[i]);
+  });
+
+  it('sharpening raises the contrast across a blurred step', () => {
+    // soft steps 5 -> 128 -> 250 (wide range, median 128) so levels and gamma stay out of the way
+    const src = make(80, 40, (x) => { const sig = (c: number) => 1 / (1 + Math.exp(-(x - c) / 1.2));
+      const v = Math.round(5 + 123 * sig(20) + 122 * sig(60)); return [v, v, v, 255]; });
+    const out = autoEnhance(src);
+    const row = 20 * 80 * 4;
+    const grad = (img: Img) => Math.max(...Array.from({ length: 79 }, (_, x) => Math.abs(img.data[row + (x + 1) * 4] - img.data[row + x * 4])));
+    const maxGrad = (img: Img) => Math.max(...Array.from({ length: 79 }, (_, x) => Math.abs(img.data[row + (x + 1) * 4] - img.data[row + x * 4])));
+    expect(maxGrad(out)).toBeGreaterThan(maxGrad(src) * 1.05);
+  });
+
+  it('output stays within 0..255 and a bright/dark extremes image does not wrap', () => {
+    const src = make(64, 64, (x, y) => ((x + y) % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]));
+    const out = autoEnhance(src);
+    expect(out.data.length).toBe(src.data.length);
+    expect(Math.min(...out.data)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...out.data)).toBeLessThanOrEqual(255);
+  });
+
+  it('nothing opaque: a copy', () => {
+    const src = make(8, 8, () => [10, 20, 30, 0]);
+    expect(Array.from(autoEnhance(src).data)).toEqual(Array.from(src.data));
+  });
+
+  it('1024x1024 completes quickly', () => {
+    const src = dim(1024);
+    const t0 = performance.now();
+    const out = autoEnhance(src);
+    const ms = performance.now() - t0;
+    console.log(`autoEnhance 1024x1024: ${ms.toFixed(0)} ms`);
+    expect(out.width).toBe(1024);
+    expect(ms).toBeLessThan(2000); // loose for CI; the target on a dev machine is well under 300
+  });
+
+  describe('contrast S-curve', () => {
+    const mid = (n = 64) => make(n, n, (x, y) => {
+      const v = 70 + ((x * 7 + y * 3) % 116); // 70..185: wide enough that levels are mostly out of the way
+      return [v, v * 0.9, v * 0.8, 255];
+    });
+    const lstd = (img: Img) => {
+      const v: number[] = [];
+      for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] >= 128) v.push(lumOf(img.data, i));
+      const m = v.reduce((a, b) => a + b, 0) / v.length;
+      return Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length);
+    };
+
+    it('raises the luminance std-dev of a mid-contrast toy', () => {
+      const src = mid();
+      expect(lstd(autoEnhance(src, { contrast: 0.4 }))).toBeGreaterThan(lstd(autoEnhance(src, { contrast: 0 })) * 1.05);
+    });
+
+    it('curve fixes 0, 0.5 and 1 and is monotone; contrast 0 is the identity', () => {
+      const f = contrastCurve(0.45);
+      expect(f(0)).toBeCloseTo(0, 6);
+      expect(f(1)).toBeCloseTo(1, 6);
+      expect(Math.abs(255 * f(0.5) - 127.5)).toBeLessThanOrEqual(2);
+      let prev = -1;
+      for (let k = 0; k <= 100; k++) { const y = f(k / 100); expect(y).toBeGreaterThanOrEqual(prev); prev = y; }
+      expect(contrastCurve(0)(0.3)).toBe(0.3);
+    });
+
+    it('keeps mid-grey fixed (+-2) on an image that needs no levels or gamma', () => {
+      const grey = make(64, 64, (x, y) => (y < 32 ? (x % 2 ? [255, 255, 255, 255] : [0, 0, 0, 255]) : [128, 128, 128, 255]));
+      const out = autoEnhance(grey, { contrast: 0.45 });
+      const i = (50 * 64 + 20) * 4;
+      expect(Math.abs(out.data[i] - 128)).toBeLessThanOrEqual(2);
+    });
+
+    it('keeps the hue (+-10 deg) and stays within 0..255 at the strongest setting', () => {
+      const src = make(64, 64, (x, y) => [60 + x * 2.5, 30 + y, 20 + (x + y) / 2, 255]);
+      const out = autoEnhance(src, { contrast: 0.8 });
+      for (const [x, y] of [[10, 10], [32, 20], [50, 50], [60, 5]]) {
+        const i = (y * 64 + x) * 4;
+        const dh = Math.abs(hue(src.data[i], src.data[i + 1], src.data[i + 2]) - hue(out.data[i], out.data[i + 1], out.data[i + 2]));
+        expect(Math.min(dh, 360 - dh)).toBeLessThanOrEqual(10);
+      }
+      expect(Math.min(...out.data)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...out.data)).toBeLessThanOrEqual(255);
+    });
+
+    it('komiks gets neither the stretch nor the curve (gamma only)', () => {
+      const src = dim();
+      const k = autoEnhance(src, { style: 'komiks' });
+      const n = autoEnhance(src, { style: 'naklejka' });
+      const [lo0, , hi0] = stats(src);
+      const [lo1, , hi1] = stats(k);
+      expect(hi1 - lo1).toBeLessThan((hi0 - lo0) * 1.5); // no stretch (gamma alone widens a dim range a little)
+      expect(stats(n)[2] - stats(n)[0]).toBeGreaterThan(hi1 - lo1);
+      expect(Array.from(k.data)).toEqual(Array.from(autoEnhance(src, { style: 'komiks', contrast: 0.9 }).data)); // contrast ignored
+    });
+
+    it('default contrast comes from ENHANCE', () => {
+      expect(ENHANCE.contrast).toBeGreaterThan(0);
+      const src = mid();
+      expect(Array.from(autoEnhance(src).data)).toEqual(Array.from(autoEnhance(src, { contrast: ENHANCE.contrast }).data));
+    });
+  });
+
+  it('makeSticker enhances before styling only when asked', () => {
+    const toy = make(64, 64, (x, y) => (x > 8 && y > 8 && x < 56 && y < 56 ? [60 + x / 2, 50, 40, 255] : [0, 0, 0, 0]));
+    const plain = makeSticker(toy, 'naklejka');
+    const enhanced = makeSticker(toy, 'naklejka', true);
+    expect(plain && enhanced && Buffer.compare(Buffer.from(plain.data), Buffer.from(enhanced.data))).not.toBe(0);
   });
 });

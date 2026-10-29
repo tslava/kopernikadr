@@ -100,6 +100,7 @@ export const pl = {
   'maker.preview': 'Podgląd naklejki',
   'maker.styleNaklejka': 'Naklejka',
   'maker.styleKomiks': 'Komiks',
+  'maker.enhance': '✨ Popraw',
   'maker.save': 'Zapisz',
   'maker.saving': 'Zapisuję…',
   'maker.brushAdd': 'Dodaj',

@@ -1,7 +1,7 @@
 /**
  * The StickerMaker flow as a pure state machine (plan "Photo stickers", Task 5):
  * `source -> loading -> [cut ->] style -> saving -> done`, with cancel and an error at each step.
- * The cut step is only for an image without transparency (Task 9): strokes are kept here, the mask
+ * The cut step is only for an image without transparency (Task 9); auto-enhance is ON for photos, OFF for finished transparent art: strokes are kept here, the mask
  * and the preview pixels live in the component (big arrays stay out of the reducer).
  */
 import type { NativeErrorCode } from '../native';
@@ -16,8 +16,8 @@ export type MakerState =
   | { step: 'source'; notice: MakerNotice | null }
   | { step: 'loading' }
   | CutState
-  | { step: 'style'; style: StickerStyle; notice: MakerNotice | null }
-  | { step: 'saving'; style: StickerStyle }
+  | { step: 'style'; style: StickerStyle; enhance: boolean; notice: MakerNotice | null }
+  | { step: 'saving'; style: StickerStyle; enhance: boolean }
   | { step: 'done'; id: string }
   | { step: 'closed' };
 
@@ -62,6 +62,8 @@ export type MakerEvent =
   /** "Dalej": cut -> style. */
   | { type: 'next' }
   | { type: 'style'; style: StickerStyle }
+  /** The "Popraw" chip: auto-enhance on/off. */
+  | { type: 'enhance'; on: boolean }
   | { type: 'save' }
   | { type: 'saved'; id: string }
   | { type: 'saveFailed'; notice: 'empty' | 'full' | 'failed' }
@@ -133,7 +135,7 @@ export function reduce(s: MakerState, e: MakerEvent): MakerState {
       return s.step === 'source' ? { step: 'loading' } : s;
     case 'picked':
       if (s.step !== 'loading') return s;
-      return e.hasAlpha ? { step: 'style', style: 'naklejka', notice: null } : CUT_START;
+      return e.hasAlpha ? { step: 'style', style: 'naklejka', enhance: false, notice: null } : CUT_START;
     case 'pickFailed':
       return s.step === 'loading' ? { step: 'source', notice: noticeForPick(e.code) } : s;
     case 'empty':
@@ -154,15 +156,17 @@ export function reduce(s: MakerState, e: MakerEvent): MakerState {
     case 'retry':
       return s.step === 'cut' && s.strokes.length > 0 && !s.busy ? { ...s, busy: true, notice: null, attempt: s.attempt + 1 } : s;
     case 'next':
-      return s.step === 'cut' && s.ready && !s.busy ? { step: 'style', style: 'naklejka', notice: null } : s;
+      return s.step === 'cut' && s.ready && !s.busy ? { step: 'style', style: 'naklejka', enhance: true, notice: null } : s;
     case 'style':
       return s.step === 'style' ? { ...s, style: e.style } : s;
+    case 'enhance':
+      return s.step === 'style' ? { ...s, enhance: e.on } : s;
     case 'save':
-      return s.step === 'style' ? { step: 'saving', style: s.style } : s;
+      return s.step === 'style' ? { step: 'saving', style: s.style, enhance: s.enhance } : s;
     case 'saved':
       return s.step === 'saving' ? { step: 'done', id: e.id } : s;
     case 'saveFailed':
-      return s.step === 'saving' ? { step: 'style', style: s.style, notice: e.notice } : s;
+      return s.step === 'saving' ? { step: 'style', style: s.style, enhance: s.enhance, notice: e.notice } : s;
     case 'cancel':
       if (s.step === 'source') return { step: 'closed' };
       if (s.step === 'style' || s.step === 'loading' || s.step === 'cut') return { step: 'source', notice: null };
