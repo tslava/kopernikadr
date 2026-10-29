@@ -352,19 +352,73 @@ export function komiks(img: Img): Img {
 /** Alpha at or above this counts as the toy (statistics and sharpening ignore the rest). */
 const OPAQUE = 128;
 
+/** Tunable constants of the auto-enhance pipeline (see `autoEnhance`). */
+export const ENHANCE = {
+  /** Levels: lower luminance percentile that becomes the black point. */
+  lowPercentile: 0.01,
+  /** Levels: upper luminance percentile that becomes the white point. */
+  highPercentile: 0.99,
+  /** Levels are skipped when the p-low..p-high range already covers this share of 0..255. */
+  skipRange: 0.97,
+  /** Levels: largest linear gain of the stretch. */
+  maxGain: 2,
+  /** Brightness: gamma bounds (below 1 brightens, above 1 darkens). */
+  gammaMin: 0.7,
+  gammaMax: 1.4,
+  /** Brightness: no gamma while the median luminance (0..1) is inside this dead zone. */
+  medianDeadLo: 0.42,
+  medianDeadHi: 0.58,
+  /** Brightness: a gamma above 1 (darkening) is applied at this share of its strength. */
+  darkenShare: 0.5,
+  /** Contrast: S-curve strength around mid-grey; the slope at 0.5 is 1 + contrast (0 = off). */
+  contrast: 0.45,
+  /** Saturation: multiplier of the distance from luma (1.12 = +12%). */
+  saturation: 1.12,
+  /** Sharpness: box-blur radius as a share of the long side (at least 1 px), two passes. */
+  sharpenRadius: 0.0015,
+  /** Sharpness: unsharp-mask amount. */
+  sharpenAmount: 0.6,
+  /** Sharpness: differences below this (0..255 luminance) are left alone, so noise is not boosted. */
+  sharpenThreshold: 3,
+};
+
+/** Normalised tanh S-curve on 0..1 with slope 1 + c at 0.5; fixes 0, 0.5 and 1. c <= 0 is the identity. */
+export function contrastCurve(c: number): (x: number) => number {
+  if (!(c > 0)) return (x) => x;
+  const slope = (s: number) => s / (2 * Math.tanh(s / 2));
+  let lo = 1e-6, hi = 40;
+  for (let k = 0; k < 60; k++) {
+    const mid = (lo + hi) / 2;
+    if (slope(mid) < 1 + c) lo = mid; else hi = mid;
+  }
+  const s = (lo + hi) / 2, d = Math.tanh(s / 2);
+  return (x) => 0.5 + 0.5 * Math.tanh(s * (x - 0.5)) / d;
+}
+
+export interface EnhanceOptions {
+  /** 'komiks' skips the levels stretch and the contrast curve (they break flat bright areas into patches). */
+  style?: StickerStyle;
+  /** Overrides `ENHANCE.contrast`. */
+  contrast?: number;
+}
+
 /**
  * Automatic correction of a dim, flat, soft photo of a toy; statistics come ONLY from opaque pixels
- * (alpha >= 128) and alpha is never touched. Steps, all hue-preserving where it matters:
- * 1. levels: luminance 0.5% / 99.5% percentiles -> linear stretch (one curve for the luminance, the
- *    channels scale by the same ratio so the hue is kept), gain <= 2,
- *    skipped when the range already covers >= 90% of 0..255;
+ * (alpha >= 128) and alpha is never touched. Constants live in `ENHANCE`. Steps, hue-preserving where
+ * it matters (one curve for the luminance, the channels scale by the same ratio):
+ * 1. levels: luminance 1% / 99% percentiles -> linear stretch, gain <= 2, skipped when the range
+ *    already covers >= 97% of 0..255 (not for 'komiks');
  * 2. brightness: gamma moves the median luminance toward 0.5 (gamma 0.7..1.4, none inside 0.42..0.58;
  *    darkening only at half strength, so a naturally bright toy stays bright);
- * 3. saturation: +12% away from luma;
- * 4. sharpness: unsharp mask on luminance, box blur (2 passes) of radius ~0.15% of the long side,
+ * 3. contrast: a normalised tanh S-curve around 0.5 on the luminance (always on, also when levels are
+ *    skipped; not for 'komiks');
+ * 4. saturation: +12% away from luma;
+ * 5. sharpness: unsharp mask on luminance, box blur (2 passes) of radius ~0.15% of the long side,
  *    amount 0.6, threshold 3/255, blurred only over opaque pixels so no halo bleeds from transparency.
  */
-export function autoEnhance(img: Img): Img {
+export function autoEnhance(img: Img, opts: EnhanceOptions = {}): Img {
+  const komiksStyle = opts.style === 'komiks';
+  const contrast = komiksStyle ? 0 : (opts.contrast ?? ENHANCE.contrast);
   const { width: w, height: h } = img;
   const n = w * h;
   const src = img.data;
@@ -390,11 +444,11 @@ export function autoEnhance(img: Img): Img {
   };
 
   // levels + gamma as one lookup table shared by R, G and B
-  const lo = percentile(0.005);
-  const hi = percentile(0.995);
+  const lo = percentile(ENHANCE.lowPercentile);
+  const hi = percentile(ENHANCE.highPercentile);
   const range = hi - lo;
-  const skip = range >= 0.9 * 255;
-  const gain0 = skip ? 1 : Math.min(2, 255 / Math.max(1, range));
+  const skip = komiksStyle || range >= ENHANCE.skipRange * 255;
+  const gain0 = skip ? 1 : Math.min(ENHANCE.maxGain, 255 / Math.max(1, range));
   // The black point is lowered only partly (at least half of `lo` stays, more when the stretch is
   // capped), so a naturally bright toy does not turn darker; the highlight never exceeds 255.
   const base = skip ? 0 : Math.min(lo, Math.max(lo * 0.5, (255 - range * gain0) / 2));
@@ -403,16 +457,17 @@ export function autoEnhance(img: Img): Img {
   const level = (v: number) => Math.min(255, Math.max(0, base + (v - stretch) * gain));
   const median = level(percentile(0.5)) / 255;
   let gamma = 1;
-  if ((median < 0.42 || median > 0.58) && median > 0.001 && median < 0.999) {
-    gamma = Math.min(1.4, Math.max(0.7, Math.log(0.5) / Math.log(median)));
-    if (gamma > 1) gamma = 1 + (gamma - 1) * 0.5; // a bright toy is rarely wrong: darken at half strength
+  if ((median < ENHANCE.medianDeadLo || median > ENHANCE.medianDeadHi) && median > 0.001 && median < 0.999) {
+    gamma = Math.min(ENHANCE.gammaMax, Math.max(ENHANCE.gammaMin, Math.log(0.5) / Math.log(median)));
+    if (gamma > 1) gamma = 1 + (gamma - 1) * ENHANCE.darkenShare; // a bright toy is rarely wrong: darken at half strength
   }
+  const curve = contrastCurve(contrast);
   const lut = new Float32Array(256);
-  for (let v = 0; v < 256; v++) lut[v] = 255 * Math.pow(level(v) / 255, gamma);
+  for (let v = 0; v < 256; v++) lut[v] = 255 * curve(Math.pow(level(v) / 255, gamma));
 
   // tone + saturation, opaque pixels only. The curve acts on luminance and the channels follow by the
   // same ratio (hue stays put, unlike a per-channel gamma); Y keeps the toned luminance for sharpening
-  const SAT = 1.12;
+  const SAT = ENHANCE.saturation;
   const Y = new Float32Array(n);
   const mask = new Uint8Array(n);
   for (let p = 0, i = 0; p < n; p++, i += 4) {
@@ -434,7 +489,7 @@ export function autoEnhance(img: Img): Img {
   }
 
   // unsharp mask: mask-normalised blur of Y, so transparent pixels contribute nothing
-  const radius = Math.max(1, Math.round(0.0015 * Math.max(w, h)));
+  const radius = Math.max(1, Math.round(ENHANCE.sharpenRadius * Math.max(w, h)));
   const num = new Float32Array(n);
   const den = new Float32Array(n);
   for (let p = 0; p < n; p++) {
@@ -448,7 +503,7 @@ export function autoEnhance(img: Img): Img {
     boxBlurF(num, tmp, w, h, radius);
     boxBlurF(den, tmp, w, h, radius);
   }
-  const AMOUNT = 0.6, THRESHOLD = 3;
+  const AMOUNT = ENHANCE.sharpenAmount, THRESHOLD = ENHANCE.sharpenThreshold;
   for (let p = 0, i = 0; p < n; p++, i += 4) {
     if (!mask[p] || den[p] <= 0) continue;
     const d = Y[p] - num[p] / den[p];
@@ -493,7 +548,7 @@ function boxBlurF(a: Float32Array, tmp: Float32Array, w: number, h: number, r: n
 export function makeSticker(cut: Img, style: StickerStyle, enhance: boolean = false): Img | null {
   const trimmed0 = trimToContent(downscale(cut, MAX_STICKER_PX));
   if (!trimmed0) return null;
-  const trimmed = enhance ? autoEnhance(trimmed0) : trimmed0; // before the style: outline/shadow stay pure
+  const trimmed = enhance ? autoEnhance(trimmed0, { style }) : trimmed0; // before the style: outline/shadow stay pure
   const styled = style === 'komiks' ? komiks(trimmed) : naklejka(trimmed);
   return downscale(padSquare(styled), MAX_STICKER_PX);
 }
