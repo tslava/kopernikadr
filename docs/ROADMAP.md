@@ -25,6 +25,8 @@ AI → the rest by priority.**
   new "Moje" tab in the emoji picker, then it works like an emoji (place, drag, scale, rotate, range,
   export). A PNG/WebP with transparency skips the cut. Details: ARCHITECTURE §5.4a; tablet run:
   `docs/diagnostics/20261028-photo-stickers.md`.
+- "✨ Popraw": automatic brightness, contrast, saturation and sharpness for the cut-out (offline, pure JS), a toggle
+  chip on the style step: ON for photos, OFF for transparent PNGs (ARCHITECTURE §5.4a).
 
 ## Next: stage 3b
 - Insert a frame in the middle and reshoot frame N.

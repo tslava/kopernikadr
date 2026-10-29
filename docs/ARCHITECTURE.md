@@ -524,6 +524,17 @@ A sticker made from a photo of a toy. Plan: `docs/plans/20261028-photo-stickers.
 - **Downgrade caveat.** The 3a app opens and plays a movie with `my:` stickers (an unknown sprite is
   skipped) but **cannot export it** (`SpriteLoadError`). Install the new build again to export. Accepted:
   there is one tablet and it gets the new build.
+- **Auto-enhance** ("✨ Popraw" / «✨ Улучшить», `autoEnhance` in `stickerize.ts`, 2026-10-29). Tablet photos of
+  toys are dim, flat and soft, so a pure offline correction runs on the cut-out BEFORE the style
+  (outline, shadow, comic). Statistics come only from opaque pixels (alpha >= 128); alpha is never touched.
+  Levels: luminance 0.5%/99.5% percentiles stretched linearly (gain <= 2, skipped when the range is already
+  >= 90% of 0..255, the black point is lowered only partly so a bright toy does not darken); brightness: a
+  gamma moves the median luminance toward 0.5 (0.7..1.4, none inside 0.42..0.58, darkening at half strength).
+  The curve acts on luminance and the channels follow by the same ratio, so the hue is kept. Then saturation
+  +12% away from luma, and an unsharp mask on luminance (two box passes, radius 0.15% of the long side, at
+  least 1 px, amount 0.6, threshold 3/255) blurred only over opaque pixels, so no halo bleeds from transparency.
+  About 35 ms at 1024 px. The chip is a toggle (ON for a photo, OFF for an image that came with transparency:
+  finished art); `StyleCache` keys by (enhance, style), so each combination is computed once and "Zapisz" reuses it.
 - **Native segmenter** (`native/SegSession.kt`, `SegEngine.kt`; MediaPipe Interactive Segmenter,
   `tasks-vision` 1.1.1, the stroke API, MagicTouch model).
   - API: `segOpen({path, maxSide:1024})` decodes with `ImageDecoder` (EXIF and downscale in one call) to

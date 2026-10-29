@@ -24,7 +24,7 @@ describe('armMakerBack', () => {
   };
 
   it('keeps the registration while Back only returns to the source step', () => {
-    const t = setup({ step: 'style', style: 'naklejka', notice: null });
+    const t = setup({ step: 'style', style: 'naklejka', enhance: false, notice: null });
     expect(t.overlays.closeTop()).toBe(true);
     expect(t.s.step).toBe('source');
     expect(t.overlays.size).toBe(1); // the next Back must still reach the maker, not the picker below
@@ -34,7 +34,7 @@ describe('armMakerBack', () => {
   });
 
   it('keeps the registration when Back is ignored while saving', () => {
-    const t = setup({ step: 'saving', style: 'naklejka' });
+    const t = setup({ step: 'saving', style: 'naklejka', enhance: false });
     t.overlays.closeTop();
     expect(t.s.step).toBe('saving');
     expect(t.overlays.size).toBe(1);
@@ -52,10 +52,21 @@ describe('armMakerBack', () => {
 const run = (events: MakerEvent[], from: MakerState = START): MakerState => events.reduce(reduce, from);
 
 describe('sticker maker flow', () => {
+  it('enhance: ON for a photo, OFF for transparent art; the toggle sticks through style change and save', () => {
+    const photo = run([{ type: 'pick' }, { type: 'picked', hasAlpha: false }, { type: 'stroke', stroke: { mode: 'add', points: [[0.5, 0.5]] } }, { type: 'cutDone', coverage: 0.2, empty: false }, { type: 'next' }]);
+    expect(photo).toMatchObject({ step: 'style', enhance: true });
+    const art = run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }]);
+    expect(art).toMatchObject({ step: 'style', enhance: false });
+    const toggled = run([{ type: 'enhance', on: false }, { type: 'style', style: 'komiks' }], photo);
+    expect(toggled).toMatchObject({ enhance: false, style: 'komiks' });
+    expect(run([{ type: 'save' }], toggled)).toEqual({ step: 'saving', style: 'komiks', enhance: false });
+    expect(reduce(START, { type: 'enhance', on: false })).toBe(START);
+  });
+
   it('a picture with transparency goes source -> loading -> style -> saving -> done', () => {
     expect(run([{ type: 'pick' }])).toEqual({ step: 'loading' });
-    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }])).toEqual({ step: 'style', style: 'naklejka', notice: null });
-    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'style', style: 'komiks' }, { type: 'save' }])).toEqual({ step: 'saving', style: 'komiks' });
+    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }])).toEqual({ step: 'style', style: 'naklejka', enhance: false, notice: null });
+    expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'style', style: 'komiks' }, { type: 'save' }])).toEqual({ step: 'saving', style: 'komiks', enhance: false });
     expect(run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'save' }, { type: 'saved', id: 'x' }])).toEqual({ step: 'done', id: 'x' });
   });
 
@@ -79,7 +90,7 @@ describe('sticker maker flow', () => {
 
   it('a failed save returns to the style step with the notice, keeping the style', () => {
     const saving = run([{ type: 'pick' }, { type: 'picked', hasAlpha: true }, { type: 'style', style: 'komiks' }, { type: 'save' }]);
-    expect(reduce(saving, { type: 'saveFailed', notice: 'full' })).toEqual({ step: 'style', style: 'komiks', notice: 'full' });
+    expect(reduce(saving, { type: 'saveFailed', notice: 'full' })).toEqual({ step: 'style', style: 'komiks', enhance: false, notice: 'full' });
   });
 
   it('cancel goes one step back, closes from the source step and is ignored while saving', () => {
@@ -110,7 +121,7 @@ describe('sticker maker flow', () => {
       expect(reduce(s, { type: 'next' })).toBe(s); // not while a run is in flight
       const done = reduce(s, { type: 'cutDone', coverage: 0.2, empty: false }) as CutState;
       expect(done).toMatchObject({ busy: false, ready: true, wide: false, notice: null });
-      expect(reduce(done, { type: 'next' })).toEqual({ step: 'style', style: 'naklejka', notice: null });
+      expect(reduce(done, { type: 'next' })).toEqual({ step: 'style', style: 'naklejka', enhance: true, notice: null }); // a photo: enhance ON
     });
 
     it('the brush is a toggle and strokes keep their order', () => {

@@ -349,13 +349,151 @@ export function komiks(img: Img): Img {
   return dropShadow(outline(flat, { radiusPx: side * 0.02, color: [20, 20, 20] }), side);
 }
 
+/** Alpha at or above this counts as the toy (statistics and sharpening ignore the rest). */
+const OPAQUE = 128;
+
+/**
+ * Automatic correction of a dim, flat, soft photo of a toy; statistics come ONLY from opaque pixels
+ * (alpha >= 128) and alpha is never touched. Steps, all hue-preserving where it matters:
+ * 1. levels: luminance 0.5% / 99.5% percentiles -> linear stretch (one curve for the luminance, the
+ *    channels scale by the same ratio so the hue is kept), gain <= 2,
+ *    skipped when the range already covers >= 90% of 0..255;
+ * 2. brightness: gamma moves the median luminance toward 0.5 (gamma 0.7..1.4, none inside 0.42..0.58;
+ *    darkening only at half strength, so a naturally bright toy stays bright);
+ * 3. saturation: +12% away from luma;
+ * 4. sharpness: unsharp mask on luminance, box blur (2 passes) of radius ~0.15% of the long side,
+ *    amount 0.6, threshold 3/255, blurred only over opaque pixels so no halo bleeds from transparency.
+ */
+export function autoEnhance(img: Img): Img {
+  const { width: w, height: h } = img;
+  const n = w * h;
+  const src = img.data;
+  const out = new Uint8ClampedArray(src);
+  const lum = (i: number) => 0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2];
+
+  const hist = new Uint32Array(256);
+  let count = 0;
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    if (src[i + 3] < OPAQUE) continue;
+    hist[Math.min(255, Math.round(lum(i)))]++;
+    count++;
+  }
+  if (count < 16) return { width: w, height: h, data: out };
+  const percentile = (q: number): number => {
+    const target = q * count;
+    let acc = 0;
+    for (let v = 0; v < 256; v++) {
+      acc += hist[v];
+      if (acc >= target) return v;
+    }
+    return 255;
+  };
+
+  // levels + gamma as one lookup table shared by R, G and B
+  const lo = percentile(0.005);
+  const hi = percentile(0.995);
+  const range = hi - lo;
+  const skip = range >= 0.9 * 255;
+  const gain0 = skip ? 1 : Math.min(2, 255 / Math.max(1, range));
+  // The black point is lowered only partly (at least half of `lo` stays, more when the stretch is
+  // capped), so a naturally bright toy does not turn darker; the highlight never exceeds 255.
+  const base = skip ? 0 : Math.min(lo, Math.max(lo * 0.5, (255 - range * gain0) / 2));
+  const gain = skip ? 1 : Math.min(gain0, (255 - base) / Math.max(1, range));
+  const stretch = skip ? 0 : lo;
+  const level = (v: number) => Math.min(255, Math.max(0, base + (v - stretch) * gain));
+  const median = level(percentile(0.5)) / 255;
+  let gamma = 1;
+  if ((median < 0.42 || median > 0.58) && median > 0.001 && median < 0.999) {
+    gamma = Math.min(1.4, Math.max(0.7, Math.log(0.5) / Math.log(median)));
+    if (gamma > 1) gamma = 1 + (gamma - 1) * 0.5; // a bright toy is rarely wrong: darken at half strength
+  }
+  const lut = new Float32Array(256);
+  for (let v = 0; v < 256; v++) lut[v] = 255 * Math.pow(level(v) / 255, gamma);
+
+  // tone + saturation, opaque pixels only. The curve acts on luminance and the channels follow by the
+  // same ratio (hue stays put, unlike a per-channel gamma); Y keeps the toned luminance for sharpening
+  const SAT = 1.12;
+  const Y = new Float32Array(n);
+  const mask = new Uint8Array(n);
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    if (src[i + 3] < OPAQUE) continue;
+    mask[p] = 1;
+    const r0 = src[i], g0 = src[i + 1], b0 = src[i + 2];
+    const l0 = 0.299 * r0 + 0.587 * g0 + 0.114 * b0;
+    const li = Math.min(255, l0);
+    const l1 = lut[Math.floor(li)] + (lut[Math.min(255, Math.floor(li) + 1)] - lut[Math.floor(li)]) * (li - Math.floor(li));
+    const mx = Math.max(r0, g0, b0);
+    const k = mx > 0 && l0 > 0.5 ? Math.min(l1 / l0, 255 / mx) : 0;
+    let r = r0 * k, g = g0 * k, b = b0 * k;
+    if (l0 <= 0.5) r = g = b = l1; // (near) black: nothing to keep the hue of
+    const l = 0.299 * r + 0.587 * g + 0.114 * b;
+    out[i] = l + (r - l) * SAT;
+    out[i + 1] = l + (g - l) * SAT;
+    out[i + 2] = l + (b - l) * SAT;
+    Y[p] = l;
+  }
+
+  // unsharp mask: mask-normalised blur of Y, so transparent pixels contribute nothing
+  const radius = Math.max(1, Math.round(0.0015 * Math.max(w, h)));
+  const num = new Float32Array(n);
+  const den = new Float32Array(n);
+  for (let p = 0; p < n; p++) {
+    if (mask[p]) {
+      num[p] = Y[p];
+      den[p] = 1;
+    }
+  }
+  const tmp = new Float32Array(n);
+  for (let pass = 0; pass < 2; pass++) {
+    boxBlurF(num, tmp, w, h, radius);
+    boxBlurF(den, tmp, w, h, radius);
+  }
+  const AMOUNT = 0.6, THRESHOLD = 3;
+  for (let p = 0, i = 0; p < n; p++, i += 4) {
+    if (!mask[p] || den[p] <= 0) continue;
+    const d = Y[p] - num[p] / den[p];
+    if (d > -THRESHOLD && d < THRESHOLD) continue;
+    const add = AMOUNT * d;
+    out[i] += add;
+    out[i + 1] += add;
+    out[i + 2] += add;
+  }
+  return { width: w, height: h, data: out };
+}
+
+/** In-place separable box blur (window 2r+1, edge-clamped by a shrinking window); `tmp` is scratch. */
+function boxBlurF(a: Float32Array, tmp: Float32Array, w: number, h: number, r: number): void {
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    let sum = 0;
+    for (let x = 0; x <= Math.min(r, w - 1); x++) sum += a[row + x];
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(w - 1, x + r);
+      tmp[row + x] = sum / (x1 - x0 + 1);
+      if (x + r + 1 < w) sum += a[row + x + r + 1];
+      if (x - r >= 0) sum -= a[row + x - r];
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    let sum = 0;
+    for (let y = 0; y <= Math.min(r, h - 1); y++) sum += tmp[y * w + x];
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - r), y1 = Math.min(h - 1, y + r);
+      a[y * w + x] = sum / (y1 - y0 + 1);
+      if (y + r + 1 < h) sum += tmp[(y + r + 1) * w + x];
+      if (y - r >= 0) sum -= tmp[(y - r) * w + x];
+    }
+  }
+}
+
 /**
  * Cut-out (or an already transparent picture) -> finished sticker: trimmed, styled, centred on a
  * square, at most `MAX_STICKER_PX`. Null when nothing is visible ("nothing cut").
  */
-export function makeSticker(cut: Img, style: StickerStyle): Img | null {
-  const trimmed = trimToContent(downscale(cut, MAX_STICKER_PX));
-  if (!trimmed) return null;
+export function makeSticker(cut: Img, style: StickerStyle, enhance: boolean = false): Img | null {
+  const trimmed0 = trimToContent(downscale(cut, MAX_STICKER_PX));
+  if (!trimmed0) return null;
+  const trimmed = enhance ? autoEnhance(trimmed0) : trimmed0; // before the style: outline/shadow stay pure
   const styled = style === 'komiks' ? komiks(trimmed) : naklejka(trimmed);
   return downscale(padSquare(styled), MAX_STICKER_PX);
 }

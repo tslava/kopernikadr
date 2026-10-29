@@ -125,7 +125,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
     else if (state.step === 'done') onDone(state.id);
   }, [state, onClose, onDone]);
 
-  const styled = (style: StickerStyle): Img | null => cache.current.get(style);
+  const styled = (style: StickerStyle, enhance: boolean): Img | null => cache.current.get(style, enhance);
 
   /**
    * Both sources hand back a file in `tmp/`; the native `segOpen` decodes it (EXIF applied, <= 1024 px,
@@ -165,7 +165,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       if (opened.hasAlpha) {
         void seg().close();
         cache.current.setSource(img);
-        if (!styled('naklejka')) dispatch({ type: 'empty' });
+        if (!styled('naklejka', false)) dispatch({ type: 'empty' });
         else dispatch({ type: 'picked', hasAlpha: true });
       } else {
         photoRef.current = img;
@@ -192,7 +192,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
 
   const onSave = async () => {
     if (state.step !== 'style') return;
-    const sticker = styled(state.style);
+    const sticker = styled(state.style, state.enhance);
     dispatch({ type: 'save' });
     if (!sticker) {
       dispatch({ type: 'saveFailed', notice: 'empty' });
@@ -281,7 +281,7 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
       )}
       {(state.step === 'style' || state.step === 'saving') && (
         <div className="maker-body style">
-          <Preview img={styled(state.style)} label={t('maker.preview')} />
+          <Preview img={styled(state.style, state.enhance)} label={t('maker.preview')} />
           <div className="maker-side">
             <div className="maker-styles" role="radiogroup">
               {STYLES.map((s) => (
@@ -299,6 +299,18 @@ export default function StickerMaker({ t, library, overlays, seg: segProp, onDon
                   {t(s === 'naklejka' ? 'maker.styleNaklejka' : 'maker.styleKomiks')}
                 </button>
               ))}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={state.enhance}
+                className={`maker-style maker-enhance${state.enhance ? ' sel' : ''}`}
+                data-testid="maker-enhance"
+                disabled={state.step === 'saving'}
+                onClick={() => dispatch({ type: 'enhance', on: !state.enhance })}
+              >
+                {state.enhance && <span className="maker-check" aria-hidden="true">✓</span>}
+                {t('maker.enhance')}
+              </button>
             </div>
             <button type="button" className="primary maker-save" data-testid="maker-save" disabled={state.step === 'saving'} onClick={() => void onSave()}>
               {state.step === 'saving' ? t('maker.saving') : t('maker.save')}

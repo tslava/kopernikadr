@@ -102,6 +102,7 @@ export const ru: Strings = {
   'maker.preview': 'Предпросмотр наклейки',
   'maker.styleNaklejka': 'Наклейка',
   'maker.styleKomiks': 'Комикс',
+  'maker.enhance': '✨ Улучшить',
   'maker.save': 'Сохранить',
   'maker.saving': 'Сохраняю…',
   'maker.brushAdd': 'Добавить',
