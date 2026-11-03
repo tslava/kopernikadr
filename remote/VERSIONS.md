@@ -82,8 +82,9 @@ exactly 14 days).
 Merged manifest (debug): no `CAMERA` permission (the camera is the system camera app via an
 intent). The dependency adds `ACCESS_NETWORK_STATE` and three components (`TransportBackendDiscovery`,
 `JobInfoSchedulerService`, `AlarmManagerSchedulerBroadcastReceiver`) from `transport-backend-cct`,
-Google's telemetry transport used by MediaPipe tasks-core. `INTERNET` was already declared by the
-app. Segmentation itself makes no network calls.
+Google's telemetry transport used by MediaPipe tasks-core (`RemoteLoggingClient`). `INTERNET` was already
+declared by the app. Segmentation itself makes no network calls. Since 2026-11-03 the app manifest removes
+`TransportBackendDiscovery`, so no upload backend is registered and nothing is sent (ARCHITECTURE §5.4a).
 
 APK (debug, arm64 only): 10.9 MB before, 61.3 MB after (+50.3 MB). It contains
 `lib/arm64-v8a/libmediapipe_tasks_jni.so` (14.4 MB, the only native library, stored) and

@@ -39,8 +39,8 @@ OpenMoji CC BY-SA attribution is in parent mode (`about.openmoji`).
 
 ### Task 3: Drop MediaPipe telemetry
 **Files:** `remote/android/app/build.gradle` or `AndroidManifest.xml`, `remote/VERSIONS.md`, `docs/ARCHITECTURE.md` §5.4a
-- [ ] exclude `com.google.android.datatransport` (or remove its components with `tools:node="remove"`)
-- [ ] merged release manifest: no transport services/receivers, no `AD_ID`, list the final permissions
+- [x] remove `TransportBackendDiscovery` with `tools:node="remove"` (MediaPipe calls datatransport directly, so excluding the library would crash)
+- [x] merged release manifest: no transport services/receivers, no `AD_ID`, list the final permissions
 - [ ] segmenter still runs (debug build on the tablet, one cut)
 - [ ] close backlog `kopernikadr-mediapipe-telemetry`
 

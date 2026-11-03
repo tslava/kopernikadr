@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -9,6 +10,15 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- Play Families (kids): MediaPipe tasks-core logs usage stats through Google datatransport
+             (RemoteLoggingClient -> CCTDestination). Its classes are called directly, so the library
+             stays; removing the backend discovery service leaves the uploader with no "cct" backend,
+             and queued events are dropped instead of sent. The schedulers stay declared so that
+             JobScheduler/AlarmManager calls cannot throw. -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            tools:node="remove" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"

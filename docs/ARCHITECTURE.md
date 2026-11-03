@@ -569,10 +569,14 @@ A sticker made from a photo of a toy. Plan: `docs/plans/20261028-photo-stickers.
   in front, the photo is lost by design: the plugin clears `cacheDir/capture/` in `load()`, a result with
   a null call is ignored, and the app opens on its default route without a crash (no `appRestoredResult`
   restore). The merged manifest declares no `CAMERA` permission (that would make the capture intent throw).
-- **Known fact: telemetry component.** MediaPipe tasks-core pulls in Google's `transport-backend-cct`
-  (Firebase/datatransport) with three components (`TransportBackendDiscovery`, `JobInfoSchedulerService`,
-  `AlarmManagerSchedulerBroadcastReceiver`) and `ACCESS_NETWORK_STATE`. It is not verified whether it sends
-  anything; the segmentation itself makes no network calls. See `remote/VERSIONS.md` (transitive audit).
+- **Telemetry cut off.** MediaPipe tasks-core logs usage stats through Google datatransport
+  (`RemoteLoggingClient` -> `CCTDestination`, created by `TasksStatsProtoLogger` for every task). The classes
+  call it directly, so the library stays (excluding it would throw `NoClassDefFoundError`). The app manifest
+  removes `TransportBackendDiscovery` (`tools:node="remove"`): it carries the only backend descriptor
+  (`backend:…CctBackendFactory`), so the registry logs "Could not retrieve metadata, returning empty list of
+  transport backends" and the uploader has nothing to send to. `JobInfoSchedulerService`,
+  `AlarmManagerSchedulerBroadcastReceiver` and `ACCESS_NETWORK_STATE` stay so scheduling cannot throw.
+  Re-check when bumping MediaPipe (Play Families: no telemetry). See `remote/VERSIONS.md`.
 - **Model.** The 30.5 MB model is not in the repo: `node scripts/fetch-models.mjs` (also `npm run models`,
   `android:debug`, `scripts/build.sh`) caches it in `~/.kopernikadr/models/<sha256>.task` and copies it
   into the ignored assets folder; the Gradle `checkSegModel` fails the build without it.
