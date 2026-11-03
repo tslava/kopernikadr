@@ -55,14 +55,14 @@ export function parseCatalog(raw: unknown): EmojiCatalog {
     if (ids.has(c.id)) throw new Error(`catalog: duplicate category ${c.id}`);
     ids.add(c.id);
     const name = c.name;
-    if (!isObj(name) || !nonEmpty(name.pl) || !nonEmpty(name.ru)) throw new Error(`catalog: category ${c.id} needs pl and ru names`);
+    if (!isObj(name) || !nonEmpty(name.en) || !nonEmpty(name.pl) || !nonEmpty(name.ru)) throw new Error(`catalog: category ${c.id} needs en, pl and ru names`);
     if (!Array.isArray(c.hexcodes) || c.hexcodes.length === 0) throw new Error(`catalog: category ${c.id} is empty`);
     for (const h of c.hexcodes) {
       if (!nonEmpty(h)) throw new Error(`catalog: bad hexcode in ${c.id}`);
       if (seen.has(h)) throw new Error(`catalog: duplicate hexcode ${h}`);
       seen.add(h);
     }
-    return { id: c.id, name: { pl: name.pl, ru: name.ru }, hexcodes: [...(c.hexcodes as string[])] };
+    return { id: c.id, name: { en: name.en, pl: name.pl, ru: name.ru }, hexcodes: [...(c.hexcodes as string[])] };
   });
   return { categories };
 }

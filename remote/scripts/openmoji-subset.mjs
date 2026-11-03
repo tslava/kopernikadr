@@ -17,7 +17,7 @@ export function validateList(list) {
     if (typeof c.id !== 'string' || !c.id) throw new Error('list: category without id');
     if (ids.has(c.id)) throw new Error(`list: duplicate category ${c.id}`);
     ids.add(c.id);
-    if (typeof c.name?.pl !== 'string' || typeof c.name?.ru !== 'string' || !c.name.pl || !c.name.ru) throw new Error(`list: category ${c.id} needs name.pl and name.ru`);
+    if (typeof c.name?.en !== 'string' || typeof c.name?.pl !== 'string' || typeof c.name?.ru !== 'string' || !c.name.en || !c.name.pl || !c.name.ru) throw new Error(`list: category ${c.id} needs name.en, name.pl and name.ru`);
     if (!Array.isArray(c.hexcodes) || c.hexcodes.length === 0) throw new Error(`list: category ${c.id} is empty`);
     for (const h of c.hexcodes) {
       if (typeof h !== 'string' || !HEX.test(h)) throw new Error(`list: bad hexcode ${JSON.stringify(h)} in ${c.id}`);
@@ -50,7 +50,7 @@ export function buildSubset({ list, srcDir, licensePath, outDir }) {
   }
   const catalog = {
     version: 1,
-    categories: list.categories.map((c) => ({ id: c.id, name: { pl: c.name.pl, ru: c.name.ru }, hexcodes: [...c.hexcodes] })),
+    categories: list.categories.map((c) => ({ id: c.id, name: { en: c.name.en, pl: c.name.pl, ru: c.name.ru }, hexcodes: [...c.hexcodes] })),
   };
   fs.writeFileSync(path.join(outDir, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`);
   fs.copyFileSync(licensePath, path.join(outDir, 'LICENSE.txt'));

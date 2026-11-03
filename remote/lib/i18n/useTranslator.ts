@@ -5,7 +5,7 @@ import { FALLBACK, translatorFor } from './index';
 
 /**
  * The translator for the device language. The static export is prerendered with the fallback
- * (`pl`); the real language is picked after mount, when `navigator` exists.
+ * (`en`); the real language is picked after mount, when `navigator` exists.
  */
 export function useTranslator() {
   const [tr, setTr] = useState(() => translatorFor(FALLBACK));

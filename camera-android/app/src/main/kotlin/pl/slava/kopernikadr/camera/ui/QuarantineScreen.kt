@@ -68,7 +68,8 @@ fun QuarantineSection(store: QuarantineStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var listing by remember { mutableStateOf<QuarantineListing?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
+    // removed to failed of the last clear; the text is built at render time so it follows the locale.
+    var cleared by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var confirming by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
     LaunchedEffect(reload) { listing = withContext(Dispatchers.IO) { store.list() } }
@@ -93,7 +94,14 @@ fun QuarantineSection(store: QuarantineStore) {
                 Button(onClick = { confirming = true }) { Text(stringResource(R.string.quarantine_clear)) }
             }
         }
-        message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = GREEN_OK) }
+        cleared?.let { (removed, failed) ->
+            val text = if (failed == 0) {
+                stringResource(R.string.quarantine_cleared, removed)
+            } else {
+                stringResource(R.string.quarantine_cleared_failed, removed, failed)
+            }
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = GREEN_OK)
+        }
     }
 
     if (confirming && l != null) {
@@ -104,11 +112,7 @@ fun QuarantineSection(store: QuarantineStore) {
                 confirming = false
                 scope.launch {
                     val r = withContext(Dispatchers.IO) { store.clear(l.entries) }
-                    message = if (r.failed.isEmpty()) {
-                        context.getString(R.string.quarantine_cleared, r.removed)
-                    } else {
-                        context.getString(R.string.quarantine_cleared_failed, r.removed, r.failed.size)
-                    }
+                    cleared = r.removed to r.failed.size
                     reload++
                 }
             },

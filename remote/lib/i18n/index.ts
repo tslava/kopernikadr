@@ -1,4 +1,5 @@
 import { makeTranslator, pickLang } from '@kopernikadr/remote-core/i18n-core';
+import { en } from './en';
 import { pl } from './pl';
 import { ru } from './ru';
 
@@ -9,12 +10,12 @@ export type Plural = Partial<Record<Intl.LDMLPluralRule, string>> & { other: str
 export type Strings = { readonly [K in Key]: string | Plural };
 export type Translate = (key: Key, params?: Record<string, unknown>) => string;
 
-export const LANGS = ['pl', 'ru'] as const;
+export const LANGS = ['en', 'pl', 'ru'] as const;
 export type Lang = (typeof LANGS)[number];
-export const FALLBACK: Lang = 'pl';
-export const STRINGS: Record<Lang, Strings> = { pl, ru };
+export const FALLBACK: Lang = 'en';
+export const STRINGS: Record<Lang, Strings> = { en, pl, ru };
 
-/** Picks the language from e.g. navigator.languages (fallback `pl`) and returns its translator. */
+/** Picks the language from e.g. navigator.languages (fallback `en`) and returns its translator. */
 export function translatorFor(languages?: readonly string[] | string): { lang: Lang; t: Translate } {
   const lang = pickLang(languages, LANGS, FALLBACK) as Lang;
   return { lang, t: makeTranslator(STRINGS, lang, FALLBACK) };

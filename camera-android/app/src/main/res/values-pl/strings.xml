@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="status_title">Kopernikadr</string>
+    <string name="status_no_wifi">Brak połączenia Wi-Fi</string>
+    <string name="permission_text">Poproś rodzica o zgodę na aparat</string>
+    <string name="permission_retry">Spróbuj ponownie</string>
+    <string name="camera_starting">Kamera: uruchamianie…</string>
+    <string name="camera_ready">Kamera gotowa</string>
+    <string name="camera_error">Błąd kamery: %1$s</string>
+    <string name="server_starting">Serwer: uruchamianie…</string>
+    <string name="server_waiting">Czekam na tablet</string>
+    <string name="server_connected">Połączono z tabletem</string>
+    <string name="server_error">Błąd serwera: %1$s</string>
+    <string name="status_chip">Kamera</string>
+    <string name="status_ready">Gotowe do zdjęć</string>
+    <string name="status_tablet_connected">Tablet połączony</string>
+    <string name="status_hint_open_tablet">Otwórz Kopernikadr na tablecie — kamera znajdzie się sama.</string>
+    <string name="status_qr_caption">albo zeskanuj w przeglądarce</string>
+    <string name="status_no_wifi_title">Brak Wi-Fi</string>
+    <string name="status_no_wifi_hint">Połącz telefon z domowym Wi-Fi.</string>
+    <string name="status_starting">Uruchamianie…</string>
+    <string name="status_error_title">Błąd</string>
+    <string name="status_frames">Kadry: %1$d</string>
+    <string name="status_battery">Bateria: %1$d%%</string>
+    <string name="parent_title">Dla rodzica</string>
+    <string name="parent_close">Zamknij</string>
+    <string name="parent_diagnostics">Diagnostyka</string>
+    <string name="quarantine_title">Kwarantanna</string>
+    <string name="quarantine_empty">Pusto. Nic tu nie ma.</string>
+    <string name="quarantine_summary">Pliki: %1$d, %2$s</string>
+    <string name="quarantine_hint">Zdjęcia, których aplikacja nie mogła bezpiecznie przypisać do filmu. Nie są usuwane same.</string>
+    <string name="quarantine_clear">Wyczyść</string>
+    <string name="quarantine_confirm_title">Usunąć na stałe?</string>
+    <string name="quarantine_confirm_text">To zdjęcia (%1$d), które nigdy nie zostały dostarczone na tablet i mogą być jedyną kopią. Tego nie można cofnąć.</string>
+    <string name="quarantine_confirm_question">Ile to %1$d × %2$d?</string>
+    <string name="quarantine_confirm_label">Odpowiedź</string>
+    <string name="quarantine_confirm_ok">Usuń</string>
+    <string name="quarantine_cancel">Anuluj</string>
+    <string name="quarantine_cleared">Usunięto: %1$d</string>
+    <string name="quarantine_cleared_failed">Usunięto: %1$d, nie udało się: %2$d</string>
+</resources>

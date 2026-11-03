@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { buildSubset, validateList } from './openmoji-subset.mjs';
 
-const cat = (id, hexcodes) => ({ id, name: { pl: `${id}-pl`, ru: `${id}-ru` }, hexcodes });
+const cat = (id, hexcodes) => ({ id, name: { en: `${id}-en`, pl: `${id}-pl`, ru: `${id}-ru` }, hexcodes });
 
 function fixture(svgs) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'openmoji-'));
@@ -29,8 +29,8 @@ test('copies listed SVGs, writes catalog and license', () => {
   assert.deepEqual(catalog, {
     version: 1,
     categories: [
-      { id: 'animals', name: { pl: 'animals-pl', ru: 'animals-ru' }, hexcodes: ['1F436', '1F431'] },
-      { id: 'nature', name: { pl: 'nature-pl', ru: 'nature-ru' }, hexcodes: ['2600-FE0F'] },
+      { id: 'animals', name: { en: 'animals-en', pl: 'animals-pl', ru: 'animals-ru' }, hexcodes: ['1F436', '1F431'] },
+      { id: 'nature', name: { en: 'nature-en', pl: 'nature-pl', ru: 'nature-ru' }, hexcodes: ['2600-FE0F'] },
     ],
   });
 });
@@ -57,7 +57,7 @@ test('validateList rejects bad lists', () => {
   assert.throws(() => validateList({ categories: [cat('a', ['1f436'])] }), /bad hexcode/);
   assert.throws(() => validateList({ categories: [cat('a', ['1F436']), cat('b', ['1F436'])] }), /duplicate hexcode/);
   assert.throws(() => validateList({ categories: [cat('a', ['1F436']), cat('a', ['1F431'])] }), /duplicate category/);
-  assert.throws(() => validateList({ categories: [{ id: 'a', name: { pl: 'x' }, hexcodes: ['1F436'] }] }), /name\.pl and name\.ru/);
+  assert.throws(() => validateList({ categories: [{ id: 'a', name: { en: 'x', pl: 'x' }, hexcodes: ['1F436'] }] }), /name\.ru/);
   assert.throws(() => validateList({ categories: [cat('a', [])] }), /empty/);
 });
 

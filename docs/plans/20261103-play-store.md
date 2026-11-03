@@ -27,15 +27,15 @@ OpenMoji CC BY-SA attribution is in parent mode (`about.openmoji`).
 ### Task 1: English UI in the remote, English fallback
 **Files:** Create `remote/lib/i18n/en.ts`; Modify `remote/lib/i18n/index.ts`, `remote/lib/i18n/i18n.test.ts`,
 `remote/android/app/src/main/res/values*/strings.xml`
-- [ ] `en.ts` with every key of `pl` (plural entries per Intl rules); `LANGS = ['en','pl','ru']`, `FALLBACK = 'en'`
-- [ ] native strings: `values/` English, add `values-pl/`, keep `values-ru/`
-- [ ] tests: key parity en/pl/ru, `de-DE` → en, `pl-PL` → pl, `ru` → ru
-- [ ] `npm test` and lint pass
+- [x] `en.ts` with every key of `pl` (plural entries per Intl rules); `LANGS = ['en','pl','ru']`, `FALLBACK = 'en'`
+- [x] native strings: `values/` English, add `values-pl/`, keep `values-ru/`
+- [x] tests: key parity en/pl/ru, `de-DE` → en, `pl-PL` → pl, `ru` → ru
+- [x] `npm test` and lint pass
 
 ### Task 2: English in the camera app
 **Files:** `camera-android/app/src/main/res/values*/strings.xml`
-- [ ] `values/` English, `values-pl/` Polish (current text), `values-ru/` kept; same keys in all three
-- [ ] unit tests / lint (`MissingTranslation`) pass
+- [x] `values/` English, `values-pl/` Polish (current text), `values-ru/` kept; same keys in all three
+- [x] unit tests / lint (`MissingTranslation`) pass
 
 ### Task 3: Drop MediaPipe telemetry
 **Files:** `remote/android/app/build.gradle` or `AndroidManifest.xml`, `remote/VERSIONS.md`, `docs/ARCHITECTURE.md` §5.4a

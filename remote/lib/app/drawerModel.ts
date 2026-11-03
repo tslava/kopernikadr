@@ -159,7 +159,7 @@ export interface TransferStatusInfo {
   failed?: number;
 }
 
-export function formatBytes(bytes: number | null | undefined, lang = 'pl'): string | null {
+export function formatBytes(bytes: number | null | undefined, lang = 'en'): string | null {
   if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return null;
   const gb = bytes / 1e9;
   if (gb >= 1) return `${gb.toLocaleString(lang, { maximumFractionDigits: 1 })} GB`;

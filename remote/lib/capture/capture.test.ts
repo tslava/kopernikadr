@@ -225,7 +225,7 @@ describe('camera error answers', () => {
   }
 
   it('the kid-level keys exist in pl and ru', () => {
-    for (const [, , key] of cases) for (const lang of ['pl', 'ru'] as const) expect((STRINGS[lang] as any)[key]).toBeTypeOf('string');
+    for (const [, , key] of cases) for (const lang of ['en', 'pl', 'ru'] as const) expect((STRINGS[lang] as any)[key]).toBeTypeOf('string');
     for (const key of ['capture.err.later', 'capture.err.newMovie', 'capture.err.offline']) expect((STRINGS.pl as any)[key]).toBeTypeOf('string');
     expect(STRINGS.pl['capture.err.later']).toBe('Sprawdzimy tę klatkę później.');
     expect(STRINGS.pl['capture.err.generic']).toBe('Nie wyszło, spróbuj jeszcze raz.');

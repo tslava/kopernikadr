@@ -147,8 +147,8 @@ describe('catalog', () => {
   const good = {
     version: 1,
     categories: [
-      { id: 'animals', name: { pl: 'Zwierzęta', ru: 'Животные' }, hexcodes: ['1F436', '1F431'] },
-      { id: 'food', name: { pl: 'Jedzenie', ru: 'Еда' }, hexcodes: ['1F34E'] },
+      { id: 'animals', name: { en: 'Animals', pl: 'Zwierzęta', ru: 'Животные' }, hexcodes: ['1F436', '1F431'] },
+      { id: 'food', name: { en: 'Food', pl: 'Jedzenie', ru: 'Еда' }, hexcodes: ['1F34E'] },
     ],
   };
 
@@ -164,7 +164,7 @@ describe('catalog', () => {
     expect(() => parseCatalog(null)).toThrow('bad shape');
     expect(bad((c) => ({ ...c, version: 2 }))).toThrow('bad shape');
     expect(bad((c) => ({ ...c, categories: [] }))).toThrow('bad shape');
-    expect(bad((c) => ({ ...c, categories: [{ ...c.categories[0], name: { pl: 'x' } }] }))).toThrow('pl and ru');
+    expect(bad((c) => ({ ...c, categories: [{ ...c.categories[0], name: { en: 'x', pl: 'x' } }] }))).toThrow('en, pl and ru');
     expect(bad((c) => ({ ...c, categories: [{ ...c.categories[0], hexcodes: [] }] }))).toThrow('empty');
     expect(bad((c) => ({ ...c, categories: [c.categories[0], c.categories[0]] }))).toThrow('duplicate category');
     expect(bad((c) => ({ ...c, categories: [c.categories[0], { ...c.categories[1], hexcodes: ['1F436'] }] }))).toThrow('duplicate hexcode');

@@ -4,6 +4,7 @@
     {
       "id": "animals",
       "name": {
+        "en": "Animals",
         "pl": "Zwierzęta",
         "ru": "Животные"
       },
@@ -49,6 +50,7 @@
     {
       "id": "faces",
       "name": {
+        "en": "Faces",
         "pl": "Buźki",
         "ru": "Смайлики"
       },
@@ -94,6 +96,7 @@
     {
       "id": "food",
       "name": {
+        "en": "Food",
         "pl": "Jedzenie",
         "ru": "Еда"
       },
@@ -129,6 +132,7 @@
     {
       "id": "nature",
       "name": {
+        "en": "Nature",
         "pl": "Przyroda",
         "ru": "Природа"
       },
@@ -170,6 +174,7 @@
     {
       "id": "transport",
       "name": {
+        "en": "Vehicles",
         "pl": "Pojazdy",
         "ru": "Транспорт"
       },
@@ -201,6 +206,7 @@
     {
       "id": "toys",
       "name": {
+        "en": "Toys and things",
         "pl": "Zabawki i rzeczy",
         "ru": "Игрушки и вещи"
       },
@@ -238,6 +244,7 @@
     {
       "id": "magic",
       "name": {
+        "en": "Magic and space",
         "pl": "Magia i kosmos",
         "ru": "Магия и космос"
       },
@@ -269,6 +276,7 @@
     {
       "id": "symbols",
       "name": {
+        "en": "Hearts and signs",
         "pl": "Serca i znaki",
         "ru": "Сердца и знаки"
       },

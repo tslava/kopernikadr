@@ -7,6 +7,15 @@ describe('i18n tables', () => {
     for (const lang of LANGS) expect(Object.keys(STRINGS[lang]).sort(), lang).toEqual(plKeys);
   });
 
+  it('en has exactly the keys of pl and ru, and plural entries have only one/other', () => {
+    expect(LANGS).toEqual(['en', 'pl', 'ru']);
+    expect(Object.keys(STRINGS.en).sort()).toEqual(Object.keys(STRINGS.pl).sort());
+    expect(Object.keys(STRINGS.en).sort()).toEqual(Object.keys(STRINGS.ru).sort());
+    for (const [key, v] of Object.entries(STRINGS.en)) {
+      if (typeof v === 'object') expect(Object.keys(v).sort(), key).toEqual(['one', 'other']);
+    }
+  });
+
   it('plural entries are plural in every language and have `other`', () => {
     for (const [key, v] of Object.entries(STRINGS.pl)) {
       for (const lang of LANGS) {
@@ -30,10 +39,14 @@ describe('i18n tables', () => {
 });
 
 describe('translatorFor', () => {
-  it('picks the language from navigator.languages, falling back to pl', () => {
+  it('picks the language from navigator.languages, falling back to en', () => {
     expect(translatorFor(['ru-RU', 'en']).lang).toBe('ru');
-    expect(translatorFor(['en-US', 'de']).lang).toBe(FALLBACK);
-    expect(translatorFor(undefined).lang).toBe('pl');
+    expect(translatorFor(['en-US', 'de']).lang).toBe('en');
+    expect(translatorFor('de-DE').lang).toBe('en');
+    expect(translatorFor(['pl-PL']).lang).toBe('pl');
+    expect(translatorFor('ru-RU').lang).toBe('ru');
+    expect(translatorFor(undefined).lang).toBe(FALLBACK);
+    expect(FALLBACK).toBe('en');
     expect(translatorFor(['de', 'pl-PL']).t('home.connect')).toBe('Połącz z kamerą');
   });
 
@@ -42,6 +55,8 @@ describe('translatorFor', () => {
     expect([1, 2, 5, 22, 25].map((n) => tpl('diag.count', { n }))).toEqual([
       '1 test', '2 testy', '5 testów', '22 testy', '25 testów',
     ]);
+    const { t: ten } = translatorFor('en');
+    expect([1, 2, 5].map((n) => ten('diag.count', { n }))).toEqual(['1 test', '2 tests', '5 tests']);
     const { t: tru } = translatorFor('ru');
     expect([1, 3, 5, 21].map((n) => tru('diag.count', { n }))).toEqual([
       '1 тест', '3 теста', '5 тестов', '21 тест',

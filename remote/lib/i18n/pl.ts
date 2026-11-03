@@ -1,4 +1,4 @@
-// Polish strings (the fallback language). Plural entries are keyed by Intl.PluralRules categories.
+// Polish strings (the key source: `Key` derives from this table). Plural entries are keyed by Intl.PluralRules categories.
 export const pl = {
   'app.title': 'Kopernikadr',
   'app.subtitle': 'Pilot do kamery poklatkowej',
