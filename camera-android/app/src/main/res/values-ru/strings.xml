@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">Kopernikadr Камера</string>
     <string name="status_title">Kopernikadr</string>
     <string name="status_no_wifi">Нет подключения к Wi-Fi</string>
     <string name="permission_text">Попроси родителя разрешить камеру</string>
