@@ -49,7 +49,7 @@ OpenMoji CC BY-SA attribution is in parent mode (`about.openmoji`).
 - [x] versionCode/versionName scheme for both apps (Play needs a growing versionCode)
 - [x] `scripts/build-release.sh`: `bundleRelease` for both apps, fails without keystore.properties, checks
       16 KB alignment and prints AAB sizes
-- [ ] release smoke on the emulator with a throwaway scratchpad key: start, NSD find, capture, export, sticker cut
+- [x] release smoke on the emulator with a throwaway scratchpad key (2026-11-03, kopernikadr-tab, fake camera at 10.0.2.2:8765): start, connect by address, capture 3 frames + onion skin, MP4 export to the gallery, sticker cut (MediaPipe GPU, no crash with the backend discovery removed) and save; camera release starts. Not covered: NSD discovery of a real camera (needs two devices).
 - [x] `docs/RELEASE.md`: keystore generation command for the owner, Play App Signing, upload order
 
 ### Task 5: Privacy policy site
