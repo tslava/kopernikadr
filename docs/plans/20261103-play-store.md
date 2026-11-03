@@ -42,7 +42,7 @@ OpenMoji CC BY-SA attribution is in parent mode (`about.openmoji`).
 - [x] remove `TransportBackendDiscovery` with `tools:node="remove"` (MediaPipe calls datatransport directly, so excluding the library would crash)
 - [x] merged release manifest: no transport services/receivers, no `AD_ID`, list the final permissions
 - [ ] segmenter still runs (debug build on the tablet, one cut)
-- [ ] close backlog `kopernikadr-mediapipe-telemetry`
+- [x] close backlog `kopernikadr-mediapipe-telemetry`
 
 ### Task 4: Release builds
 **Files:** both `build.gradle(.kts)`, `scripts/build-release.sh`, `docs/RELEASE.md`
