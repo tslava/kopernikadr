@@ -59,7 +59,7 @@ Applies to both apps unless marked. Apps: **Kopernikadr** (tablet, `pl.slava.kop
 - Conclusion: **no data collected, no data shared.** Declare "No data collected" and "No data shared" for both.
 - **FLAG (uncertainty):** Google's help text does not explicitly cover device-to-device transfer inside one user's home network between two installs of the same developer's apps. The reading "data leaves the device only to the user's own other device, not to the developer/third party, so it is not collection" matches the definition's wording and common practice for local-network apps, but it is an interpretation. If Play review disagrees, the fallback declaration would be: **Photos and videos** (collected: No for the developer; processed ephemerally; not shared). Keep the privacy policy explicit about the local transfer so the two documents agree.
 - **FLAG:** the camera server on the phone is reachable by other devices on the same Wi-Fi (session handshake exists, but traffic is cleartext). Not a data-safety item, but the privacy policy should say "use your own trusted home network" and the owner may want to harden this later (see backlog candidates in the report).
-- **FLAG:** the tablet manifest has `android:allowBackup="true"`: Android auto-backup could copy movies and stickers to the user's Google Drive backup. Play's Data safety says that user-initiated/OS backup is not developer collection, but a parent may be surprised. Consider `allowBackup="false"` (the camera app already has it) before release. Not changed here (out of scope).
+- Both apps set `android:allowBackup="false"` (tablet changed 2026-11-03: Auto Backup is capped at 25 MB per app, too small for movies, and a kids app should not copy data to the cloud).
 
 ## Permissions
 

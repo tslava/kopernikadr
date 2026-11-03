@@ -46,11 +46,11 @@ OpenMoji CC BY-SA attribution is in parent mode (`about.openmoji`).
 
 ### Task 4: Release builds
 **Files:** both `build.gradle(.kts)`, `scripts/build-release.sh`, `docs/RELEASE.md`
-- [ ] versionCode/versionName scheme for both apps (Play needs a growing versionCode)
-- [ ] `scripts/build-release.sh`: `bundleRelease` for both apps, fails without keystore.properties, checks
+- [x] versionCode/versionName scheme for both apps (Play needs a growing versionCode)
+- [x] `scripts/build-release.sh`: `bundleRelease` for both apps, fails without keystore.properties, checks
       16 KB alignment and prints AAB sizes
 - [ ] release smoke on the emulator with a throwaway scratchpad key: start, NSD find, capture, export, sticker cut
-- [ ] `docs/RELEASE.md`: keystore generation command for the owner, Play App Signing, upload order
+- [x] `docs/RELEASE.md`: keystore generation command for the owner, Play App Signing, upload order
 
 ### Task 5: Privacy policy site
 **Files:** Create `store/site/` (index + privacy in pl/en/ru)

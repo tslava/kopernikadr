@@ -96,12 +96,12 @@ Release builds must be signed with the one Kopernikadr release key. Create it on
 
   mkdir -p ~/.kopernikadr && chmod 700 ~/.kopernikadr
   "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -genkeypair -v \\
-    -keystore ~/.kopernikadr/release.jks -alias kopernikadr \\
+    -keystore ~/.kopernikadr/upload.jks -alias upload \\
     -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=Kopernikadr"
   # then ~/.kopernikadr/keystore.properties:
-  storeFile=release.jks
+  storeFile=upload.jks
   storePassword=...
-  keyAlias=kopernikadr
+  keyAlias=upload
   keyPassword=...
 
 Expected properties file: $KEYSTORE_PROPERTIES
