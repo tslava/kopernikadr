@@ -11,6 +11,10 @@ on the real tablet and phone is still to do. The browser remote on the phone, **
 still works and is the fallback. Next: stage 3b (insert, reshoot, copy/paste, reverse), then more
 effects ([roadmap](docs/ROADMAP.md)).
 
+![The tablet remote: live preview with onion skin, frame counter and the shutter button](store/graphics/screens/tablet-1-capture.png)
+
+**Stack:** Kotlin · CameraX · Ktor (phone camera app) · Next.js static export + Capacitor 8 (tablet app) · a versioned JSON protocol between them, with fixtures and a fake camera for tests
+
 Docs: [requirements](docs/PROMPT.md) · [architecture](docs/ARCHITECTURE.md) ·
 [protocol](protocol/PROTOCOL.md) · [roadmap](docs/ROADMAP.md) · [plans](docs/plans/) ·
 [on-device acceptance](docs/ACCEPTANCE.md)
@@ -390,3 +394,7 @@ devices. Never try to bypass supervision.
   permission; we don't need 37 while sideloading.
 - Server details such as `HEAD` support and `503` + `Retry-After` (while a frame's smaller copy
   is still being made) are internal: remote-lite retries on its own, users don't need them.
+
+---
+
+Built by [Wiaczeslaw Cyunczyk](https://cyunczyk.dev)
