@@ -397,4 +397,4 @@ devices. Never try to bypass supervision.
 
 ---
 
-Built by [Wiaczeslaw Cyunczyk](https://cyunczyk.dev)
+Built by [Wiaczeslaw Cyunczyk](https://tslava.dev)
